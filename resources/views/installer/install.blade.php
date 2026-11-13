@@ -243,13 +243,13 @@
                 @endif
             </div>
             <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">
-                Need to deploy new code from GitHub? Use the protected <a href="/update" style="color:#a5b4fc;">/update</a> manager.
+                Need to deploy new code from GitHub? Open <a href="/admin/dashboard/settings/update-app" style="color:#a5b4fc;">Settings &rarr; Update App</a> in the Admin Dashboard.
                 If you intentionally want to wipe setup and re-run the wizard, delete <code>storage/installed</code> from cPanel File Manager.
             </p>
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
                 <a href="/" class="btn-link btn-primary">Open Website</a>
                 <a href="/admin" class="btn-link btn-secondary">Admin Login</a>
-                <a href="/update" class="btn-link btn-secondary">Open Updater (/update)</a>
+                <a href="/admin/dashboard/settings/update-app" class="btn-link btn-secondary">Open Update App</a>
             </div>
         </div>
     @else
@@ -479,12 +479,12 @@
 
                 <div id="finish-actions" style="display:none;margin-top:22px;">
                     <div class="callout ok" style="margin-bottom:16px;">
-                        <strong>Installation Complete!</strong> <code>/install</code> is now locked. Keep <code>/update</code> bookmarked for future GitHub deployments.
+                        <strong>Installation Complete!</strong> <code>/install</code> is now restricted to the Super Admin. Future updates live under <strong>Admin Dashboard &rarr; Settings &rarr; Update App</strong>.
                     </div>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;">
                         <a href="/" class="btn-link btn-primary">Visit Homepage</a>
                         <a href="/admin" class="btn-link btn-secondary">Sign In to Admin</a>
-                        <a href="/update" class="btn-link btn-secondary">View Updater (/update)</a>
+                        <a href="/admin/dashboard/settings/update-app" class="btn-link btn-secondary">Update App</a>
                     </div>
                 </div>
             </section>

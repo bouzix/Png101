@@ -54,6 +54,7 @@ Route::middleware(['admin.auth'])->prefix('admin/dashboard')->group(function () 
     Route::get('/settings/error-pages', [AdminController::class, 'errorPages'])->name('admin.settings.error-pages');
     Route::get('/settings/team', [AdminController::class, 'settingsTeam'])->name('admin.settings.team');
     Route::get('/settings/website-info', [AdminController::class, 'websiteInfo'])->name('admin.settings.website-info');
+    Route::get('/settings/update-app', [AdminController::class, 'updateApp'])->name('admin.settings.update-app');
 });
 
 // API Routes
@@ -139,6 +140,10 @@ Route::prefix('api')->group(function () {
         Route::delete('/admin/team', [AdminController::class, 'deleteTeamMember']);
 
         Route::get('/team/workspace', [AdminController::class, 'teamWorkspaceData']);
+
+        Route::get('/admin/update-app/status', [AdminController::class, 'getUpdateStatus']);
+        Route::post('/admin/update-app/check-remote', [AdminController::class, 'checkRemoteUpdate']);
+        Route::post('/admin/update-app/run', [AdminController::class, 'runUpdateApp']);
 
         Route::get('/admin/me', [AuthController::class, 'me']);
 

@@ -116,6 +116,34 @@ class InstallerService
         }
     }
 
+    public static function isSuperAdminRequest(Request $request): bool
+    {
+        $rawAuth = $request->cookie('auth_token');
+        if (is_string($rawAuth) && $rawAuth !== '') {
+            if ($rawAuth === 'authenticated') {
+                return true;
+            }
+            if (config('app.key')) {
+                try {
+                    $decrypted = Crypt::decryptString($rawAuth);
+                    // Laravel CookieValuePrefix format: "<40-char-hmac>|<value>"
+                    if ($decrypted === 'authenticated' || str_ends_with($decrypted, '|authenticated')) {
+                        return true;
+                    }
+                } catch (\Throwable $e) {
+                    // Ignore decrypt failure
+                }
+            }
+        }
+
+        try {
+            $session = TeamService::getCurrentSession($request);
+            return !empty($session['authenticated']) && ($session['role'] ?? '') === 'super_admin';
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public static function isAuthenticatedForUpdate(Request $request): bool
     {
         // 1. Standalone updater session cookie
@@ -124,24 +152,8 @@ class InstallerService
             return true;
         }
 
-        // 2. Existing Super Admin session cookie (decrypt safely if APP_KEY exists)
-        $rawAuth = $request->cookie('auth_token');
-        if (is_string($rawAuth) && $rawAuth !== '' && config('app.key')) {
-            if ($rawAuth === 'authenticated') {
-                return true;
-            }
-            try {
-                $decrypted = Crypt::decryptString($rawAuth);
-                // Laravel CookieValuePrefix format: "<40-char-hmac>|<value>"
-                if ($decrypted === 'authenticated' || str_ends_with($decrypted, '|authenticated')) {
-                    return true;
-                }
-            } catch (\Throwable $e) {
-                // Ignore decrypt failure
-            }
-        }
-
-        return false;
+        // 2. Existing Super Admin session
+        return self::isSuperAdminRequest($request);
     }
 
     public static function verifyAdminOrUpdateSecret(string $secret): bool

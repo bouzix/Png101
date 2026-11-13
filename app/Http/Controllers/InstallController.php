@@ -2,18 +2,35 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\CodeInjectionService;
+use App\Services\ErrorPagesService;
 use App\Services\InstallerService;
 use App\Services\WebsiteInfoService;
 use App\Support\HostingEnvironment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class InstallController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request): SymfonyResponse
     {
         if (HostingEnvironment::isInstalled()) {
+            if (!InstallerService::isSuperAdminRequest($request)) {
+                try {
+                    $config = ErrorPagesService::get();
+                    return Inertia::render('Errors/Forbidden', [
+                        'config' => $config['p403'] ?? [],
+                        'websiteInfo' => WebsiteInfoService::get(),
+                        'codeInjection' => CodeInjectionService::get(),
+                    ])->toResponse($request)->setStatusCode(403);
+                } catch (\Throwable $e) {
+                    return response('403 Forbidden', 403);
+                }
+            }
+
             return response()->view('installer.install', [
                 'alreadyInstalled' => true,
                 'installedState' => HostingEnvironment::readInstalledState(),

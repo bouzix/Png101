@@ -140,6 +140,7 @@ export default function AdminLayout({ children }) {
                     { name: 'Code Injection', href: '/admin/dashboard/settings/code-injection', permitted: hasPerm('manage_code_injection'), reason: 'Requires Code Injection permission' },
                     { name: 'Data Management', href: '/admin/dashboard/settings/data-management', permitted: hasPerm('manage_data_seo'), reason: 'Requires Data, Backup & SEO permission' },
                     { name: 'Error Pages', href: '/admin/dashboard/settings/error-pages', permitted: hasPerm('manage_general_settings'), reason: 'Requires General & Website Settings permission' },
+                    { name: 'Update App', href: '/admin/dashboard/settings/update-app', permitted: isSuperAdmin, reason: 'Super Admin only' },
                 ],
             },
         ];
@@ -175,7 +176,7 @@ export default function AdminLayout({ children }) {
         if (pathname.startsWith('/admin/dashboard/settings/error-pages') || pathname.startsWith('/admin/dashboard/settings/website-info')) {
             return hasPerm('manage_general_settings');
         }
-        if (pathname.startsWith('/admin/dashboard/team') || pathname.startsWith('/admin/dashboard/settings/team')) return false;
+        if (pathname.startsWith('/admin/dashboard/team') || pathname.startsWith('/admin/dashboard/settings/team') || pathname.startsWith('/admin/dashboard/settings/update-app')) return false;
         return true;
     }, [session, pathname]);
 

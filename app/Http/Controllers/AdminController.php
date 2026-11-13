@@ -8,9 +8,11 @@ use App\Models\SearchLog;
 use App\Models\Setting;
 use App\Services\CodeInjectionService;
 use App\Services\ErrorPagesService;
+use App\Services\InstallerService;
 use App\Services\SeoGeneratorService;
 use App\Services\TeamService;
 use App\Services\WebsiteInfoService;
+use App\Support\HostingEnvironment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -153,6 +155,15 @@ class AdminController extends Controller
             return $forbidden;
         }
         return Inertia::render('Admin/Settings/WebsiteInfo');
+    }
+
+    public function updateApp(Request $request): Response
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (($session['role'] ?? '') !== 'super_admin') {
+            return Inertia::render('Errors/Forbidden');
+        }
+        return Inertia::render('Admin/Settings/UpdateApp');
     }
 
     // --- Admin API Endpoints ---
@@ -840,6 +851,56 @@ class AdminController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['error' => 'Failed to load workspace intelligence'], 500);
         }
+    }
+
+    public function getUpdateStatus(Request $request): JsonResponse
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!$session['authenticated'] || ($session['role'] ?? '') !== 'super_admin') {
+            return response()->json(['error' => 'Forbidden: Super Admin only.'], 403);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'isLocal' => HostingEnvironment::isLocal($request),
+            'appVersion' => HostingEnvironment::getAppVersion(),
+            'diagnostics' => InstallerService::getUpdateDiagnostics(),
+        ]);
+    }
+
+    public function checkRemoteUpdate(Request $request): JsonResponse
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!$session['authenticated'] || ($session['role'] ?? '') !== 'super_admin') {
+            return response()->json(['error' => 'Forbidden: Super Admin only.'], 403);
+        }
+
+        return response()->json(InstallerService::fetchGitRemoteStatus());
+    }
+
+    public function runUpdateApp(Request $request): JsonResponse
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!$session['authenticated'] || ($session['role'] ?? '') !== 'super_admin') {
+            return response()->json(['error' => 'Forbidden: Super Admin only.'], 403);
+        }
+
+        if (HostingEnvironment::isLocal($request)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Applying remote deployment updates is disabled in local development so local .env and database are never overwritten.',
+            ], 403);
+        }
+
+        $result = InstallerService::runUpdate($request->only([
+            'pull_git',
+            'run_migrations',
+            'refresh_caches',
+            'regen_seo',
+            'maintenance_mode',
+        ]));
+
+        return response()->json($result, $result['ok'] ? 200 : 422);
     }
 
     public function clearDb(Request $request): JsonResponse

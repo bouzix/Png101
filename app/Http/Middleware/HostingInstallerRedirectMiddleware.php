@@ -25,7 +25,7 @@ class HostingInstallerRedirectMiddleware
         }
 
         if (
-            $request->is('install', 'install/*', 'update', 'update/*', 'up')
+            $request->is('install', 'install/*', 'up')
             || $request->is('api/*')
         ) {
             return $next($request);
