@@ -389,8 +389,11 @@ class ImageApiController extends Controller
     {
         try {
             $imageBase64 = (string) $request->input('imageBase64', '');
-            $modelName = (string) $request->input('modelName', 'gemini-2.5-flash');
-            $result = GeminiService::generateImageMetadata($imageBase64, $modelName);
+            $modelName = $request->input('modelName');
+            $result = GeminiService::generateImageMetadata(
+                $imageBase64,
+                is_string($modelName) ? $modelName : null
+            );
             return response()->json($result);
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 500);
