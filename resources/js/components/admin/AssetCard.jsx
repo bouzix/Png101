@@ -53,7 +53,7 @@ const AssetCard = ({
                     checked={isSelected}
                     onChange={(e) => {
                         e.stopPropagation();
-                        onToggleSelect();
+                        onToggleSelect(e);
                     }}
                     onClick={(e) => e.stopPropagation()}
                     className="w-5 h-5 rounded border-gray-300 text-primary-glow focus:ring-primary-glow cursor-pointer"

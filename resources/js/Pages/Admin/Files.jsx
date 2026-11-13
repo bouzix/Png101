@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Head } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import AssetCard from '@/components/admin/AssetCard';
@@ -6,6 +6,7 @@ import BulkEditSidebar from '@/components/admin/BulkEditSidebar';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import Pagination from '@/components/ui/Pagination';
 import { toast } from 'sonner';
+import { CheckSquare, Square, Trash2, Pencil } from 'lucide-react';
 
 export default function AdminFiles() {
     const [images, setImages] = useState([]);
@@ -24,6 +25,7 @@ export default function AdminFiles() {
     const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
     const [editingFileId, setEditingFileId] = useState(null);
     const [loading, setLoading] = useState(false);
+    const lastSelectedIdRef = useRef(null);
     const [confirmDialog, setConfirmDialog] = useState({
         isOpen: false,
         title: '',
@@ -91,10 +93,51 @@ export default function AdminFiles() {
         return filteredImages.slice(startIndex, startIndex + itemsPerPage);
     }, [filteredImages, currentPage, itemsPerPage]);
 
-    const handleToggleSelect = (id) => {
-        setSelectedIds(prev =>
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+    const allPageSelected =
+        paginatedImages.length > 0 && paginatedImages.every((img) => selectedSet.has(img.id));
+    const allFilteredSelected =
+        filteredImages.length > 0 && filteredImages.every((img) => selectedSet.has(img.id));
+
+    const handleToggleSelect = (id, event) => {
+        const isShift = Boolean(event?.shiftKey || event?.nativeEvent?.shiftKey);
+        if (isShift && lastSelectedIdRef.current) {
+            const startIdx = filteredImages.findIndex((img) => img.id === lastSelectedIdRef.current);
+            const endIdx = filteredImages.findIndex((img) => img.id === id);
+            if (startIdx !== -1 && endIdx !== -1) {
+                const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+                const rangeIds = filteredImages.slice(from, to + 1).map((img) => img.id);
+                setSelectedIds((prev) => Array.from(new Set([...prev, ...rangeIds])));
+                lastSelectedIdRef.current = id;
+                return;
+            }
+        }
+
+        lastSelectedIdRef.current = id;
+        setSelectedIds((prev) =>
+            prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
         );
+    };
+
+    const handleToggleSelectPage = () => {
+        const pageIds = paginatedImages.map((img) => img.id);
+        if (allPageSelected) {
+            const pageSet = new Set(pageIds);
+            setSelectedIds((prev) => prev.filter((id) => !pageSet.has(id)));
+        } else {
+            setSelectedIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+        }
+    };
+
+    const handleSelectAllFiltered = () => {
+        if (allFilteredSelected) {
+            const filteredSet = new Set(filteredImages.map((img) => img.id));
+            setSelectedIds((prev) => prev.filter((id) => !filteredSet.has(id)));
+        } else {
+            setSelectedIds((prev) =>
+                Array.from(new Set([...prev, ...filteredImages.map((img) => img.id)]))
+            );
+        }
     };
 
     const handleEdit = (id) => {
@@ -190,8 +233,8 @@ export default function AdminFiles() {
     return (
         <AdminLayout>
             <Head title="My Files - Admin" />
-            <div className="max-w-6xl mx-auto pb-24">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div className="max-w-6xl mx-auto pb-12">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <div>
                         <h2 className="text-2xl font-bold text-foreground">My Files</h2>
                         <p className="text-sm text-foreground/60 mt-0.5">
@@ -242,7 +285,95 @@ export default function AdminFiles() {
                 </div>
 
                 {paginatedImages.length > 0 ? (
-                    <>
+                    <div className="space-y-6">
+                        <div className="sticky top-4 z-30 flex flex-wrap items-center justify-between gap-4 bg-card-bg/95 backdrop-blur-md border border-card-border rounded-xl p-4 shadow-md">
+                            <div className="flex flex-wrap items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={handleToggleSelectPage}
+                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-background border border-card-border hover:border-primary-glow/50 text-foreground transition-all cursor-pointer"
+                                >
+                                    {allPageSelected ? (
+                                        <CheckSquare className="w-4 h-4 text-primary-glow" />
+                                    ) : (
+                                        <Square className="w-4 h-4 text-foreground/60" />
+                                    )}
+                                    {filteredImages.length > paginatedImages.length
+                                        ? allPageSelected
+                                            ? `Deselect Page (${paginatedImages.length})`
+                                            : `Select Page (${paginatedImages.length})`
+                                        : allPageSelected
+                                        ? 'Deselect All'
+                                        : `Select All (${paginatedImages.length})`}
+                                </button>
+
+                                {filteredImages.length > paginatedImages.length && (
+                                    <button
+                                        type="button"
+                                        onClick={handleSelectAllFiltered}
+                                        className="px-3 py-2 rounded-lg text-xs font-semibold bg-background/70 border border-card-border hover:border-primary-glow/40 text-foreground/80 hover:text-foreground transition-all cursor-pointer"
+                                    >
+                                        {allFilteredSelected
+                                            ? `Deselect All (${filteredImages.length})`
+                                            : `Select All (${filteredImages.length})`}
+                                    </button>
+                                )}
+
+                                <span className="text-sm text-foreground/60">
+                                    <strong className="text-foreground">{selectedIds.length}</strong> of{' '}
+                                    <strong className="text-foreground">{filteredImages.length}</strong> selected
+                                </span>
+
+                                {selectedIds.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedIds([])}
+                                        className="text-xs font-semibold text-foreground/50 hover:text-foreground underline underline-offset-2 cursor-pointer"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+
+                            {selectedIds.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-3">
+                                    {canDelete && (
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setConfirmDialog({
+                                                    isOpen: true,
+                                                    title: 'Delete Images',
+                                                    message: `Are you sure you want to delete ${selectedIds.length} image(s)? This action cannot be undone.`,
+                                                    onConfirm: handleDelete,
+                                                })
+                                            }
+                                            disabled={loading}
+                                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                            {loading ? 'DELETING...' : `DELETE (${selectedIds.length})`}
+                                        </button>
+                                    )}
+
+                                    {canEdit && (
+                                        <button
+                                            type="button"
+                                            onClick={
+                                                selectedIds.length === 1
+                                                    ? () => handleEdit(selectedIds[0])
+                                                    : handleBulkEdit
+                                            }
+                                            className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg text-xs font-bold bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-colors cursor-pointer"
+                                        >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                            EDIT {selectedIds.length > 1 ? `(${selectedIds.length})` : ''}
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
                             {paginatedImages.map((img) => (
                                 <AssetCard
@@ -250,9 +381,9 @@ export default function AdminFiles() {
                                     file={null}
                                     previewUrl={img.path}
                                     hasMetadata={true}
-                                    isSelected={selectedIds.includes(img.id)}
+                                    isSelected={selectedSet.has(img.id)}
                                     onEdit={() => handleEdit(img.id)}
-                                    onToggleSelect={() => handleToggleSelect(img.id)}
+                                    onToggleSelect={(e) => handleToggleSelect(img.id, e)}
                                     luminance={img.luminance}
                                     contrastBgDark={img.contrastBgDark}
                                     contrastBgLight={img.contrastBgLight}
@@ -272,44 +403,10 @@ export default function AdminFiles() {
                                 }}
                             />
                         </div>
-                    </>
+                    </div>
                 ) : (
                     <div className="text-center py-20 text-foreground/50">
                         {search ? 'No matching files found across your catalog.' : 'No files uploaded yet.'}
-                    </div>
-                )}
-
-                {selectedIds.length > 0 && (
-                    <div className="fixed bottom-0 right-0 left-64 bg-card-bg border-t border-card-border p-4 flex justify-end items-center gap-4 z-40">
-                        <span className="text-foreground/60 font-medium mr-4">
-                            {selectedIds.length} Selected
-                        </span>
-
-                        {canEdit && (
-                            <button
-                                type="button"
-                                onClick={selectedIds.length === 1 ? () => handleEdit(selectedIds[0]) : handleBulkEdit}
-                                className="bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 px-6 py-2 rounded-lg font-bold transition-colors cursor-pointer"
-                            >
-                                EDIT {selectedIds.length > 1 ? `(${selectedIds.length})` : ''}
-                            </button>
-                        )}
-
-                        {canDelete && (
-                            <button
-                                type="button"
-                                onClick={() => setConfirmDialog({
-                                    isOpen: true,
-                                    title: 'Delete Images',
-                                    message: `Are you sure you want to delete ${selectedIds.length} image(s)? This action cannot be undone.`,
-                                    onConfirm: handleDelete
-                                })}
-                                disabled={loading}
-                                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-6 py-2 rounded-lg font-bold transition-colors disabled:opacity-50 cursor-pointer"
-                            >
-                                {loading ? 'DELETING...' : 'DELETE'}
-                            </button>
-                        )}
                     </div>
                 )}
 
