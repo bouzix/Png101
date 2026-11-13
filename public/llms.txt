@@ -1,0 +1,27 @@
+# PNG Finder
+
+> Discover and download free, high-resolution transparent PNG images for your creative projects.
+
+Website: https://png-finder.com
+Contact: contact@png-finder.com
+
+## Main Pages
+- [Home](https://png-finder.com/)
+- [Collections](https://png-finder.com/collections)
+- [About Us](https://png-finder.com/about-us)
+- [Contact Us](https://png-finder.com/contact-us)
+- [Terms of Service](https://png-finder.com/terms-of-service)
+- [Privacy Policy](https://png-finder.com/privacy-policy)
+- [DMCA Policy](https://png-finder.com/dmca-policy)
+
+## Sitemaps
+- [Master Sitemap Index](https://png-finder.com/sitemap.xml)
+- [Collections Sitemap (1 packs)](https://png-finder.com/sitemap-collections.xml)
+- [Images Sitemap (66 PNGs)](https://png-finder.com/sitemap-images.xml)
+- [Tags Sitemap (1186 tags)](https://png-finder.com/sitemap-tags.xml)
+
+## Curated Collections
+- [google logos](https://png-finder.com/collections/google-logos)
+
+## Popular Tags
+black rectangle, solid black, black background, png banner, transparent background, dark background, minimal design, graphic element, ui component, dark mode, overlay, mask layer, geometric shape, plain black, header background, footer background, placeholder, web design asset, flat color, monochrome, dark theme, basic shape, clean design, vector style, high resolution, digital background, design resource, black texture, rectangular shape, simple background, New York Yankees, Yankees, NY Logo, Interlocking NY, Baseball Logo, MLB Logo, Sports Logo, Team Emblem, Navy Blue, Transparent PNG

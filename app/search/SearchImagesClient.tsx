@@ -1,0 +1,273 @@
+'use client';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
+import ImageCard from '../components/ImageCard';
+import { slugify } from '@/lib/utils';
+import { Layers, ArrowRight } from 'lucide-react';
+
+interface ImageItem {
+    id: string;
+    name?: string | null;
+    filename?: string;
+    path: string;
+    luminance?: string | null;
+    contrastBgDark?: string | null;
+    contrastBgLight?: string | null;
+}
+
+interface SearchImagesClientProps {
+    query: string;
+    initialImages?: ImageItem[];
+    initialTotal?: number;
+    initialHasMore?: boolean;
+}
+
+const BATCH_SIZE = 30;
+
+export default function SearchImagesClient({
+    query,
+    initialImages,
+    initialTotal,
+    initialHasMore,
+}: SearchImagesClientProps) {
+    const [images, setImages] = useState<ImageItem[]>(initialImages || []);
+    const [total, setTotal] = useState<number | null>(
+        typeof initialTotal === 'number' ? initialTotal : null
+    );
+    const [loadingInitial, setLoadingInitial] = useState(!initialImages);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(
+        initialHasMore !== undefined ? initialHasMore : true
+    );
+    const [matchingCollections, setMatchingCollections] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (query && query.trim()) {
+            fetch(`/api/collections?q=${encodeURIComponent(query.trim())}`)
+                .then((res) => res.json())
+                .then((data) => {
+                    if (Array.isArray(data)) setMatchingCollections(data.slice(0, 2));
+                })
+                .catch(() => {});
+        }
+    }, [query]);
+
+    const offsetRef = useRef(initialImages ? initialImages.length : 0);
+    const loadingRef = useRef(false);
+    const hasMoreRef = useRef(initialHasMore !== undefined ? initialHasMore : true);
+    const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+    const fetchBatch = useCallback(
+        async (isInitial: boolean) => {
+            if (loadingRef.current) return;
+            if (!isInitial && !hasMoreRef.current) return;
+
+            loadingRef.current = true;
+
+            if (isInitial) {
+                setLoadingInitial(true);
+            } else {
+                setLoadingMore(true);
+                // Visual delay matching /latest so the circular loader is clearly visible when scrolling
+                await new Promise((resolve) => setTimeout(resolve, 450));
+            }
+
+            try {
+                const currentOffset = isInitial ? 0 : offsetRef.current;
+                const res = await fetch(
+                    `/api/images?status=published&paginated=1&limit=${BATCH_SIZE}&offset=${currentOffset}&q=${encodeURIComponent(
+                        query
+                    )}`
+                );
+                const data = await res.json();
+                const newBatch: ImageItem[] = Array.isArray(data.images) ? data.images : [];
+                const nextHasMore = Boolean(data.hasMore) && newBatch.length > 0;
+
+                setTotal(typeof data.total === 'number' ? data.total : null);
+                setHasMore(nextHasMore);
+                hasMoreRef.current = nextHasMore;
+
+                if (isInitial) {
+                    setImages(newBatch);
+                    offsetRef.current = newBatch.length;
+                } else {
+                    setImages((prev) => {
+                        const existingIds = new Set(prev.map((img) => img.id));
+                        const uniqueNew = newBatch.filter((img) => !existingIds.has(img.id));
+                        return [...prev, ...uniqueNew];
+                    });
+                    offsetRef.current = currentOffset + newBatch.length;
+                }
+            } catch (error) {
+                console.error('Failed to load search results:', error);
+                setHasMore(false);
+                hasMoreRef.current = false;
+            } finally {
+                setLoadingInitial(false);
+                setLoadingMore(false);
+                loadingRef.current = false;
+            }
+        },
+        [query]
+    );
+
+    // Initial load if not provided from server
+    useEffect(() => {
+        if (!initialImages) {
+            fetchBatch(true);
+        }
+    }, [initialImages, fetchBatch]);
+
+    // IntersectionObserver + scroll listener for seamless infinite scroll
+    useEffect(() => {
+        if (loadingInitial || !hasMore) return;
+
+        const sentinel = sentinelRef.current;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const first = entries[0];
+                if (first && first.isIntersecting && hasMoreRef.current && !loadingRef.current) {
+                    fetchBatch(false);
+                }
+            },
+            { rootMargin: '250px' }
+        );
+
+        if (sentinel) {
+            observer.observe(sentinel);
+        }
+
+        const handleScroll = () => {
+            if (!hasMoreRef.current || loadingRef.current) return;
+            if (sentinelRef.current) {
+                const rect = sentinelRef.current.getBoundingClientRect();
+                if (rect.top <= window.innerHeight + 250) {
+                    fetchBatch(false);
+                }
+            }
+        };
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('scroll', handleScroll);
+        };
+    }, [loadingInitial, hasMore, images.length, fetchBatch]);
+
+    return (
+        <div>
+            {/* Header info */}
+            <div className="text-center mb-10">
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground mb-2">
+                    Search Results for <span className="text-primary-glow">&quot;{query}&quot;</span>
+                </h1>
+                {total !== null && (
+                    <p className="text-foreground/50 text-sm">
+                        Showing {images.length} of {total} {total === 1 ? 'image' : 'images'}
+                    </p>
+                )}
+            </div>
+
+            {/* Matching Collection Callout */}
+            {matchingCollections.length > 0 && (
+                <div className="mb-8 p-4 rounded-2xl bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-transparent border border-blue-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-500 flex items-center justify-center shrink-0">
+                            <Layers className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-blue-500">
+                                Curated Collection Available
+                            </span>
+                            <h3 className="text-sm font-bold text-foreground">
+                                Looking for a cohesive pack? Check out the &ldquo;{matchingCollections[0].name}&rdquo; collection
+                            </h3>
+                        </div>
+                    </div>
+                    <Link
+                        href={`/collections/${matchingCollections[0].slug}`}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center gap-1.5 shrink-0 hover:scale-[1.02]"
+                    >
+                        <span>View Pack ({matchingCollections[0].imageCount} PNGs)</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                </div>
+            )}
+
+            {loadingInitial ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                    {Array.from({ length: 15 }).map((_, i) => (
+                        <ImageCard key={`search-skel-${i}`} />
+                    ))}
+                </div>
+            ) : images.length > 0 ? (
+                <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                        {images.map((image) => (
+                            <Link
+                                key={image.id}
+                                href={`/images/${image.id}-${slugify(image.name || image.filename || '')}`}
+                            >
+                                <ImageCard
+                                    src={image.path}
+                                    luminance={image.luminance}
+                                    contrastBgDark={image.contrastBgDark}
+                                    contrastBgLight={image.contrastBgLight}
+                                />
+                            </Link>
+                        ))}
+                    </div>
+
+                    {/* Infinite Scroll Sentinel & Circular Loader (matches /latest) */}
+                    <div
+                        ref={sentinelRef}
+                        className="py-14 flex flex-col items-center justify-center min-h-[100px]"
+                    >
+                        {loadingMore ? (
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="w-10 h-10 rounded-full border-4 border-primary-glow/20 border-t-primary-glow animate-spin shadow-[0_0_15px_rgba(59,130,246,0.3)]" />
+                                <span className="text-foreground/60 text-xs font-semibold tracking-wider uppercase">
+                                    Loading next 30 images...
+                                </span>
+                            </div>
+                        ) : hasMore ? (
+                            <div className="w-8 h-8 rounded-full border-3 border-primary-glow/20 border-t-primary-glow/60 animate-spin" />
+                        ) : (
+                            <p className="text-foreground/40 text-xs uppercase tracking-widest">
+                                You&apos;ve reached the end of search results ({images.length}{' '}
+                                {images.length === 1 ? 'image' : 'images'})
+                            </p>
+                        )}
+                    </div>
+                </>
+            ) : (
+                <div className="flex flex-col items-center justify-center py-20 text-foreground/50">
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        strokeWidth={1.5}
+                        stroke="currentColor"
+                        className="w-16 h-16 mb-4 opacity-40 text-foreground"
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                        />
+                    </svg>
+                    <p className="text-lg font-semibold text-foreground">
+                        No images found for &quot;{query}&quot;
+                    </p>
+                    <p className="text-sm mt-2 text-foreground/60">
+                        Try searching with different keywords or check spelling.
+                    </p>
+                </div>
+            )}
+        </div>
+    );
+}
+

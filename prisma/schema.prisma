@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Image {
+  id        String   @id @default(uuid())
+  filename  String
+  path      String
+  previewPath String?
+  name      String?
+  description String? @db.Text
+  altText   String?
+  tags      Json?    // Storing tags as a JSON array
+  status    String   @default("draft")
+  width     Int?
+  height    Int?
+  size      Int?
+  mimeType  String?
+  luminance       String?
+  contrastBgDark  String?
+  contrastBgLight String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  downloads Download[]
+  views     ImageView[]
+  
+  // Many-to-many relationship with categories
+  categories ImageCategory[]
+
+  // Many-to-many relationship with collections
+  collections CollectionImage[]
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Hierarchy
+  parentId    String?
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[] @relation("CategoryHierarchy")
+
+  // Many-to-many relationship with images
+  images      ImageCategory[]
+}
+
+// Junction table for many-to-many relationship
+model ImageCategory {
+  id         String   @id @default(uuid())
+  imageId    String
+  categoryId String
+  image      Image    @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([imageId, categoryId])
+  @@index([imageId])
+  @@index([categoryId])
+}
+
+model Download {
+  id        String   @id @default(uuid())
+  imageId   String?
+  image     Image?   @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  
+  // Analytics tracking fields
+  deviceType   String?  // "mobile", "desktop", "tablet", "unknown"
+  country      String?  // ISO country code (e.g., "US", "GB", "CA")
+  countryName  String?  // Full country name (e.g., "United States")
+  isCustomSize Boolean  @default(false)
+  resolution   String?
+  
+  @@index([imageId])
+  @@index([createdAt])
+  @@index([deviceType])
+  @@index([country])
+}
+
+model ImageView {
+  id        String   @id @default(uuid())
+  imageId   String
+  image     Image    @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([imageId])
+  @@index([createdAt])
+}
+
+model SearchLog {
+  id           String   @id @default(uuid())
+  query        String
+  resultsCount Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([query])
+  @@index([createdAt])
+  @@index([resultsCount])
+}
+
+model Setting {
+  key   String @id
+  value String @db.Text
+}
+
+model ApiKey {
+  id           String   @id @default(uuid())
+  name         String
+  key          String
+  modelVersion String   @default("2.5")
+  isActive     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model CodeInjection {
+  id         String   @id @default("default")
+  headCode   String?  @db.Text
+  bodyCode   String?  @db.Text
+  footerCode String?  @db.Text
+  updatedAt  DateTime @updatedAt
+}
+
+model WebsiteInfo {
+  id           String   @id @default("default")
+  websiteName  String   @default("PNG Finder")
+  websiteUrl   String   @default("https://png-finder.com")
+  tagline      String?  @db.Text
+  contactEmail String   @default("contact@png-finder.com")
+  dmcaEmail    String   @default("dmca@png-finder.com")
+  companyName  String   @default("PNG Finder")
+  country      String   @default("United States")
+  address      String?  @db.Text
+  foundedYear  String   @default("2025")
+  updatedAt    DateTime @updatedAt
+}
+
+model SeoSetting {
+  id                    String    @id @default("default")
+  autoRegenerate        Boolean   @default(true)
+  scheduleFrequency     String    @default("daily") // "hourly" | "daily" | "weekly" | "monthly"
+  scheduleTime          String    @default("00:00") // HH:mm
+  scheduleDayOfWeek     Int       @default(1)       // 0 (Sun) - 6 (Sat)
+  scheduleDayOfMonth    Int       @default(1)       // 1 - 28
+  disallowAdminInRobots Boolean   @default(true)
+  includeImageXml       Boolean   @default(true)
+  includeLlmsTxt        Boolean   @default(true)
+  includeManifest       Boolean   @default(true)
+  customRobotsRules     String?   @db.Text
+  lastGeneratedAt       DateTime?
+  lastGeneratedTrigger  String?
+  lastStatsJson         String?   @db.Text
+  updatedAt             DateTime  @updatedAt
+}
+
+model TeamMember {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  permissions  Json      // Array of permission strings
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Collection {
+  id              String            @id @default(uuid())
+  name            String
+  slug            String            @unique
+  description     String?           @db.Text
+  coverImageId    String?
+  coverImagePath  String?
+  
+  // Type: "manual" | "smart_dynamic" | "smart_snapshot"
+  type            String            @default("manual")
+  tagRules        Json?             // Array of tag strings, e.g. ["christmas", "xmas", "santa"]
+  ruleMatchMode   String            @default("any")    // "any" (OR) | "all" (AND)
+  
+  // Display & SEO
+  isFeatured      Boolean           @default(false)
+  status          String            @default("published") // "published" | "draft"
+  order           Int               @default(0)
+  
+  // Analytics
+  viewsCount      Int               @default(0)
+  downloadsCount  Int               @default(0)
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  images          CollectionImage[]
+
+  @@index([slug])
+  @@index([isFeatured])
+  @@index([status])
+}
+
+model CollectionImage {
+  id           String      @id @default(uuid())
+  collectionId String
+  imageId      String
+  position     Int         @default(0)
+  isPinned     Boolean     @default(false)
+  isExcluded   Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  
+  collection   Collection  @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  image        Image       @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, imageId])
+  @@index([collectionId])
+  @@index([imageId])
+}

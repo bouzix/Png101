@@ -1,0 +1,412 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Hide default browser number spin buttons */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+:root {
+  /* Dark Navy Theme Base (Default) */
+  --background: #0f172a;
+  /* Slate 900 */
+  --foreground: #f8fafc;
+  /* Slate 50 */
+  --primary-glow: #3b82f6;
+  /* Blue 500 */
+  --card-bg: #0f172a;
+  --card-border: #1e293b;
+  --card-header-bg: #1e293b80;
+  /* Slate 800 @ 50% */
+  --muted-text: #e2e8f0;
+  /* Slate 200 */
+  --input-bg: #0f172a80;
+  /* Slate 900/50 */
+  --input-border: #334155;
+  /* Slate 700 */
+  --input-text: #e2e8f0;
+  /* Slate 200 */
+  --tag-bg: #33415580;
+  /* Slate 700/50 */
+  --tag-bg-hover: #1d4ed8;
+  /* Blue 700 */
+  --tag-text: #cbd5e1;
+  /* Slate 300 */
+  --tag-border: #47556980;
+  /* Slate 600/50 */
+  --related-heading-bg: oklch(28.2% 0.091 267.935);
+  --related-heading-border: #1e3a8a80;
+  --related-heading-text: #dbeafe;
+}
+
+.light {
+  /* Light Mode Overrides */
+  --background: #ffffff;
+  /* Pure white background */
+  --foreground: #0f172a;
+  /* Dark slate text */
+  --primary-glow: #2563eb;
+  /* Blue 600 */
+  --card-bg: #f8fafc;
+  /* Very light slate for cards */
+  --card-border: #e2e8f0;
+  /* Slate 200 for visible borders */
+  --card-header-bg: #cbd5e180;
+  --card-header-bg: #cbd5e180;
+  /* Slate 300 @ 50% */
+  --muted-text: #64748b;
+  /* Slate 500 */
+  --input-bg: #e2e8f080;
+  /* Slate 200/50 */
+  --input-border: #bfdbfe;
+  /* Blue 200 */
+  --input-text: #64748b;
+  /* Slate 500 */
+  --tag-bg: #e2e8f080;
+  /* Slate 200/50 */
+  --tag-bg-hover: #e2e8f0;
+  /* Slate 200 */
+  --tag-text: #334155;
+  --related-heading-bg: #f1f5f9;
+  --related-heading-border: #e2e8f0;
+  --related-heading-text: #1e293b;
+  /* Slate 700 */
+  --tag-border: #94a3b880;
+  /* Slate 400/50 */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary-glow: var(--primary-glow);
+  --color-card-bg: var(--card-bg);
+  --color-card-border: var(--card-border);
+  --color-card-header-bg: var(--card-header-bg);
+  --color-muted-text: var(--muted-text);
+  --color-input-bg: var(--input-bg);
+  --color-input-border: var(--input-border);
+  --color-input-text: var(--input-text);
+  --color-tag-bg: var(--tag-bg);
+  --color-tag-bg-hover: var(--tag-bg-hover);
+  --color-tag-text: var(--tag-text);
+  --color-tag-border: var(--tag-border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Custom Scrollbar Styles */
+/* Webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--card-bg);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary-glow);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2563eb;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary-glow) var(--card-bg);
+}
+
+/* Shimmer & Flowing Gradient Animation for Buttons */
+@keyframes gradient-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes sweep-shimmer {
+  0% {
+    transform: translateX(-150%) skewX(-20deg);
+  }
+  100% {
+    transform: translateX(250%) skewX(-20deg);
+  }
+}
+
+.animate-btn-shimmer {
+  background-size: 200% 200%;
+}
+
+.animate-btn-shimmer:hover {
+  animation: gradient-flow 3s ease infinite;
+}
+
+.shimmer-sweep {
+  animation: sweep-shimmer 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Visible contrast backgrounds for transparent PNGs (Option 2) */
+.contrast-stage-dark {
+  /* Visible in Dark Mode: crisp slate-50/light background behind dark/black PNGs */
+  display: block;
+  background-color: #f8fafc;
+}
+.light .contrast-stage-dark {
+  display: none !important;
+}
+
+.contrast-stage-light {
+  /* In Dark Mode: not needed */
+  display: none !important;
+}
+.light .contrast-stage-light {
+  /* Visible in Light Mode: Slate 300 background behind white/light PNGs */
+  display: block !important;
+  background-color: #cbd5e1;
+}
+
+/* Complementary border adjustments when contrast stage is active */
+:root:not(.light) div:has(> .contrast-stage-dark) {
+  border-color: #e2e8f0 !important;
+}
+.light div:has(> .contrast-stage-light) {
+  border-color: #94a3b8 !important;
+}
+
+/* ==========================================================================
+   Pulsating Ring Animation (Trending Pill)
+   ========================================================================== */
+.ring-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.circle {
+  width: 8px;
+  height: 8px;
+  background-color: #3b82f6;
+  border-radius: 50%;
+  position: absolute;
+}
+
+.ringring {
+  border: 2px solid #3b82f6;
+  border-radius: 50%;
+  height: 18px;
+  width: 18px;
+  position: absolute;
+  animation: pulsate 1s ease-out infinite;
+  opacity: 0;
+}
+
+@keyframes pulsate {
+  0% {
+    transform: scale(0.1, 0.1);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.2, 1.2);
+    opacity: 0;
+  }
+}
+
+/* Pulsating Blue Glow Animation & Styling for "More" buttons */
+@keyframes pulse-blue-glow {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.4), 0 0 2px rgba(59, 130, 246, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(59, 130, 246, 0.75), 0 0 6px rgba(59, 130, 246, 0.4);
+  }
+}
+
+.more-btn-glow {
+  animation: pulse-blue-glow 2.5s ease-in-out infinite;
+  border: 1px solid #3b82f6; /* 1px Blue-500 border for Dark Mode */
+}
+
+.more-btn-glow:hover {
+  animation-play-state: paused;
+  box-shadow: 0 0 28px rgba(59, 130, 246, 0.9), 0 0 8px rgba(59, 130, 246, 0.5);
+}
+
+.light .more-btn-glow {
+  border: 1px solid transparent !important; /* No 1px border in Light Mode */
+}
+
+/* Image Card Styling & Hover Pulsating Glow */
+.image-card-glow {
+  border: 1px solid var(--card-border);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+:root:not(.light) .image-card-glow {
+  border-color: #3b82f6; /* 1px Blue-500 border for Dark Mode */
+}
+
+.image-card-glow:hover {
+  animation: pulse-blue-glow 2s ease-in-out infinite;
+}
+
+.light .image-card-glow {
+  border-color: var(--card-border); /* Preserves existing light mode border */
+}
+
+/* ==========================================================================
+   Header Theme Styling (Light Mode vs Dark Mode)
+   ========================================================================== */
+.light .site-header {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9) !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
+}
+
+.light .site-header .header-brand-title {
+  color: #0f172a !important;
+}
+
+.light .site-header .header-search-box {
+  background-color: rgba(241, 245, 249, 0.95) !important;
+  border: 1px solid rgba(203, 213, 225, 0.9) !important;
+}
+
+.light .site-header .header-search-box input {
+  color: #0f172a !important;
+}
+
+.light .site-header .header-search-box input::placeholder {
+  color: #64748b !important;
+}
+
+.light .site-header .header-nav-link {
+  color: #475569 !important;
+}
+
+.light .site-header .header-nav-link:hover {
+  color: #0f172a !important;
+  background-color: rgba(219, 234, 254, 0.75) !important;
+}
+
+.light .site-header .theme-toggle-btn {
+  background-color: rgba(241, 245, 249, 0.95) !important;
+  border: 1px solid rgba(203, 213, 225, 0.9) !important;
+}
+
+.light .site-header .theme-toggle-btn:hover {
+  background-color: rgba(191, 219, 254, 0.6) !important;
+  border-color: rgba(59, 130, 246, 0.5) !important;
+}
+
+/* Dark Mode Defaults for Header */
+:root:not(.light) .site-header,
+.dark .site-header {
+  background-color: rgba(2, 6, 23, 0.88) !important;
+  border-bottom: 1px solid rgba(30, 41, 59, 0.8) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 4px 25px rgba(0, 0, 0, 0.45) !important;
+}
+
+:root:not(.light) .site-header .header-brand-title,
+.dark .site-header .header-brand-title {
+  color: #f8fafc !important;
+}
+
+:root:not(.light) .site-header .header-search-box,
+.dark .site-header .header-search-box {
+  background-color: rgba(15, 23, 42, 0.9) !important;
+  border: 1px solid rgba(51, 65, 85, 0.8) !important;
+}
+
+:root:not(.light) .site-header .header-search-box input,
+.dark .site-header .header-search-box input {
+  color: #f8fafc !important;
+}
+
+:root:not(.light) .site-header .header-search-box input::placeholder,
+.dark .site-header .header-search-box input::placeholder {
+  color: rgba(248, 250, 252, 0.4) !important;
+}
+
+:root:not(.light) .site-header .header-nav-link,
+.dark .site-header .header-nav-link {
+  color: rgba(248, 250, 252, 0.7) !important;
+}
+
+:root:not(.light) .site-header .header-nav-link:hover,
+.dark .site-header .header-nav-link:hover {
+  color: #ffffff !important;
+  background-color: rgba(59, 130, 246, 0.25) !important;
+}
+
+:root:not(.light) .site-header .theme-toggle-btn,
+.dark .site-header .theme-toggle-btn {
+  background-color: rgba(15, 23, 42, 0.85) !important;
+  border: 1px solid rgba(51, 65, 85, 0.8) !important;
+}
+
+:root:not(.light) .site-header .theme-toggle-btn:hover,
+.dark .site-header .theme-toggle-btn:hover {
+  background-color: rgba(59, 130, 246, 0.3) !important;
+  border-color: rgba(59, 130, 246, 0.5) !important;
+}
+
+/* ==========================================================================
+   Admin Sidebar Theme (Light Mode vs Dark Mode)
+   ========================================================================== */
+.light .admin-sidebar {
+  background-color: #ffffff !important;
+  border-right-color: #e2e8f0 !important;
+}
+
+:root:not(.light) .admin-sidebar,
+.dark .admin-sidebar {
+  background-color: #0f172a !important;
+  border-right-color: rgba(30, 41, 59, 0.8) !important;
+}
+
+
+
+

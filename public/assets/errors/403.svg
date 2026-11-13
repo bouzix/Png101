@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none" className="w-full h-full">
+  <defs>
+    <linearGradient id="g403" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.8"/>
+    </linearGradient>
+    <linearGradient id="glow403" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="200" cy="150" r="110" fill="url(#glow403)" />
+
+  <!-- Shield Shape -->
+  <g transform="translate(130, 45)">
+    <path d="M70 10 L130 35 C130 110 70 155 70 155 C70 155 10 110 10 35 Z" fill="#0f172a" fill-opacity="0.9" stroke="#a855f7" stroke-width="3" />
+    
+    <!-- Padlock inside shield -->
+    <rect x="50" y="80" width="40" height="34" rx="8" fill="url(#g403)" stroke="#e9d5ff" stroke-width="1.5"/>
+    <path d="M58 80 V66 C58 59 82 59 82 66 V80" stroke="#e9d5ff" stroke-width="4" stroke-linecap="round" fill="none"/>
+    <circle cx="70" cy="94" r="3" fill="#0f172a"/>
+    <path d="M70 97 V104" stroke="#0f172a" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <!-- 403 Badge -->
+  <g transform="translate(110, 195)">
+    <rect x="0" y="0" width="180" height="50" rx="14" fill="#1e293b" stroke="#a855f7" stroke-width="2"/>
+    <text x="90" y="36" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-size="34" fill="url(#g403)" letter-spacing="2">403</text>
+  </g>
+</svg>
+
