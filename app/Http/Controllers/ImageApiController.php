@@ -232,60 +232,70 @@ class ImageApiController extends Controller
         }
 
         if (!$request->hasFile('file')) {
-            return response()->json(['error' => 'No file uploaded'], 400);
+            return response()->json(['error' => 'No file received (the file may exceed the server POST size limit).'], 400);
         }
 
         $file = $request->file('file');
+        if (!$file->isValid()) {
+            return response()->json(['error' => $file->getErrorMessage() ?: 'Invalid or incomplete file upload.'], 422);
+        }
+
         $name = $request->input('name');
         $tagsString = $request->input('tags');
 
-        $year = date('Y');
-        $month = strtolower(date('F'));
-        $day = date('d');
+        try {
+            $year = date('Y');
+            $month = strtolower(date('F'));
+            $day = date('d');
 
-        $relativeDir = "/uploads/{$year}/{$month}/{$day}";
-        $uploadDir = public_path($relativeDir);
-        if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
-        }
-
-        $origName = preg_replace('/\s+/', '-', $file->getClientOriginalName());
-        $filename = (int) round(microtime(true) * 1000) . '-' . $origName;
-        $filepath = $uploadDir . '/' . $filename;
-        $fileSize = $file->getSize();
-        $mimeType = $file->getClientMimeType();
-
-        $file->move($uploadDir, $filename);
-
-        [$width, $height] = ImageProcessingService::getDimensions($filepath);
-        $previewFilename = "preview-{$filename}.jpg";
-        $previewFilepath = $uploadDir . '/' . $previewFilename;
-        $previewOk = ImageProcessingService::generateCheckerboardPreview($filepath, $previewFilepath, $width, $height);
-        $luminanceResult = ImageProcessingService::calculateLuminance($filepath);
-
-        $tags = [];
-        if ($tagsString) {
-            $decoded = json_decode($tagsString, true);
-            if (is_array($decoded)) {
-                $tags = $decoded;
+            $relativeDir = "/uploads/{$year}/{$month}/{$day}";
+            $uploadDir = public_path($relativeDir);
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
             }
+
+            $origName = preg_replace('/\s+/', '-', $file->getClientOriginalName());
+            $filename = (int) round(microtime(true) * 1000) . '-' . $origName;
+            $filepath = $uploadDir . '/' . $filename;
+            $fileSize = $file->getSize();
+            $mimeType = $file->getClientMimeType();
+
+            $file->move($uploadDir, $filename);
+
+            [$width, $height] = ImageProcessingService::getDimensions($filepath);
+            $previewFilename = "preview-{$filename}.jpg";
+            $previewFilepath = $uploadDir . '/' . $previewFilename;
+            $previewOk = ImageProcessingService::generateCheckerboardPreview($filepath, $previewFilepath, $width, $height);
+            $luminanceResult = ImageProcessingService::calculateLuminance($filepath);
+
+            $tags = [];
+            if ($tagsString) {
+                $decoded = json_decode($tagsString, true);
+                if (is_array($decoded)) {
+                    $tags = $decoded;
+                }
+            }
+
+            $newImage = Image::create([
+                'filename' => $filename,
+                'path' => "{$relativeDir}/{$filename}",
+                'previewPath' => $previewOk ? "{$relativeDir}/{$previewFilename}" : null,
+                'name' => $name ?: $filename,
+                'tags' => $tags,
+                'status' => 'draft',
+                'width' => $width,
+                'height' => $height,
+                'size' => $fileSize,
+                'mimeType' => $mimeType,
+                'luminance' => $luminanceResult['luminance'],
+            ]);
+
+            return response()->json(['success' => true, 'image' => $newImage]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'error' => $e->getMessage() ?: 'Server error while processing uploaded image.',
+            ], 500);
         }
-
-        $newImage = Image::create([
-            'filename' => $filename,
-            'path' => "{$relativeDir}/{$filename}",
-            'previewPath' => $previewOk ? "{$relativeDir}/{$previewFilename}" : null,
-            'name' => $name ?: $filename,
-            'tags' => $tags,
-            'status' => 'draft',
-            'width' => $width,
-            'height' => $height,
-            'size' => $fileSize,
-            'mimeType' => $mimeType,
-            'luminance' => $luminanceResult['luminance'],
-        ]);
-
-        return response()->json(['success' => true, 'image' => $newImage]);
     }
 
     public function update(Request $request)

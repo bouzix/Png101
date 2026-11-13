@@ -17,15 +17,14 @@ const DropZone = ({ onFilesDropped }) => {
         e.preventDefault();
         setIsDragging(false);
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const files = Array.from(e.dataTransfer.files).filter(file => file.type === 'image/png');
-            onFilesDropped(files);
+            onFilesDropped(Array.from(e.dataTransfer.files));
         }
     };
 
     const handleFileSelect = (e) => {
         if (e.target.files && e.target.files.length > 0) {
-            const files = Array.from(e.target.files).filter(file => file.type === 'image/png');
-            onFilesDropped(files);
+            onFilesDropped(Array.from(e.target.files));
+            e.target.value = '';
         }
     };
 

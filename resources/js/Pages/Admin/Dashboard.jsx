@@ -1,14 +1,39 @@
-import { useState, useEffect } from 'react';
-import { Head } from '@inertiajs/react';
+import { useState, useEffect, useRef } from 'react';
+import { Head, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import DropZone from '@/components/admin/DropZone';
 import AssetCard from '@/components/admin/AssetCard';
 import BulkEditSidebar from '@/components/admin/BulkEditSidebar';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import { toast } from 'sonner';
-import { CheckSquare, Square, Trash2, Loader2, CheckCircle2, Copy, X, Sparkles } from 'lucide-react';
+import {
+    CheckSquare,
+    Square,
+    Trash2,
+    Loader2,
+    CheckCircle2,
+    Copy,
+    X,
+    Sparkles,
+    AlertTriangle,
+    RotateCcw,
+    Upload,
+    Image as ImageIcon,
+} from 'lucide-react';
+import { useUploadManager } from '@/components/admin/UploadManager';
+
+const CATEGORY_BADGE = {
+    format: 'Wrong Format',
+    size: 'Too Large',
+    corrupt: 'Corrupted PNG',
+    transient: 'Temp Error',
+    network: 'Network',
+    auth: 'Auth',
+    server: 'Server Error',
+};
 
 export default function Dashboard() {
+    const pageProps = usePage().props;
     const [stagedFiles, setStagedFiles] = useState([]);
     const [targetKeyword, setTargetKeyword] = useState(() => {
         if (typeof window !== 'undefined') {
@@ -16,18 +41,33 @@ export default function Dashboard() {
         }
         return '';
     });
-    const [uploading, setUploading] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [failedFilter, setFailedFilter] = useState('all');
+    const replaceInputRef = useRef(null);
+    const replacingFailedIdRef = useRef(null);
 
-    const [progress, setProgress] = useState({
-        active: false,
-        mode: 'staging',
-        total: 0,
-        completed: 0,
-        succeeded: 0,
-        failed: 0,
-        currentFileName: '',
-    });
+    const {
+        job: progress,
+        failedUploads,
+        uploadLimits,
+        setUploadLimits,
+        startStagingUpload,
+        startPublishingBatch,
+        retryFailedUpload,
+        replaceFailedUpload,
+        retryAllFailedUploads,
+        removeFailedUpload,
+        clearFailedUploads,
+        subscribe,
+    } = useUploadManager();
+
+    useEffect(() => {
+        if (pageProps?.uploadLimits) {
+            setUploadLimits(pageProps.uploadLimits);
+        }
+    }, [pageProps?.uploadLimits, setUploadLimits]);
+
+    const uploading = progress.status === 'running' && progress.mode === 'publishing';
 
     const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
     const [editingFileId, setEditingFileId] = useState(null);
@@ -62,88 +102,22 @@ export default function Dashboard() {
                     setStagedFiles(drafts);
                 }
             });
-    }, []);
 
-    const handleFilesDropped = async (files) => {
-        if (files.length === 0) return;
-
-        setProgress({
-            active: true,
-            mode: 'staging',
-            total: files.length,
-            completed: 0,
-            succeeded: 0,
-            failed: 0,
-            currentFileName: files[0].name,
+        return subscribe({
+            onStaged: (newFile) => {
+                setStagedFiles((prev) =>
+                    prev.some((f) => f.id === newFile.id) ? prev : [newFile, ...prev]
+                );
+            },
+            onPublished: (publishedId) => {
+                setStagedFiles((prev) => prev.filter((f) => f.id !== publishedId));
+            },
         });
+    }, [subscribe]);
 
-        let succeeded = 0;
-        let failed = 0;
-
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            setProgress(prev => ({
-                ...prev,
-                currentFileName: file.name,
-            }));
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            try {
-                const res = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                if (res.ok) {
-                    const data = await res.json();
-                    const newFile = {
-                        id: data.image.id,
-                        file: file,
-                        preview: data.image.path,
-                        name: data.image.name,
-                        tags: [],
-                        altText: '',
-                        description: '',
-                        categoryIds: [],
-                        hasMetadata: false,
-                        isSelected: false,
-                        luminance: data.image.luminance || null,
-                        contrastBgDark: data.image.contrastBgDark || null,
-                        contrastBgLight: data.image.contrastBgLight || null,
-                    };
-                    setStagedFiles(prev => [newFile, ...prev]);
-                    succeeded++;
-                } else {
-                    failed++;
-                }
-            } catch (error) {
-                console.error('Upload failed', error);
-                failed++;
-            }
-
-            setProgress(prev => ({
-                ...prev,
-                completed: i + 1,
-                succeeded,
-                failed,
-            }));
-        }
-
-        if (failed === 0) {
-            toast.success(
-                succeeded === 1
-                    ? 'Image uploaded successfully'
-                    : `Successfully uploaded all ${succeeded} images!`
-            );
-        } else {
-            toast.warning(`Uploaded ${succeeded} images. ${failed} failed.`);
-        }
-
-        setTimeout(() => {
-            setProgress(prev => ({ ...prev, active: false }));
-        }, 2000);
+    const handleFilesDropped = (files) => {
+        if (files.length === 0) return;
+        startStagingUpload(files);
     };
 
     const handleEdit = (id) => {
@@ -250,72 +224,48 @@ export default function Dashboard() {
         });
     };
 
-    const handleUploadSelected = async () => {
+    const handleUploadSelected = () => {
         const selectedReady = stagedFiles.filter(f => f.isSelected && f.hasMetadata);
         if (selectedReady.length === 0) return;
+        startPublishingBatch(selectedReady);
+    };
 
-        setUploading(true);
-        setProgress({
-            active: true,
-            mode: 'publishing',
-            total: selectedReady.length,
-            completed: 0,
-            succeeded: 0,
-            failed: 0,
-            currentFileName: selectedReady[0].name,
-        });
-
-        let successCount = 0;
-        let failCount = 0;
-
-        for (let i = 0; i < selectedReady.length; i++) {
-            const stagedFile = selectedReady[i];
-            setProgress(prev => ({
-                ...prev,
-                currentFileName: stagedFile.name,
-            }));
-
-            try {
-                const res = await fetch('/api/images/update', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id: stagedFile.id, status: 'published' }),
-                });
-
-                if (res.ok) {
-                    successCount++;
-                    setStagedFiles(prev => prev.filter(f => f.id !== stagedFile.id));
-                } else {
-                    failCount++;
-                }
-            } catch {
-                failCount++;
-            }
-
-            setProgress(prev => ({
-                ...prev,
-                completed: i + 1,
-                succeeded: successCount,
-                failed: failCount,
-            }));
+    const triggerReplaceFailed = (failedId) => {
+        replacingFailedIdRef.current = failedId;
+        if (replaceInputRef.current) {
+            replaceInputRef.current.value = '';
+            replaceInputRef.current.click();
         }
+    };
 
-        setUploading(false);
-        if (failCount === 0) {
-            toast.success(`Successfully published ${successCount} images!`);
-        } else {
-            toast.warning(`Published ${successCount} images. ${failCount} failed.`);
+    const handleReplaceFileSelected = (e) => {
+        const file = e.target.files?.[0];
+        const targetId = replacingFailedIdRef.current;
+        replacingFailedIdRef.current = null;
+        e.target.value = '';
+        if (file && targetId) {
+            replaceFailedUpload(targetId, file);
         }
-
-        setTimeout(() => {
-            setProgress(prev => ({ ...prev, active: false }));
-        }, 2000);
     };
 
     const editingFile = stagedFiles.find(f => f.id === editingFileId);
     const selectedFiles = stagedFiles.filter(f => f.isSelected);
     const readyToUploadCount = stagedFiles.filter(f => f.isSelected && f.hasMetadata).length;
     const progressPercent = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
+
+    const retryableFailedCount = failedUploads.filter((f) => f.canRetry).length;
+    const fixRequiredFailedCount = failedUploads.length - retryableFailedCount;
+    const activeFailedFilter =
+        (failedFilter === 'retryable' && retryableFailedCount === 0) ||
+        (failedFilter === 'fix_required' && fixRequiredFailedCount === 0)
+            ? 'all'
+            : failedFilter;
+    const filteredFailedUploads =
+        activeFailedFilter === 'retryable'
+            ? failedUploads.filter((f) => f.canRetry)
+            : activeFailedFilter === 'fix_required'
+            ? failedUploads.filter((f) => !f.canRetry)
+            : failedUploads;
 
     const imagesToEdit = editingFile
         ? [editingFile]
@@ -417,6 +367,218 @@ export default function Dashboard() {
                                 className="h-full bg-gradient-to-r from-blue-600 to-primary-glow transition-all duration-300 ease-out rounded-full"
                                 style={{ width: `${progressPercent}%` }}
                             />
+                        </div>
+                    </div>
+                )}
+
+                {failedUploads.length > 0 && (
+                    <div className="mb-8 bg-rose-500/5 border border-rose-500/25 rounded-2xl p-5 space-y-4">
+                        <input
+                            ref={replaceInputRef}
+                            type="file"
+                            accept=".png,image/png"
+                            onChange={handleReplaceFileSelected}
+                            className="hidden"
+                        />
+
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/25">
+                                    <AlertTriangle className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <h3 className="text-sm font-bold text-foreground">
+                                            Failed Uploads ({failedUploads.length})
+                                        </h3>
+                                        {uploadLimits?.effectiveMaxLabel && (
+                                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-background/80 border border-card-border text-foreground/60">
+                                                Max size: {uploadLimits.effectiveMaxLabel}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-foreground/60">
+                                        Hover over any faded image to see why it failed, then retry or replace the file.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                                {retryableFailedCount > 0 && fixRequiredFailedCount > 0 && (
+                                    <div className="inline-flex items-center p-0.5 rounded-xl bg-background border border-card-border text-xs">
+                                        <button
+                                            type="button"
+                                            onClick={() => setFailedFilter('all')}
+                                            className={`px-2.5 py-1.5 rounded-lg font-semibold cursor-pointer transition-colors ${
+                                                activeFailedFilter === 'all'
+                                                    ? 'bg-card-bg text-foreground shadow-sm'
+                                                    : 'text-foreground/60 hover:text-foreground'
+                                            }`}
+                                        >
+                                            All ({failedUploads.length})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFailedFilter('retryable')}
+                                            className={`px-2.5 py-1.5 rounded-lg font-semibold cursor-pointer transition-colors ${
+                                                activeFailedFilter === 'retryable'
+                                                    ? 'bg-primary-glow/15 text-primary-glow'
+                                                    : 'text-foreground/60 hover:text-foreground'
+                                            }`}
+                                        >
+                                            Retryable ({retryableFailedCount})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFailedFilter('fix_required')}
+                                            className={`px-2.5 py-1.5 rounded-lg font-semibold cursor-pointer transition-colors ${
+                                                activeFailedFilter === 'fix_required'
+                                                    ? 'bg-amber-500/15 text-amber-300'
+                                                    : 'text-foreground/60 hover:text-foreground'
+                                            }`}
+                                        >
+                                            Needs Replace ({fixRequiredFailedCount})
+                                        </button>
+                                    </div>
+                                )}
+
+                                {retryableFailedCount > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={retryAllFailedUploads}
+                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary-glow/15 hover:bg-primary-glow/25 border border-primary-glow/30 text-xs font-bold text-primary-glow cursor-pointer transition-all"
+                                    >
+                                        <RotateCcw className="w-3.5 h-3.5" />
+                                        Retry All
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={clearFailedUploads}
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-background hover:bg-white/5 border border-card-border text-xs font-semibold text-foreground/70 hover:text-foreground cursor-pointer transition-all"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                    Clear All
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {filteredFailedUploads.map((item) => {
+                                const sizeKb = item.size > 0 ? `${Math.max(1, Math.round(item.size / 1024))} KB` : '';
+                                const badgeText = CATEGORY_BADGE[item.failureCategory] || 'Failed';
+                                return (
+                                    <div
+                                        key={item.id}
+                                        title={item.reason}
+                                        className="group relative rounded-xl border border-rose-500/30 bg-card-bg/80 overflow-hidden aspect-square flex flex-col justify-between transition-all hover:border-rose-400/60 shadow-md"
+                                    >
+                                        {/* Faded Image Preview */}
+                                        <div className="relative flex-1 flex items-center justify-center p-3 overflow-hidden">
+                                            {item.previewUrl ? (
+                                                <img
+                                                    src={item.previewUrl}
+                                                    alt={item.name}
+                                                    className="max-h-full max-w-full object-contain opacity-45 grayscale-[40%] group-hover:opacity-25 group-hover:scale-95 transition-all duration-200"
+                                                />
+                                            ) : (
+                                                <ImageIcon className="w-10 h-10 text-rose-400/40 group-hover:opacity-25 transition-opacity" />
+                                            )}
+
+                                            {/* Top Status Badge */}
+                                            <div className="absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/35 text-[10px] font-bold text-rose-300">
+                                                <AlertTriangle className="w-3 h-3" />
+                                                {badgeText}
+                                            </div>
+
+                                            {/* Top-right Quick Dismiss */}
+                                            <button
+                                                type="button"
+                                                onClick={() => removeFailedUpload(item.id)}
+                                                className="absolute top-2 right-2 p-1 rounded-full bg-black/50 text-white/70 hover:text-white hover:bg-black/80 cursor-pointer z-20 transition-colors"
+                                                title="Remove from failed list"
+                                            >
+                                                <X className="w-3 h-3" />
+                                            </button>
+
+                                            {/* Hover Error Reason & Actions Overlay */}
+                                            <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm p-3 flex flex-col justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+                                                <div className="pt-4 space-y-1 overflow-y-auto">
+                                                    <div className="text-[10px] font-bold uppercase tracking-wider text-rose-400">
+                                                        Failure Reason
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-200 leading-snug break-words">
+                                                        {item.reason}
+                                                    </p>
+                                                    <div className="text-[10px] text-slate-400 pt-0.5">
+                                                        {sizeKb ? `Size: ${sizeKb} · ` : ''}Attempts: {item.attempts}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-1.5">
+                                                    {item.canRetry ? (
+                                                        <>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => retryFailedUpload(item.id)}
+                                                                className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-primary-glow hover:bg-primary-glow/90 text-white text-[11px] font-bold cursor-pointer transition-colors"
+                                                            >
+                                                                <RotateCcw className="w-3 h-3" />
+                                                                Retry
+                                                            </button>
+                                                            {item.kind === 'staging' && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => triggerReplaceFailed(item.id)}
+                                                                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 cursor-pointer transition-colors"
+                                                                    title="Replace with another PNG"
+                                                                >
+                                                                    <Upload className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => triggerReplaceFailed(item.id)}
+                                                            className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-bold cursor-pointer transition-colors"
+                                                        >
+                                                            <Upload className="w-3 h-3" />
+                                                            Replace File
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Bottom Filename Footer */}
+                                        <div className="px-2.5 py-2 border-t border-card-border/70 bg-background/60 flex items-center justify-between gap-1.5">
+                                            <span className="text-[11px] font-medium text-foreground/75 truncate">
+                                                {item.name}
+                                            </span>
+                                            {item.canRetry ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => retryFailedUpload(item.id)}
+                                                    className="p-1 rounded-md text-primary-glow hover:bg-primary-glow/15 cursor-pointer flex-shrink-0"
+                                                    title="Retry upload"
+                                                >
+                                                    <RotateCcw className="w-3 h-3" />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => triggerReplaceFailed(item.id)}
+                                                    className="p-1 rounded-md text-amber-400 hover:bg-amber-500/15 cursor-pointer flex-shrink-0"
+                                                    title="Replace invalid file"
+                                                >
+                                                    <Upload className="w-3 h-3" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\CodeInjectionService;
+use App\Services\ImageProcessingService;
 use App\Services\TeamService;
 use App\Services\WebsiteInfoService;
 use Illuminate\Http\Request;
@@ -23,6 +24,9 @@ class HandleInertiaRequests extends Middleware
             'websiteInfo' => fn () => WebsiteInfoService::get(),
             'codeInjection' => fn () => CodeInjectionService::get(),
             'auth' => fn () => TeamService::getCurrentSession($request),
+            'uploadLimits' => fn () => str_starts_with($request->path(), 'admin')
+                ? ImageProcessingService::getUploadLimits()
+                : null,
         ]);
     }
 }

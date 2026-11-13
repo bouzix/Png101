@@ -142,5 +142,54 @@ class ImageProcessingService
 
         return ['luminance' => $luminance, 'score' => $avgScore];
     }
+
+    /**
+     * Convert a PHP ini shorthand size value (e.g. "8M", "2048K") into bytes.
+     */
+    public static function parseIniBytes(string|false $value): int
+    {
+        if ($value === false) {
+            return 0;
+        }
+        $trimmed = trim($value);
+        if ($trimmed === '' || $trimmed === '-1') {
+            return 0;
+        }
+
+        $unit = strtolower(substr($trimmed, -1));
+        $number = (float) $trimmed;
+
+        return match ($unit) {
+            'g' => (int) round($number * 1024 * 1024 * 1024),
+            'm' => (int) round($number * 1024 * 1024),
+            'k' => (int) round($number * 1024),
+            default => (int) round($number),
+        };
+    }
+
+    /**
+     * Expose effective PHP upload size limits for client-side pre-flight checks.
+     */
+    public static function getUploadLimits(): array
+    {
+        $uploadMaxBytes = self::parseIniBytes(ini_get('upload_max_filesize'));
+        $postMaxBytes = self::parseIniBytes(ini_get('post_max_size'));
+
+        $positive = array_values(array_filter([$uploadMaxBytes, $postMaxBytes], fn ($b) => $b > 0));
+        $effectiveMaxBytes = empty($positive) ? 0 : min($positive);
+
+        $effectiveMaxLabel = $effectiveMaxBytes > 0
+            ? ($effectiveMaxBytes >= 1024 * 1024
+                ? number_format($effectiveMaxBytes / (1024 * 1024), 1) . ' MB'
+                : number_format($effectiveMaxBytes / 1024, 0) . ' KB')
+            : null;
+
+        return [
+            'uploadMaxBytes' => $uploadMaxBytes,
+            'postMaxBytes' => $postMaxBytes,
+            'effectiveMaxBytes' => $effectiveMaxBytes,
+            'effectiveMaxLabel' => $effectiveMaxLabel,
+        ];
+    }
 }
 

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createInertiaApp } from '@inertiajs/react';
 import { Toaster } from 'sonner';
 import Footer from './components/Footer';
+import { UploadManagerProvider, FloatingUploadTracker } from './components/admin/UploadManager';
 
 createInertiaApp({
     resolve: (name) => {
@@ -17,6 +18,7 @@ createInertiaApp({
                 contactEmail: 'contact@png101.com',
                 companyName: 'Png101',
             };
+            const initialUploadLimits = propsObj.initialPage?.props?.uploadLimits || null;
             const url = propsObj.initialPage?.url || '';
             const hideFooter =
                 url.startsWith('/admin') ||
@@ -24,13 +26,16 @@ createInertiaApp({
                 url === '/maintenance';
 
             return (
-                <div className="min-h-screen flex flex-col flex-1">
-                    <div className="flex-1 flex flex-col">
-                        <App {...propsObj} />
+                <UploadManagerProvider initialUploadLimits={initialUploadLimits}>
+                    <div className="min-h-screen flex flex-col flex-1">
+                        <div className="flex-1 flex flex-col">
+                            <App {...propsObj} />
+                        </div>
+                        {!hideFooter && <Footer info={websiteInfo} currentUrl={url} />}
+                        <FloatingUploadTracker />
+                        <Toaster position="top-right" richColors />
                     </div>
-                    {!hideFooter && <Footer info={websiteInfo} currentUrl={url} />}
-                    <Toaster position="bottom-right" richColors />
-                </div>
+                </UploadManagerProvider>
             );
         };
 
