@@ -2,7 +2,9 @@
 
 namespace App\Support;
 
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 
 class HostingEnvironment
@@ -198,6 +200,39 @@ class HostingEnvironment
         } catch (\Throwable $e) {
             return false;
         }
+    }
+
+    /**
+     * Build an outbound HTTP client with strict TLS verification, falling back
+     * to a bundled Windows CA store when local PHP has no curl.cainfo.
+     */
+    public static function httpClient(int $timeout = 60): PendingRequest
+    {
+        $client = Http::timeout($timeout);
+
+        if (
+            PHP_OS_FAMILY === 'Windows'
+            && !ini_get('curl.cainfo')
+            && !ini_get('openssl.cafile')
+        ) {
+            $phpDir = dirname(PHP_BINARY);
+            $candidates = [
+                $phpDir . DIRECTORY_SEPARATOR . 'extras' . DIRECTORY_SEPARATOR . 'ssl' . DIRECTORY_SEPARATOR . 'cacert.pem',
+                $phpDir . DIRECTORY_SEPARATOR . 'cacert.pem',
+                'C:\\Program Files\\Git\\mingw64\\ssl\\certs\\ca-bundle.crt',
+                'C:\\Program Files\\Git\\usr\\ssl\\certs\\ca-bundle.crt',
+                'C:\\Program Files (x86)\\Git\\mingw64\\ssl\\certs\\ca-bundle.crt',
+                'C:\\laragon\\etc\\ssl\\cacert.pem',
+            ];
+
+            foreach ($candidates as $caPath) {
+                if (is_file($caPath)) {
+                    return $client->withOptions(['verify' => $caPath]);
+                }
+            }
+        }
+
+        return $client;
     }
 }
 

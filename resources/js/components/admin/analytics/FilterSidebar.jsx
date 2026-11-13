@@ -14,6 +14,7 @@ import {
     ChevronDown,
     Check
 } from 'lucide-react';
+import { CountryFlag } from '../../ui/CountryFlag';
 
 export function FilterSidebar({
     filters,
@@ -161,7 +162,11 @@ export function FilterSidebar({
                                 <span className="text-foreground/70">All Countries</span>
                             ) : (
                                 <>
-                                    <span>{selectedCountryObj?.flag || '🌐'}</span>
+                                    <CountryFlag
+                                        code={selectedCountryObj?.code || filters.country}
+                                        name={selectedCountryObj?.name}
+                                        fallback={selectedCountryObj?.flag || '🌐'}
+                                    />
                                     <span className="truncate">{selectedCountryObj?.name || filters.country}</span>
                                 </>
                             )}
@@ -221,7 +226,11 @@ export function FilterSidebar({
                                             }`}
                                         >
                                             <span className="flex items-center gap-2 truncate">
-                                                <span>{c.flag}</span>
+                                                <CountryFlag
+                                                    code={c.code}
+                                                    name={c.name}
+                                                    fallback={c.flag}
+                                                />
                                                 <span className="truncate">{c.name}</span>
                                             </span>
                                             <span className="text-[10px] text-foreground/40 ml-2 shrink-0">

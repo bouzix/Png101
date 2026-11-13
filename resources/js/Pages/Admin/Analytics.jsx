@@ -37,6 +37,7 @@ import {
 import AdminLayout from '../../Layouts/AdminLayout';
 import { StatCard } from '../../components/ui/StatCard';
 import { GlassCard } from '../../components/ui/GlassCard';
+import { CountryFlag } from '../../components/ui/CountryFlag';
 import { FilterSidebar } from '../../components/admin/analytics/FilterSidebar';
 import Pagination from '../../components/ui/Pagination';
 
@@ -538,7 +539,11 @@ export default function AnalyticsPage() {
                                         <div key={c.country} className="space-y-1.5">
                                             <div className="flex items-center justify-between text-xs">
                                                 <span className="flex items-center gap-2 font-medium text-foreground/85 truncate">
-                                                    <span className="text-base leading-none">{c.flag}</span>
+                                                    <CountryFlag
+                                                        code={c.country}
+                                                        name={c.name}
+                                                        fallback={c.flag}
+                                                    />
                                                     <span className="truncate">{c.name}</span>
                                                 </span>
                                                 <span className="text-foreground/60 font-mono shrink-0 ml-2">
@@ -825,9 +830,16 @@ export default function AnalyticsPage() {
                                         <p className="text-xs font-semibold text-foreground truncate" title={item.imageTitle}>
                                             {item.imageTitle}
                                         </p>
-                                        <div className="flex items-center gap-1.5 text-[11px] text-foreground/50 mt-0.5">
-                                            <span>{item.countryFlag}</span>
-                                            <span className="capitalize">{item.deviceType}</span>
+                                        <div className="flex items-center gap-1.5 text-[11px] text-foreground/50 mt-0.5 truncate">
+                                            <CountryFlag
+                                                code={item.countryCode}
+                                                name={item.countryName}
+                                                fallback={item.countryFlag}
+                                                className="w-4 h-3"
+                                            />
+                                            <span className="truncate">{item.countryName || 'Unknown'}</span>
+                                            <span className="text-foreground/30">·</span>
+                                            <span className="capitalize shrink-0">{item.deviceType}</span>
                                             {item.isCustomSize && (
                                                 <span className="px-1 py-0.2 rounded bg-teal-500/15 text-teal-400 text-[10px]">
                                                     {item.resolution || 'Custom'}

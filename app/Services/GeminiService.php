@@ -35,30 +35,7 @@ class GeminiService
      */
     private static function httpClient(): PendingRequest
     {
-        $client = Http::timeout(60);
-
-        if (
-            PHP_OS_FAMILY === 'Windows'
-            && !ini_get('curl.cainfo')
-            && !ini_get('openssl.cafile')
-        ) {
-            $phpDir = dirname(PHP_BINARY);
-            $candidates = [
-                $phpDir . DIRECTORY_SEPARATOR . 'extras' . DIRECTORY_SEPARATOR . 'ssl' . DIRECTORY_SEPARATOR . 'cacert.pem',
-                $phpDir . DIRECTORY_SEPARATOR . 'cacert.pem',
-                'C:\\Program Files\\Git\\mingw64\\ssl\\certs\\ca-bundle.crt',
-                'C:\\Program Files\\Git\\usr\\ssl\\certs\\ca-bundle.crt',
-                'C:\\Program Files (x86)\\Git\\mingw64\\ssl\\certs\\ca-bundle.crt',
-            ];
-
-            foreach ($candidates as $caPath) {
-                if (is_file($caPath)) {
-                    return $client->withOptions(['verify' => $caPath]);
-                }
-            }
-        }
-
-        return $client;
+        return \App\Support\HostingEnvironment::httpClient(60);
     }
 
     private static function postGenerateContent(string $resolvedModel, string $apiKey, array $parts): array

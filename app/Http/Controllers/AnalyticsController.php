@@ -24,7 +24,7 @@ class AnalyticsController extends Controller
             }
 
             $deviceType = AnalyticsService::detectDevice($request->userAgent());
-            $country = AnalyticsService::detectCountry($request->ip());
+            $country = AnalyticsService::detectCountryForRequest($request);
 
             AnalyticsService::recordDownload([
                 'imageId' => $imageId,
@@ -44,7 +44,7 @@ class AnalyticsController extends Controller
     private function countryFlag(?string $code): string
     {
         $c = strtoupper(trim((string) $code));
-        if (strlen($c) === 2 && ctype_alpha($c)) {
+        if (strlen($c) === 2 && ctype_alpha($c) && !in_array($c, ['XX', 'T1'], true)) {
             return mb_chr(0x1F1E6 + ord($c[0]) - 65, 'UTF-8')
                 . mb_chr(0x1F1E6 + ord($c[1]) - 65, 'UTF-8');
         }
@@ -482,16 +482,11 @@ class AnalyticsController extends Controller
 
         $result = $rows->map(function ($row) {
             $code = strtoupper((string) ($row->country ?? ''));
-            $flag = '🌐';
-            if (strlen($code) === 2 && ctype_alpha($code)) {
-                $flag = mb_chr(0x1F1E6 + ord($code[0]) - 65, 'UTF-8')
-                    . mb_chr(0x1F1E6 + ord($code[1]) - 65, 'UTF-8');
-            }
             return [
                 'code' => $code,
-                'name' => $row->countryName ?: $code,
+                'name' => $row->countryName ?: AnalyticsService::countryNameFromCode($code),
                 'downloads' => (int) $row->count,
-                'flag' => $flag,
+                'flag' => $this->countryFlag($code),
             ];
         })->values();
 
