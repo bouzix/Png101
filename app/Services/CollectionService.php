@@ -1,0 +1,377 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\Collection;
+use App\Models\Image;
+
+class CollectionService
+{
+    public static function slugify(string $text): string
+    {
+        $slug = strtolower(trim($text));
+        $slug = preg_replace('/[\s\W-]+/', '-', $slug);
+        return trim($slug, '-');
+    }
+
+    public static function getUniqueSlug(string $baseName, ?string $excludeId = null): string
+    {
+        $baseSlug = self::slugify($baseName) ?: 'collection';
+        $slug = $baseSlug;
+        $counter = 1;
+
+        while (true) {
+            $query = Collection::where('slug', $slug);
+            if ($excludeId) {
+                $query->where('id', '!=', $excludeId);
+            }
+            if (!$query->exists()) {
+                return $slug;
+            }
+            $counter++;
+            $slug = "{$baseSlug}-{$counter}";
+        }
+    }
+
+    public static function normalizeTags($tags): array
+    {
+        if (!is_array($tags)) {
+            return [];
+        }
+        $set = [];
+        foreach ($tags as $t) {
+            if (is_string($t)) {
+                $clean = strtolower(trim($t));
+                if ($clean !== '') {
+                    $set[$clean] = true;
+                }
+            }
+        }
+        return array_keys($set);
+    }
+
+    public static function matchesTagRules(array $imageTags, array $ruleTags, string $mode = 'any'): bool
+    {
+        if (empty($ruleTags)) {
+            return false;
+        }
+        $imgSet = array_flip(array_map('strtolower', $imageTags));
+        if ($mode === 'all') {
+            foreach ($ruleTags as $rt) {
+                if (!isset($imgSet[strtolower($rt)])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        foreach ($ruleTags as $rt) {
+            if (isset($imgSet[strtolower($rt)])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static function previewTagMatches(array $ruleTags, string $mode = 'any'): array
+    {
+        $cleanRules = self::normalizeTags($ruleTags);
+        if (empty($cleanRules)) {
+            return ['count' => 0, 'sampleImages' => []];
+        }
+
+        $allPublished = Image::where('status', 'published')
+            ->select(['id', 'name', 'filename', 'path', 'tags'])
+            ->get();
+
+        $matching = [];
+        foreach ($allPublished as $img) {
+            $imgTags = self::normalizeTags($img->tags ?? []);
+            if (self::matchesTagRules($imgTags, $cleanRules, $mode)) {
+                $matching[] = [
+                    'id' => $img->id,
+                    'name' => $img->name,
+                    'filename' => $img->filename,
+                    'path' => $img->path,
+                    'tags' => $img->tags,
+                ];
+            }
+        }
+
+        return [
+            'count' => count($matching),
+            'sampleImages' => array_slice($matching, 0, 8),
+        ];
+    }
+
+    public static function listCollections(array $options = []): array
+    {
+        $query = Collection::with(['images' => function ($q) {
+            $q->orderByDesc('isPinned')->orderBy('position')->orderByDesc('createdAt');
+        }, 'images.image']);
+
+        if (!empty($options['status'])) {
+            $query->where('status', $options['status']);
+        } elseif (empty($options['includeDrafts'])) {
+            $query->where('status', 'published');
+        }
+
+        if (isset($options['isFeatured'])) {
+            $query->where('isFeatured', (bool) $options['isFeatured']);
+        }
+
+        if (!empty($options['search'])) {
+            $s = $options['search'];
+            $query->where(function ($q) use ($s) {
+                $q->where('name', 'like', "%{$s}%")
+                  ->orWhere('description', 'like', "%{$s}%")
+                  ->orWhere('slug', 'like', "%{$s}%");
+            });
+        }
+
+        $sortBy = $options['sortBy'] ?? 'order';
+        if ($sortBy === 'trending') {
+            $query->orderByDesc('isFeatured')->orderByDesc('viewsCount')->orderByDesc('downloadsCount')->orderByDesc('updatedAt')->orderByDesc('createdAt');
+        } elseif ($sortBy === 'recent') {
+            $query->orderByDesc('createdAt');
+        } elseif ($sortBy === 'popular') {
+            $query->orderByDesc('viewsCount')->orderByDesc('downloadsCount')->orderByDesc('createdAt');
+        } else {
+            $query->orderByDesc('isFeatured')->orderBy('order')->orderByDesc('createdAt');
+        }
+
+        if (!empty($options['limit']) && (int) $options['limit'] > 0) {
+            $query->limit((int) $options['limit']);
+        }
+
+        $collections = $query->get();
+
+        $publishedImages = Image::where('status', 'published')
+            ->select(['id', 'filename', 'path', 'previewPath', 'name', 'tags', 'luminance', 'contrastBgDark', 'contrastBgLight', 'createdAt'])
+            ->orderByDesc('createdAt')
+            ->get();
+
+        $result = [];
+        foreach ($collections as $col) {
+            $tagRules = self::normalizeTags($col->tagRules ?? []);
+            $finalImages = [];
+
+            if ($col->type === 'smart_dynamic' && !empty($tagRules)) {
+                $excludedIds = [];
+                $pinnedImages = [];
+                $pinnedIds = [];
+
+                foreach ($col->images as $ci) {
+                    if ($ci->isExcluded) {
+                        $excludedIds[$ci->imageId] = true;
+                    } elseif ($ci->isPinned && $ci->image && $ci->image->status === 'published') {
+                        $pinnedImages[] = $ci->image;
+                        $pinnedIds[$ci->imageId] = true;
+                    }
+                }
+
+                $dynamicMatches = [];
+                foreach ($publishedImages as $img) {
+                    if (isset($excludedIds[$img->id]) || isset($pinnedIds[$img->id])) {
+                        continue;
+                    }
+                    $imgTags = self::normalizeTags($img->tags ?? []);
+                    if (self::matchesTagRules($imgTags, $tagRules, $col->ruleMatchMode ?: 'any')) {
+                        $dynamicMatches[] = $img;
+                    }
+                }
+                $finalImages = array_merge($pinnedImages, $dynamicMatches);
+            } else {
+                foreach ($col->images as $ci) {
+                    if (!$ci->isExcluded && $ci->image && $ci->image->status === 'published') {
+                        $finalImages[] = $ci->image;
+                    }
+                }
+            }
+
+            $coverPath = $col->coverImagePath;
+            if (!$coverPath && !empty($finalImages)) {
+                $coverPath = $finalImages[0]->path;
+            }
+
+            $previewImages = array_map(fn($img) => [
+                'id' => $img->id,
+                'filename' => $img->filename,
+                'path' => $img->path,
+                'previewPath' => $img->previewPath,
+                'name' => $img->name,
+                'luminance' => $img->luminance,
+                'contrastBgDark' => $img->contrastBgDark,
+                'contrastBgLight' => $img->contrastBgLight,
+            ], array_slice($finalImages, 0, 4));
+
+            $result[] = [
+                'id' => $col->id,
+                'name' => $col->name,
+                'slug' => $col->slug,
+                'description' => $col->description,
+                'coverImageId' => $col->coverImageId,
+                'coverImagePath' => $coverPath,
+                'type' => $col->type,
+                'tagRules' => $tagRules,
+                'ruleMatchMode' => $col->ruleMatchMode ?: 'any',
+                'isFeatured' => (bool) $col->isFeatured,
+                'status' => $col->status,
+                'order' => (int) $col->order,
+                'viewsCount' => (int) $col->viewsCount,
+                'downloadsCount' => (int) $col->downloadsCount,
+                'imageCount' => count($finalImages),
+                'previewImages' => $previewImages,
+                'createdAt' => $col->createdAt?->toISOString(),
+                'updatedAt' => $col->updatedAt?->toISOString(),
+            ];
+        }
+
+        return $result;
+    }
+
+    public static function getCollectionWithImages(array $identifier, array $options = []): ?array
+    {
+        $query = Collection::with(['images' => function ($q) {
+            $q->orderByDesc('isPinned')->orderBy('position')->orderByDesc('createdAt');
+        }, 'images.image']);
+
+        if (!empty($identifier['slug'])) {
+            $query->where('slug', $identifier['slug']);
+        }
+        if (!empty($identifier['id'])) {
+            $query->where('id', $identifier['id']);
+        }
+        if (empty($options['includeDrafts'])) {
+            $query->where('status', 'published');
+        }
+
+        $collection = $query->first();
+        if (!$collection) {
+            return null;
+        }
+
+        $page = max(1, (int) ($options['page'] ?? 1));
+        $limit = max(1, (int) ($options['limit'] ?? 30));
+        $skip = ($page - 1) * $limit;
+        $tagRules = self::normalizeTags($collection->tagRules ?? []);
+        $resolved = [];
+
+        if ($collection->type === 'smart_dynamic' && !empty($tagRules)) {
+            $excludedIds = [];
+            $pinnedImages = [];
+            $pinnedIds = [];
+
+            foreach ($collection->images as $ci) {
+                if ($ci->isExcluded) {
+                    $excludedIds[$ci->imageId] = true;
+                } elseif ($ci->isPinned && $ci->image && $ci->image->status === 'published') {
+                    $arr = $ci->image->toArray();
+                    $arr['isPinned'] = true;
+                    $pinnedImages[] = $arr;
+                    $pinnedIds[$ci->imageId] = true;
+                }
+            }
+
+            $allPublished = Image::where('status', 'published')->orderByDesc('createdAt')->get();
+            $dynamicMatches = [];
+            foreach ($allPublished as $img) {
+                if (isset($excludedIds[$img->id]) || isset($pinnedIds[$img->id])) {
+                    continue;
+                }
+                $imgTags = self::normalizeTags($img->tags ?? []);
+                if (self::matchesTagRules($imgTags, $tagRules, $collection->ruleMatchMode ?: 'any')) {
+                    $dynamicMatches[] = $img->toArray();
+                }
+            }
+            $resolved = array_merge($pinnedImages, $dynamicMatches);
+        } else {
+            foreach ($collection->images as $ci) {
+                if (!$ci->isExcluded && $ci->image && $ci->image->status === 'published') {
+                    $arr = $ci->image->toArray();
+                    $arr['isPinned'] = (bool) $ci->isPinned;
+                    $arr['position'] = (int) $ci->position;
+                    $resolved[] = $arr;
+                }
+            }
+        }
+
+        $total = count($resolved);
+        $paginated = array_slice($resolved, $skip, $limit);
+        $coverPath = $collection->coverImagePath ?: ($resolved[0]['path'] ?? null);
+
+        return [
+            'collection' => [
+                'id' => $collection->id,
+                'name' => $collection->name,
+                'slug' => $collection->slug,
+                'description' => $collection->description,
+                'coverImageId' => $collection->coverImageId,
+                'coverImagePath' => $coverPath,
+                'type' => $collection->type,
+                'tagRules' => $tagRules,
+                'ruleMatchMode' => $collection->ruleMatchMode ?: 'any',
+                'isFeatured' => (bool) $collection->isFeatured,
+                'status' => $collection->status,
+                'order' => (int) $collection->order,
+                'viewsCount' => (int) $collection->viewsCount,
+                'downloadsCount' => (int) $collection->downloadsCount,
+                'createdAt' => $collection->createdAt?->toISOString(),
+                'updatedAt' => $collection->updatedAt?->toISOString(),
+            ],
+            'images' => $paginated,
+            'total' => $total,
+            'page' => $page,
+            'limit' => $limit,
+            'hasMore' => ($skip + count($paginated)) < $total,
+        ];
+    }
+
+    public static function getCollectionsForImage(string $imageId, array $imageTags = []): array
+    {
+        $direct = Collection::where('status', 'published')
+            ->whereHas('images', function ($q) use ($imageId) {
+                $q->where('imageId', $imageId)->where('isExcluded', false);
+            })
+            ->select(['id', 'name', 'slug', 'coverImagePath'])
+            ->get();
+
+        $results = [];
+        foreach ($direct as $c) {
+            $results[$c->id] = [
+                'id' => $c->id,
+                'name' => $c->name,
+                'slug' => $c->slug,
+                'coverImagePath' => $c->coverImagePath,
+            ];
+        }
+
+        $normImgTags = self::normalizeTags($imageTags);
+        if (!empty($normImgTags)) {
+            $smart = Collection::with(['images' => function ($q) use ($imageId) {
+                $q->where('imageId', $imageId);
+            }])
+                ->where('status', 'published')
+                ->where('type', 'smart_dynamic')
+                ->get();
+
+            foreach ($smart as $sc) {
+                $excluded = $sc->images->contains(fn($ci) => (bool) $ci->isExcluded);
+                if ($excluded) {
+                    continue;
+                }
+                $rules = self::normalizeTags($sc->tagRules ?? []);
+                if (self::matchesTagRules($normImgTags, $rules, $sc->ruleMatchMode ?: 'any')) {
+                    $results[$sc->id] = [
+                        'id' => $sc->id,
+                        'name' => $sc->name,
+                        'slug' => $sc->slug,
+                        'coverImagePath' => $sc->coverImagePath,
+                    ];
+                }
+            }
+        }
+
+        return array_values($results);
+    }
+}
+
