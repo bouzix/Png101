@@ -16,12 +16,9 @@ Contact: contact@png-finder.com
 
 ## Sitemaps
 - [Master Sitemap Index](https://png-finder.com/sitemap.xml)
-- [Collections Sitemap (1 packs)](https://png-finder.com/sitemap-collections.xml)
-- [Images Sitemap (66 PNGs)](https://png-finder.com/sitemap-images.xml)
-- [Tags Sitemap (1186 tags)](https://png-finder.com/sitemap-tags.xml)
-
-## Curated Collections
-- [google logos](https://png-finder.com/collections/google-logos)
+- [Collections Sitemap (0 packs)](https://png-finder.com/sitemap-collections.xml)
+- [Images Sitemap (29 PNGs)](https://png-finder.com/sitemap-images.xml)
+- [Tags Sitemap (538 tags)](https://png-finder.com/sitemap-tags.xml)
 
 ## Popular Tags
-black rectangle, solid black, black background, png banner, transparent background, dark background, minimal design, graphic element, ui component, dark mode, overlay, mask layer, geometric shape, plain black, header background, footer background, placeholder, web design asset, flat color, monochrome, dark theme, basic shape, clean design, vector style, high resolution, digital background, design resource, black texture, rectangular shape, simple background, New York Yankees, Yankees, NY Logo, Interlocking NY, Baseball Logo, MLB Logo, Sports Logo, Team Emblem, Navy Blue, Transparent PNG
+mercedes-benz logo, mercedes logo, silver emblem, chrome badge, 3d logo png, transparent background, automotive branding, luxury car logo, mercedes star, mercedes-benz symbol, metallic finish, glossy emblem, premium icon, car brand identity, german car logo, high resolution png, mercedes-benz icon, isolated logo, transport symbol, mercedes-benz emblem, shiny silver star, automotive design, vehicle badge, marketing asset, mercedes benz transparent, luxury brand, android, logo, robot, green, png, transparent, vector, icon, technology, mobile, operating system, google, bugdroid, smartphone

@@ -26,7 +26,7 @@ export default function Footer({ info = {}, currentUrl = '' }) {
 
     return (
         <footer className="mt-auto border-t border-card-border bg-card-bg/80 backdrop-blur-md text-foreground">
-            <div className="max-w-7xl mx-auto px-6 py-12">
+            <div className="w-full px-6 sm:px-10 md:px-16 py-12">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b border-card-border">
                     {/* Brand Column */}
                     <div className="md:col-span-5 space-y-4">

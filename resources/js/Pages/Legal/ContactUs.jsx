@@ -115,7 +115,7 @@ export default function ContactUs({ websiteInfo = {} }) {
             <Head title={`Contact Us - ${info.websiteName}`} />
             <Header siteName={info.websiteName} />
 
-            <main className="max-w-5xl mx-auto px-6 py-16 space-y-12">
+            <main className="w-full px-6 sm:px-10 md:px-16 py-16 space-y-12">
                 {/* Page Header */}
                 <div className="text-center max-w-2xl mx-auto space-y-3">
                     <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-primary-glow/10 text-primary-glow border border-primary-glow/20">

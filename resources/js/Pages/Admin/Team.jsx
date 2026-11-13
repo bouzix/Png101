@@ -402,7 +402,10 @@ export default function TeamPage() {
                 {/* Page Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-foreground mb-1">Team Management</h1>
+                        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
+                            <Users className="w-7 h-7 text-primary-glow shrink-0" />
+                            <span>Team Management</span>
+                        </h1>
                         <p className="text-foreground/60 text-sm">
                             Create team accounts, assign granular permissions, and send login credentials via email.
                         </p>

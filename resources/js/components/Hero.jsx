@@ -9,9 +9,9 @@ const Hero = ({ siteName }) => {
     const resolvedSiteName = siteName || props?.websiteInfo?.websiteName || 'Png101';
 
     return (
-        <div id="home-hero" className="relative flex flex-col items-center justify-center py-20 px-4 bg-background">
+        <div id="home-hero" className="relative flex flex-col items-center justify-center py-20 px-6 sm:px-10 md:px-16 bg-background">
             {/* Theme Toggle in Top Right of Hero */}
-            <div className="absolute top-5 right-5 sm:top-6 sm:right-6 z-20">
+            <div className="absolute top-5 right-6 sm:top-6 sm:right-10 md:right-16 z-20">
                 <ThemeToggle />
             </div>
 

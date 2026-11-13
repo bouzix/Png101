@@ -238,7 +238,10 @@ export default function ApiKeysPage() {
                 {/* Page Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-foreground mb-1">API Keys Vault</h1>
+                        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
+                            <Key className="w-7 h-7 text-primary-glow shrink-0" />
+                            <span>API Keys Vault</span>
+                        </h1>
                         <p className="text-foreground/60 text-sm">
                             Manage Google Generative AI keys, toggle active credentials, and select supported Gemini model versions.
                         </p>

@@ -255,6 +255,7 @@ class RelatedImagesService
                     'name' => $img->name,
                     'filename' => $img->filename,
                     'path' => $img->path,
+                    'thumbPath' => $img->thumbPath,
                     'previewPath' => $img->previewPath,
                     'luminance' => $img->luminance,
                     'contrastBgDark' => $img->contrastBgDark,

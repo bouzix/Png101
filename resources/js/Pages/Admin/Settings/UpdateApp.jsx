@@ -123,8 +123,11 @@ export default function UpdateAppPage() {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <div className="flex items-center gap-2.5 mb-1">
-                            <h1 className="text-3xl font-bold text-foreground">Update App</h1>
+                        <div className="flex items-center gap-3 mb-1">
+                            <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
+                                <Rocket className="w-7 h-7 text-primary-glow shrink-0" />
+                                <span>Update App</span>
+                            </h1>
                             <span
                                 className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                                     isLocal

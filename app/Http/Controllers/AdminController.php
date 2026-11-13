@@ -6,11 +6,14 @@ use App\Models\ApiKey;
 use App\Models\Image;
 use App\Models\SearchLog;
 use App\Models\Setting;
+use App\Services\CaptchaService;
 use App\Services\CodeInjectionService;
 use App\Services\ErrorPagesService;
 use App\Services\InstallerService;
 use App\Services\SeoGeneratorService;
+use App\Services\SystemHealthService;
 use App\Services\TeamService;
+use App\Services\TrashService;
 use App\Services\WebsiteInfoService;
 use App\Support\HostingEnvironment;
 use Illuminate\Http\JsonResponse;
@@ -164,6 +167,14 @@ class AdminController extends Controller
             return Inertia::render('Errors/Forbidden');
         }
         return Inertia::render('Admin/Settings/UpdateApp');
+    }
+
+    public function captchaSettings(Request $request): Response
+    {
+        if ($forbidden = $this->checkPermission($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+        return Inertia::render('Admin/Settings/Captcha');
     }
 
     // --- Admin API Endpoints ---
@@ -910,11 +921,88 @@ class AdminController extends Controller
         }
 
         try {
-            Image::query()->delete();
+            Image::withTrashed()->forceDelete();
+            SeoGeneratorService::refreshAuto('auto-clear-db');
             return response()->json(['success' => true, 'message' => 'Database images cleared successfully.']);
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'error' => 'Failed to clear database images.'], 500);
         }
+    }
+
+    public function getCaptchaSettings(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+
+        return response()->json([
+            'settings' => CaptchaService::getSettings(),
+            'catalog' => CaptchaService::providerCatalog(),
+        ]);
+    }
+
+    public function saveCaptchaSettings(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+
+        try {
+            $saved = CaptchaService::saveSettings($request->all());
+            return response()->json([
+                'success' => true,
+                'settings' => $saved,
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ], 422);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to save captcha settings.',
+            ], 500);
+        }
+    }
+
+    public function systemHealth(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, ['manage_general_settings', 'manage_data_seo'])) {
+            return $forbidden;
+        }
+
+        return response()->json(SystemHealthService::collect());
+    }
+
+    public function getTrashSettings(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+
+        return response()->json([
+            'retentionDays' => TrashService::getRetentionDays(),
+            'allowedOptions' => TrashService::ALLOWED_RETENTION_DAYS,
+            'trashedCount' => TrashService::hasSoftDeleteColumn() ? Image::onlyTrashed()->count() : 0,
+        ]);
+    }
+
+    public function saveTrashSettings(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+
+        $days = (int) $request->input('retentionDays', TrashService::DEFAULT_RETENTION_DAYS);
+        $saved = TrashService::saveRetentionDays($days);
+        $purgedNow = TrashService::purgeExpired();
+
+        return response()->json([
+            'success' => true,
+            'retentionDays' => $saved,
+            'purgedNow' => $purgedNow,
+        ]);
     }
 
     public function clearUploads(Request $request): JsonResponse

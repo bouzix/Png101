@@ -2,11 +2,17 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ImageCard from './ImageCard';
 import { Link } from '@inertiajs/react';
 import { slugify } from '@/lib/utils';
-
-const BATCH_SIZE = 30;
+import { useIsDesktopXl } from '@/hooks/useIsDesktopXl';
 
 const RelatedImages = ({ images: initialImages = [], currentId, totalCount }) => {
-    const initialFiltered = initialImages.filter((img) => img.id !== currentId).slice(0, 10);
+    const isDesktopXl = useIsDesktopXl();
+    const initialLimit = isDesktopXl ? 14 : 12;
+    const batchSize = isDesktopXl ? 28 : 24;
+    const loadMoreSkeletonCount = isDesktopXl ? 7 : 6;
+    const batchSizeRef = useRef(batchSize);
+    batchSizeRef.current = batchSize;
+
+    const initialFiltered = initialImages.filter((img) => img.id !== currentId).slice(0, initialLimit);
 
     const [displayedImages, setDisplayedImages] = useState(initialFiltered);
     const [total, setTotal] = useState(
@@ -26,7 +32,7 @@ const RelatedImages = ({ images: initialImages = [], currentId, totalCount }) =>
     const sentinelRef = useRef(null);
 
     useEffect(() => {
-        const filtered = initialImages.filter((img) => img.id !== currentId).slice(0, 10);
+        const filtered = initialImages.filter((img) => img.id !== currentId).slice(0, initialLimit);
         const nextTotal = typeof totalCount === 'number' ? totalCount : filtered.length;
         const nextHasMore = nextTotal > filtered.length;
 
@@ -39,6 +45,18 @@ const RelatedImages = ({ images: initialImages = [], currentId, totalCount }) =>
         loadingRef.current = false;
         hasMoreRef.current = nextHasMore;
     }, [currentId, initialImages, totalCount]);
+
+    useEffect(() => {
+        if (expanded) return;
+        const filtered = initialImages.filter((img) => img.id !== currentId).slice(0, initialLimit);
+        const nextTotal = typeof totalCount === 'number' ? totalCount : filtered.length;
+        const nextHasMore = nextTotal > filtered.length;
+
+        setDisplayedImages(filtered);
+        setHasMore(nextHasMore);
+        offsetRef.current = filtered.length;
+        hasMoreRef.current = nextHasMore;
+    }, [initialLimit, expanded, currentId, initialImages, totalCount]);
 
     const fetchBatch = useCallback(
         async (isFirstExpand) => {
@@ -54,7 +72,7 @@ const RelatedImages = ({ images: initialImages = [], currentId, totalCount }) =>
             try {
                 const requestOffset = isFirstExpand ? 0 : offsetRef.current;
                 const res = await fetch(
-                    `/api/images/related?id=${encodeURIComponent(currentId)}&limit=${BATCH_SIZE}&offset=${requestOffset}`
+                    `/api/images/related?id=${encodeURIComponent(currentId)}&limit=${batchSizeRef.current}&offset=${requestOffset}`
                 );
                 const data = await res.json();
                 const newBatch = Array.isArray(data.images) ? data.images : [];
@@ -161,14 +179,14 @@ const RelatedImages = ({ images: initialImages = [], currentId, totalCount }) =>
                 </p>
             )}
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-6">
                 {displayedImages.map((image) => (
                     <Link
                         key={image.id}
                         href={`/images/${image.id}-${slugify(image.name || image.filename || '')}`}
                     >
                         <ImageCard
-                            src={image.path}
+                            src={image.thumbPath || image.path}
                             luminance={image.luminance}
                             contrastBgDark={image.contrastBgDark}
                             contrastBgLight={image.contrastBgLight}
@@ -206,8 +224,8 @@ const RelatedImages = ({ images: initialImages = [], currentId, totalCount }) =>
             {expanded && (
                 <>
                     {loadingMore && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 mt-6">
-                            {Array.from({ length: 5 }).map((_, i) => (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-6 mt-6">
+                            {Array.from({ length: loadMoreSkeletonCount }).map((_, i) => (
                                 <ImageCard key={`rel-more-skel-${i}`} />
                             ))}
                         </div>
@@ -218,7 +236,7 @@ const RelatedImages = ({ images: initialImages = [], currentId, totalCount }) =>
                             <div className="flex flex-col items-center gap-3">
                                 <div className="w-10 h-10 rounded-full border-4 border-primary-glow/20 border-t-primary-glow animate-spin shadow-[0_0_15px_rgba(59,130,246,0.3)]" />
                                 <span className="text-foreground/60 text-xs font-semibold tracking-wider uppercase">
-                                    Loading next 30 images...
+                                    Loading next {batchSize} images...
                                 </span>
                             </div>
                         ) : hasMore ? (

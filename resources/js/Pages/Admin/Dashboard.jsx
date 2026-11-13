@@ -274,8 +274,16 @@ export default function Dashboard() {
     return (
         <AdminLayout>
             <Head title="Upload Image - Admin" />
-            <div className="max-w-6xl mx-auto pb-24">
-                <h2 className="text-2xl font-bold text-foreground mb-6">Upload Image</h2>
+            <div className="w-full pb-24">
+                <div className="mb-6">
+                    <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
+                        <Upload className="w-7 h-7 text-primary-glow shrink-0" />
+                        <span>Upload Image</span>
+                    </h1>
+                    <p className="text-sm text-foreground/60 mt-1">
+                        Drop transparent PNG files to stage, edit metadata with AI, and publish to your catalog.
+                    </p>
+                </div>
 
                 {targetKeyword && (
                     <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -463,7 +471,7 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-4">
                             {filteredFailedUploads.map((item) => {
                                 const sizeKb = item.size > 0 ? `${Math.max(1, Math.round(item.size / 1024))} KB` : '';
                                 const badgeText = CATEGORY_BADGE[item.failureCategory] || 'Failed';
@@ -645,7 +653,7 @@ export default function Dashboard() {
                             )}
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-6">
                             {stagedFiles.map(file => (
                                 <AssetCard
                                     key={file.id}

@@ -251,7 +251,10 @@ export default function DataManagementPage() {
                 {/* Page Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-foreground mb-1">Data &amp; SEO Management</h1>
+                        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
+                            <Database className="w-7 h-7 text-primary-glow shrink-0" />
+                            <span>Data &amp; SEO Management</span>
+                        </h1>
                         <p className="text-foreground/60 text-sm">
                             Purge catalog records, inspect upload storage, and automate multi-file XML sitemap generation.
                         </p>

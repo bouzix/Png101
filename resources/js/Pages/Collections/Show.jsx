@@ -39,7 +39,7 @@ export default function CollectionShow({
             <Head title={`${collection?.name || 'Collection'} PNG Collection - ${siteName}`} />
             <Header siteName={siteName} />
 
-            <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8">
+            <main className="flex-1 w-full px-6 sm:px-10 md:px-16 py-8">
                 <div className="space-y-10 pb-16">
                     {/* Breadcrumb Navigation */}
                     <nav className="flex items-center gap-2 text-xs text-foreground/50">
@@ -153,7 +153,7 @@ export default function CollectionShow({
                                 <p className="text-xs text-foreground/60 mt-1">Check back soon as assets are added.</p>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-6">
                                 {images.map((img) => (
                                     <Link
                                         key={img.id}
@@ -161,7 +161,7 @@ export default function CollectionShow({
                                         className="group block"
                                     >
                                         <ImageCard
-                                            src={img.path}
+                                            src={img.thumbPath || img.path}
                                             luminance={img.luminance}
                                             contrastBgDark={img.contrastBgDark}
                                             contrastBgLight={img.contrastBgLight}

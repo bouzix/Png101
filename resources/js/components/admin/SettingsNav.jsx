@@ -7,6 +7,7 @@ const TABS = [
     { name: 'API Keys', href: '/admin/dashboard/settings/api-keys' },
     { name: 'Code Injection', href: '/admin/dashboard/settings/code-injection' },
     { name: 'Error Pages', href: '/admin/dashboard/settings/error-pages' },
+    { name: 'Captcha', href: '/admin/dashboard/settings/captcha' },
     { name: 'Data Management', href: '/admin/dashboard/settings/data-management' },
     { name: 'Team', href: '/admin/dashboard/settings/team' },
 ];

@@ -31,7 +31,7 @@ export default function Maintenance({ config = {}, websiteInfo = {} }) {
     return (
         <div className="min-h-screen bg-background flex flex-col justify-between">
             <Head title={`Maintenance - ${siteName}`} />
-            <header className="w-full border-b border-card-border/60 bg-card-bg/40 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+            <header className="w-full border-b border-card-border/60 bg-card-bg/40 backdrop-blur-md px-6 sm:px-10 md:px-16 py-4 flex items-center justify-between">
                 <span className="flex items-center gap-2.5 text-foreground font-black tracking-tight text-lg">
                     {siteName}
                 </span>
@@ -40,7 +40,7 @@ export default function Maintenance({ config = {}, websiteInfo = {} }) {
                 </div>
             </header>
 
-            <main className="flex-1 flex items-center justify-center px-4 py-16">
+            <main className="flex-1 w-full flex items-center justify-center px-6 sm:px-10 md:px-16 py-16">
                 <div className="w-full max-w-lg mx-auto text-center space-y-8">
                     <div className="relative mx-auto w-64 h-52 sm:w-72 sm:h-60 flex items-center justify-center">
                         <div

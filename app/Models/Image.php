@@ -15,10 +15,14 @@ class Image extends Model
     const CREATED_AT = 'createdAt';
     const UPDATED_AT = 'updatedAt';
 
+    use \Illuminate\Database\Eloquent\SoftDeletes;
+
+    const DELETED_AT = 'deletedAt';
+
     protected $fillable = [
-        'id', 'filename', 'path', 'previewPath', 'name', 'description',
+        'id', 'filename', 'path', 'previewPath', 'thumbPath', 'name', 'description',
         'altText', 'tags', 'status', 'width', 'height', 'size', 'mimeType',
-        'luminance', 'contrastBgDark', 'contrastBgLight',
+        'luminance', 'contrastBgDark', 'contrastBgLight', 'deletedAt',
     ];
 
     protected $casts = [

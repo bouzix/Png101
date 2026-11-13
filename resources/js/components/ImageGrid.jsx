@@ -3,8 +3,12 @@ import ImageCard from './ImageCard';
 import { Link } from '@inertiajs/react';
 import { slugify } from '@/lib/utils';
 import TrendingCollections from './TrendingCollections';
+import { useIsDesktopXl } from '@/hooks/useIsDesktopXl';
 
 const ImageGrid = () => {
+    const isDesktopXl = useIsDesktopXl();
+    const popularLimit = isDesktopXl ? 14 : 12;
+    const latestLimit = isDesktopXl ? 28 : 24;
     const [popularImages, setPopularImages] = useState([]);
     const [latestImages, setLatestImages] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -24,7 +28,7 @@ const ImageGrid = () => {
     }, []);
 
     return (
-        <div className="w-full max-w-6xl mx-auto px-4 pb-24 space-y-20">
+        <div className="w-full px-6 sm:px-10 md:px-16 pb-24 space-y-20">
             {/* Section 1: Most Popular Images This Week (Max 15, refreshed every 24h) */}
             <section>
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-8 pb-4 border-b border-card-border">
@@ -50,17 +54,17 @@ const ImageGrid = () => {
                     )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-6">
                     {loading ? (
-                        Array.from({ length: 15 }).map((_, i) => <ImageCard key={`pop-skel-${i}`} />)
+                        Array.from({ length: popularLimit }).map((_, i) => <ImageCard key={`pop-skel-${i}`} />)
                     ) : popularImages.length > 0 ? (
-                        popularImages.map((img) => (
+                        popularImages.slice(0, popularLimit).map((img) => (
                             <Link
                                 key={img.id}
                                 href={`/images/${img.id}-${slugify(img.name || img.filename || '')}`}
                             >
                                 <ImageCard
-                                    src={img.path}
+                                    src={img.thumbPath || img.path}
                                     luminance={img.luminance}
                                     contrastBgDark={img.contrastBgDark}
                                     contrastBgLight={img.contrastBgLight}
@@ -110,17 +114,17 @@ const ImageGrid = () => {
                     </Link>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-6">
                     {loading ? (
-                        Array.from({ length: 15 }).map((_, i) => <ImageCard key={`lat-skel-${i}`} />)
+                        Array.from({ length: popularLimit }).map((_, i) => <ImageCard key={`lat-skel-${i}`} />)
                     ) : latestImages.length > 0 ? (
-                        latestImages.map((img) => (
+                        latestImages.slice(0, latestLimit).map((img) => (
                             <Link
                                 key={img.id}
                                 href={`/images/${img.id}-${slugify(img.name || img.filename || '')}`}
                             >
                                 <ImageCard
-                                    src={img.path}
+                                    src={img.thumbPath || img.path}
                                     luminance={img.luminance}
                                     contrastBgDark={img.contrastBgDark}
                                     contrastBgLight={img.contrastBgLight}

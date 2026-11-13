@@ -5,6 +5,7 @@ import CategoryList from '@/components/admin/categories/CategoryList';
 import CategoryForm from '@/components/admin/categories/CategoryForm';
 import BulkEditCategoriesSidebar from '@/components/admin/categories/BulkEditCategoriesSidebar';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
+import { FolderTree } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function CategoriesPage() {
@@ -229,11 +230,14 @@ export default function CategoriesPage() {
     return (
         <AdminLayout>
             <Head title="Categories - Admin" />
-            <div className="max-w-6xl mx-auto space-y-6 pb-24">
+            <div className="space-y-6 pb-24">
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold text-foreground mb-2">Categories</h1>
-                        <p className="text-foreground/60">Manage image categories and organization.</p>
+                        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
+                            <FolderTree className="w-7 h-7 text-primary-glow shrink-0" />
+                            <span>Categories</span>
+                        </h1>
+                        <p className="text-sm text-foreground/60">Manage image categories and organization.</p>
                     </div>
                     <button
                         onClick={() => {

@@ -144,6 +144,73 @@ class ImageProcessingService
     }
 
     /**
+     * Generate a lightweight transparent PNG thumbnail (max bounding box $maxSize px) for catalog grids.
+     * Returns false cleanly when the source image is already compact so no duplicate file is stored.
+     */
+    public static function generateThumbnail(string $sourcePath, string $destPath, int $maxSize = 450): bool
+    {
+        if (!function_exists('imagecreatefromstring') || !is_file($sourcePath)) {
+            return false;
+        }
+
+        try {
+            $raw = @file_get_contents($sourcePath);
+            if ($raw === false) {
+                return false;
+            }
+
+            $src = @imagecreatefromstring($raw);
+            unset($raw);
+            if (!$src) {
+                return false;
+            }
+
+            $origW = imagesx($src);
+            $origH = imagesy($src);
+            if ($origW <= 0 || $origH <= 0) {
+                imagedestroy($src);
+                return false;
+            }
+
+            $fileSize = @filesize($sourcePath) ?: 0;
+            if ($origW <= $maxSize && $origH <= $maxSize && $fileSize > 0 && $fileSize <= 40 * 1024) {
+                imagedestroy($src);
+                return false;
+            }
+
+            $scale = min($maxSize / $origW, $maxSize / $origH, 1.0);
+            $targetW = max(1, (int) round($origW * $scale));
+            $targetH = max(1, (int) round($origH * $scale));
+
+            $thumb = imagecreatetruecolor($targetW, $targetH);
+            if (!$thumb) {
+                imagedestroy($src);
+                return false;
+            }
+
+            imagealphablending($thumb, false);
+            imagesavealpha($thumb, true);
+            $transparent = imagecolorallocatealpha($thumb, 0, 0, 0, 127);
+            imagefilledrectangle($thumb, 0, 0, $targetW, $targetH, $transparent);
+
+            imagecopyresampled($thumb, $src, 0, 0, 0, 0, $targetW, $targetH, $origW, $origH);
+            $saved = @imagepng($thumb, $destPath, 7);
+
+            imagedestroy($src);
+            imagedestroy($thumb);
+
+            if ($saved && is_file($destPath) && $fileSize > 0 && (@filesize($destPath) ?: 0) >= $fileSize) {
+                @unlink($destPath);
+                return false;
+            }
+
+            return (bool) $saved;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
      * Convert a PHP ini shorthand size value (e.g. "8M", "2048K") into bytes.
      */
     public static function parseIniBytes(string|false $value): int

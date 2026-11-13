@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Setting;
 use App\Models\TeamMember;
+use App\Services\CaptchaService;
 use App\Services\TeamService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -16,12 +17,16 @@ class AuthController extends Controller
         if (!empty($session['authenticated'])) {
             return redirect('/admin/dashboard');
         }
-        return Inertia::render('Admin/Login');
+        return Inertia::render('Admin/Login', [
+            'captcha' => CaptchaService::getPublicConfig('admin_login'),
+        ]);
     }
 
     public function teamLoginPage()
     {
-        return Inertia::render('Team/Login');
+        return Inertia::render('Team/Login', [
+            'captcha' => CaptchaService::getPublicConfig('team_login'),
+        ]);
     }
 
     public function login(Request $request)
@@ -33,13 +38,30 @@ class AuthController extends Controller
             return response()->json(['success' => false, 'error' => 'Admin password not configured'], 500);
         }
 
+        $captchaCheck = CaptchaService::verify($request, 'admin_login');
+        if (!$captchaCheck['ok']) {
+            return response()->json([
+                'success' => false,
+                'error' => $captchaCheck['error'] ?? 'Captcha verification failed.',
+                'freshChallenge' => CaptchaService::getProviderForContext('admin_login') === 'builtin_math'
+                    ? CaptchaService::generateBuiltInChallenge('admin_login')
+                    : null,
+            ], 422);
+        }
+
         if (password_verify($password, $setting->value)) {
             return response()->json(['success' => true])
                 ->withoutCookie('team_member_id')
                 ->cookie('auth_token', 'authenticated', 60 * 24 * 7, '/', null, $request->isSecure(), true);
         }
 
-        return response()->json(['success' => false], 401);
+        return response()->json([
+            'success' => false,
+            'error' => 'Invalid password',
+            'freshChallenge' => CaptchaService::getProviderForContext('admin_login') === 'builtin_math'
+                ? CaptchaService::generateBuiltInChallenge('admin_login')
+                : null,
+        ], 401);
     }
 
     public function teamLogin(Request $request)
@@ -51,9 +73,26 @@ class AuthController extends Controller
             return response()->json(['success' => false, 'error' => 'Email and password are required.'], 400);
         }
 
+        $captchaCheck = CaptchaService::verify($request, 'team_login');
+        if (!$captchaCheck['ok']) {
+            return response()->json([
+                'success' => false,
+                'error' => $captchaCheck['error'] ?? 'Captcha verification failed.',
+                'freshChallenge' => CaptchaService::getProviderForContext('team_login') === 'builtin_math'
+                    ? CaptchaService::generateBuiltInChallenge('team_login')
+                    : null,
+            ], 422);
+        }
+
         $member = TeamMember::whereRaw('LOWER(email) = ?', [$email])->first();
         if (!$member) {
-            return response()->json(['success' => false, 'error' => 'Invalid email or password.'], 401);
+            return response()->json([
+                'success' => false,
+                'error' => 'Invalid email or password.',
+                'freshChallenge' => CaptchaService::getProviderForContext('team_login') === 'builtin_math'
+                    ? CaptchaService::generateBuiltInChallenge('team_login')
+                    : null,
+            ], 401);
         }
 
         if (!$member->isActive) {
@@ -61,7 +100,13 @@ class AuthController extends Controller
         }
 
         if (!password_verify($password, $member->passwordHash)) {
-            return response()->json(['success' => false, 'error' => 'Invalid email or password.'], 401);
+            return response()->json([
+                'success' => false,
+                'error' => 'Invalid email or password.',
+                'freshChallenge' => CaptchaService::getProviderForContext('team_login') === 'builtin_math'
+                    ? CaptchaService::generateBuiltInChallenge('team_login')
+                    : null,
+            ], 401);
         }
 
         $member->lastLoginAt = now();

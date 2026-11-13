@@ -120,7 +120,7 @@ export default function CollectionsIndex({ collections = [], websiteInfo = {} })
             <Head title={`Curated PNG Collections & Clipart Packs - ${siteName}`} />
             <Header siteName={siteName} />
 
-            <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-12">
+            <main className="flex-1 w-full px-6 sm:px-10 md:px-16 py-8 sm:py-12 space-y-12">
                 {/* Hero Header Banner */}
                 <div className="text-center max-w-3xl mx-auto space-y-4">
                     <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary-glow/10 border border-primary-glow/20 text-primary-glow text-xs font-bold tracking-wide">

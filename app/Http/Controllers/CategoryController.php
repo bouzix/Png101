@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Services\CollectionService;
+use App\Services\SeoGeneratorService;
 use Illuminate\Http\Request;
 
 class CategoryController extends Controller
@@ -66,6 +67,7 @@ class CategoryController extends Controller
             'parentId' => $parentId,
         ]);
 
+        SeoGeneratorService::refreshAuto('auto-category');
         return response()->json($category);
     }
 
@@ -112,6 +114,7 @@ class CategoryController extends Controller
         }
 
         $category->save();
+        SeoGeneratorService::refreshAuto('auto-category');
         return response()->json($category);
     }
 
@@ -123,6 +126,7 @@ class CategoryController extends Controller
         }
 
         Category::where('id', $id)->delete();
+        SeoGeneratorService::refreshAuto('auto-category-delete');
         return response()->json(['success' => true]);
     }
 }

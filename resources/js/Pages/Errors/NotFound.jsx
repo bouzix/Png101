@@ -12,7 +12,7 @@ export default function NotFound({ config = {}, websiteInfo = {} }) {
             <Head title={`404 Not Found - ${siteName}`} />
             <Header siteName={siteName} showOnScrollOnly={false} />
 
-            <main className="flex-1 flex items-center justify-center px-4 py-16 sm:py-24">
+            <main className="flex-1 w-full flex items-center justify-center px-6 sm:px-10 md:px-16 py-16 sm:py-24">
                 <div className="w-full max-w-2xl mx-auto text-center space-y-8">
                     {/* Illustration / Custom Image */}
                     <div className="relative mx-auto w-64 h-52 sm:w-80 sm:h-64 flex items-center justify-center">

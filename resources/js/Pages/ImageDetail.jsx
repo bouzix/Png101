@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { HexColorPicker } from 'react-colorful';
-import { GripHorizontal } from 'lucide-react';
+import { GripHorizontal, ShieldCheck, Clock, Download, X, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '@/components/Header';
 import ImageDetails from '@/components/ImageDetails';
 import RelatedImages from '@/components/RelatedImages';
+import CaptchaWidget from '@/components/CaptchaWidget';
 
 const GRADIENT_PRESETS = [
     { name: 'Sunset', from: '#ff7e5f', to: '#feb47b', angle: 135 },
@@ -122,6 +123,35 @@ export default function ImageDetail({
         setIsClient(true);
     }, []);
 
+    // Download countdown + captcha gate state
+    const [gateOpen, setGateOpen] = useState(false);
+    const [gateLoading, setGateLoading] = useState(false);
+    const [gateVerifying, setGateVerifying] = useState(false);
+    const [gateFeedback, setGateFeedback] = useState('idle'); // 'idle' | 'success' | 'error'
+    const [gateError, setGateError] = useState('');
+    const [countdown, setCountdown] = useState(3);
+    const [initialCountdown, setInitialCountdown] = useState(3);
+    const [captchaConfig, setCaptchaConfig] = useState(null);
+    const [captchaData, setCaptchaData] = useState({ token: '', challengeToken: '' });
+    const [captchaResetKey, setCaptchaResetKey] = useState(0);
+    const verifyingRef = useRef(false);
+    const feedbackTimerRef = useRef(null);
+    const gateRequestIdRef = useRef(0);
+
+    useEffect(() => {
+        return () => {
+            if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (!gateOpen || gateLoading || countdown <= 0) return undefined;
+        const timer = setInterval(() => {
+            setCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [gateOpen, gateLoading, countdown]);
+
     const handleResizeApply = (newWidth, newHeight) => {
         setDownloadWidth(newWidth);
         setDownloadHeight(newHeight);
@@ -190,7 +220,7 @@ export default function ImageDetail({
 
     const jpgBgInfo = getJpgBackground();
 
-    const handleDownload = async () => {
+    const executeDownload = async () => {
         const ext = downloadFormat === 'jpeg' ? 'jpg' : downloadFormat;
         const formatLabel = downloadFormat.toUpperCase();
         toast.success(`Preparing ${formatLabel} (${downloadWidth}x${downloadHeight})...`);
@@ -265,6 +295,130 @@ export default function ImageDetail({
         };
     };
 
+    const handleDownload = async () => {
+        if (feedbackTimerRef.current) {
+            clearTimeout(feedbackTimerRef.current);
+            feedbackTimerRef.current = null;
+        }
+        const requestId = ++gateRequestIdRef.current;
+        verifyingRef.current = false;
+        setGateOpen(true);
+        setGateLoading(true);
+        setGateVerifying(false);
+        setGateFeedback('idle');
+        setGateError('');
+        setCaptchaData({ token: '', challengeToken: '' });
+
+        try {
+            const res = await fetch(`/api/captcha/config?context=download&_t=${Date.now()}`, {
+                cache: 'no-store',
+            });
+            const cfg = await res.json();
+            if (requestId !== gateRequestIdRef.current) return;
+
+            const seconds = typeof cfg?.countdownSeconds === 'number' ? Math.max(0, cfg.countdownSeconds) : 3;
+            const provider = cfg?.provider || 'none';
+
+            if (seconds === 0 && provider === 'none') {
+                setGateOpen(false);
+                setGateLoading(false);
+                await executeDownload();
+                return;
+            }
+
+            setCaptchaConfig(cfg);
+            setCaptchaData({
+                token: '',
+                challengeToken: cfg?.challenge?.token || '',
+            });
+            setInitialCountdown(seconds);
+            setCountdown(seconds);
+        } catch {
+            if (requestId !== gateRequestIdRef.current) return;
+            // Safe fallback to 3-second countdown even if offline/transient error
+            setCaptchaConfig({ context: 'download', provider: 'none', countdownSeconds: 3 });
+            setInitialCountdown(3);
+            setCountdown(3);
+        } finally {
+            if (requestId === gateRequestIdRef.current) {
+                setGateLoading(false);
+            }
+        }
+    };
+
+    const handleConfirmGateDownload = async (e) => {
+        e.preventDefault();
+        if (countdown > 0 || gateLoading || gateVerifying || verifyingRef.current || gateFeedback === 'success') {
+            return;
+        }
+
+        const provider = captchaConfig?.provider || 'none';
+        if (provider !== 'none') {
+            if (!captchaData.token) {
+                setGateError('Please complete the captcha verification to start your download.');
+                return;
+            }
+
+            verifyingRef.current = true;
+            setGateVerifying(true);
+            setGateError('');
+            if (feedbackTimerRef.current) {
+                clearTimeout(feedbackTimerRef.current);
+                feedbackTimerRef.current = null;
+            }
+
+            const activeChallengeToken = captchaData.challengeToken || captchaConfig?.challenge?.token || '';
+
+            try {
+                const res = await fetch('/api/captcha/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        imageId: image.id,
+                        captchaToken: captchaData.token,
+                        captchaChallenge: activeChallengeToken,
+                    }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data?.success) {
+                    setGateError(data?.error || data?.message || 'Verification failed. Please try again.');
+                    setGateFeedback('error');
+                    if (data?.freshChallenge) {
+                        setCaptchaConfig((prev) => ({ ...(prev || {}), challenge: data.freshChallenge }));
+                        setCaptchaData({ token: '', challengeToken: data.freshChallenge.token });
+                    } else {
+                        setCaptchaData((prev) => ({ ...prev, token: '' }));
+                    }
+                    setCaptchaResetKey((k) => k + 1);
+                    feedbackTimerRef.current = setTimeout(() => {
+                        setGateFeedback('idle');
+                    }, 900);
+                    return;
+                }
+
+                // Right answer: play fluid thumbs-up feedback, then start download cleanly
+                setGateFeedback('success');
+                await new Promise((resolve) => {
+                    feedbackTimerRef.current = setTimeout(resolve, 680);
+                });
+            } catch {
+                setGateError('Verification network error. Please try again.');
+                setGateFeedback('error');
+                feedbackTimerRef.current = setTimeout(() => {
+                    setGateFeedback('idle');
+                }, 900);
+                return;
+            } finally {
+                verifyingRef.current = false;
+                setGateVerifying(false);
+            }
+        }
+
+        setGateOpen(false);
+        setGateFeedback('idle');
+        await executeDownload();
+    };
+
     const displaySrc = isClient ? imageSrc : (image.previewPath || imageSrc);
 
     const getPreviewBgStyle = () => {
@@ -302,7 +456,7 @@ export default function ImageDetail({
             <Head title={`${imageTitle} - Free Transparent PNG | ${siteName}`} />
             <Header />
 
-            <main className="container mx-auto px-4 py-8 max-w-7xl">
+            <main className="w-full px-6 sm:px-10 md:px-16 py-8">
                 {/* Breadcrumbs */}
                 <nav aria-label="Breadcrumb" className="mb-4 text-xs text-foreground/50 flex items-center gap-1.5 flex-wrap">
                     <Link href="/" className="hover:text-primary-glow transition-colors">Home</Link>
@@ -343,9 +497,9 @@ export default function ImageDetail({
                     </div>
                 </div>
 
-                <div className="flex flex-col lg:flex-row gap-8 justify-center items-start">
+                <div className="flex flex-col lg:flex-row gap-8 justify-between items-start">
                     {/* Left Column */}
-                    <div className="flex-1 w-full max-w-3xl flex flex-col gap-6">
+                    <div className="flex-1 w-full flex flex-col gap-6">
                         <div className="bg-card-bg border border-slate-300/40 rounded-2xl p-6 sm:p-10 flex items-center justify-center relative overflow-hidden shadow-2xl min-h-[500px]">
                             {bgMode === 'checker' && (
                                 <div className="absolute inset-0 bg-white z-0 pointer-events-none" />
@@ -744,6 +898,170 @@ export default function ImageDetail({
                 {/* Related Images */}
                 <RelatedImages images={relatedImages} currentId={image.id} totalCount={totalRelatedImages} />
             </main>
+
+            {/* Download Countdown & Captcha Verification Modal */}
+            {gateOpen && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+                    onClick={() => !gateVerifying && setGateOpen(false)}
+                >
+                    <form
+                        onSubmit={handleConfirmGateDownload}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full max-w-md rounded-2xl bg-card-bg border border-card-border shadow-2xl overflow-hidden"
+                    >
+                        <div className="px-6 py-4 border-b border-card-border flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-lg bg-primary-glow/15 text-primary-glow">
+                                    <ShieldCheck className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-foreground">Prepare Download</h3>
+                                    <p className="text-[11px] text-foreground/55">
+                                        {downloadFormat.toUpperCase()} &bull; {downloadWidth}&times;{downloadHeight} px
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setGateOpen(false)}
+                                disabled={gateVerifying}
+                                className="p-1.5 rounded-lg text-foreground/50 hover:text-foreground hover:bg-foreground/5 transition-colors cursor-pointer"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-5">
+                            {gateLoading ? (
+                                <div className="py-8 flex flex-col items-center gap-3 text-xs text-foreground/60">
+                                    <div className="w-8 h-8 border-2 border-primary-glow border-t-transparent rounded-full animate-spin" />
+                                    <span>Preparing secure download link...</span>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Countdown Banner */}
+                                    <div className="rounded-xl border border-card-border bg-background/70 p-4">
+                                        <div className="flex items-center justify-between gap-3 mb-2">
+                                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground/75">
+                                                <Clock className="w-4 h-4 text-primary-glow" />
+                                                {countdown > 0
+                                                    ? `Generating high-resolution file in ${countdown}s...`
+                                                    : 'Your file is ready to download!'}
+                                            </span>
+                                            <span className="text-sm font-mono font-bold text-primary-glow">
+                                                {countdown > 0 ? `${countdown}s` : 'READY'}
+                                            </span>
+                                        </div>
+                                        <div className="w-full h-1.5 rounded-full bg-card-border overflow-hidden">
+                                            <div
+                                                className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 transition-all duration-700"
+                                                style={{
+                                                    width:
+                                                        initialCountdown > 0
+                                                            ? `${Math.min(100, Math.round(((initialCountdown - countdown) / initialCountdown) * 100))}%`
+                                                            : '100%',
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Captcha Challenge */}
+                                    {captchaConfig?.provider && captchaConfig.provider !== 'none' && (
+                                        <CaptchaWidget
+                                            config={captchaConfig}
+                                            context="download"
+                                            resetKey={captchaResetKey}
+                                            onChange={(val) => {
+                                                setCaptchaData(val);
+                                                if (gateError) setGateError('');
+                                            }}
+                                            onChallengeChange={(fresh) =>
+                                                setCaptchaConfig((prev) => ({ ...(prev || {}), challenge: fresh }))
+                                            }
+                                        />
+                                    )}
+
+                                    {gateError && (
+                                        <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                                            {gateError}
+                                        </p>
+                                    )}
+
+                                    <div className="flex items-center justify-between gap-3 pt-1">
+                                        <div className="flex items-center gap-2 min-h-[40px]">
+                                            {gateFeedback === 'success' && (
+                                                <div className="relative inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-400 text-xs font-bold">
+                                                    <span className="relative flex items-center justify-center">
+                                                        <span className="absolute inset-0 rounded-full bg-emerald-400/35 animate-captcha-ring" />
+                                                        <ThumbsUp className="w-4 h-4 relative animate-captcha-thumb-up" />
+                                                    </span>
+                                                    <span>Verified!</span>
+                                                </div>
+                                            )}
+                                            {gateFeedback === 'error' && (
+                                                <div className="relative inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-500/15 border border-red-500/35 text-red-400 text-xs font-bold">
+                                                    <span className="relative flex items-center justify-center">
+                                                        <span className="absolute inset-0 rounded-full bg-red-400/35 animate-captcha-ring" />
+                                                        <ThumbsDown className="w-4 h-4 relative animate-captcha-thumb-down" />
+                                                    </span>
+                                                    <span>Wrong!</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex items-center gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setGateOpen(false)}
+                                                disabled={gateVerifying || gateFeedback === 'success'}
+                                                className="px-4 py-2.5 rounded-xl text-xs font-semibold border border-card-border text-foreground/70 hover:text-foreground transition-colors cursor-pointer disabled:opacity-45"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={
+                                                    countdown > 0 ||
+                                                    gateVerifying ||
+                                                    gateFeedback === 'success' ||
+                                                    (captchaConfig?.provider && captchaConfig.provider !== 'none' && !captchaData.token)
+                                                }
+                                                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-white shadow-lg transition-all duration-300 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${
+                                                    gateFeedback === 'error'
+                                                        ? 'bg-gradient-to-r from-red-600 via-rose-500 to-red-600 shadow-red-600/35 animate-captcha-shake !opacity-100'
+                                                        : gateFeedback === 'success'
+                                                        ? 'bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 shadow-emerald-500/35 !opacity-100'
+                                                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 shadow-blue-600/25 hover:brightness-110'
+                                                }`}
+                                            >
+                                                {gateFeedback === 'success' ? (
+                                                    <ThumbsUp className="w-4 h-4 animate-captcha-thumb-up" />
+                                                ) : gateFeedback === 'error' ? (
+                                                    <ThumbsDown className="w-4 h-4 animate-captcha-thumb-down" />
+                                                ) : (
+                                                    <Download className="w-4 h-4" />
+                                                )}
+                                                <span>
+                                                    {countdown > 0
+                                                        ? `Wait ${countdown}s`
+                                                        : gateFeedback === 'success'
+                                                        ? 'Starting Download...'
+                                                        : gateFeedback === 'error'
+                                                        ? 'Try Again'
+                                                        : gateVerifying
+                                                        ? 'Verifying...'
+                                                        : `Download ${downloadFormat.toUpperCase()}`}
+                                                </span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    </form>
+                </div>
+            )}
         </div>
     );
 }

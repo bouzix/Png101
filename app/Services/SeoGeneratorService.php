@@ -319,5 +319,33 @@ class SeoGeneratorService
             ],
         ]);
     }
+
+    /**
+     * Automatically refresh sitemaps/robots/llms when catalog content changes.
+     * Uses a short cache lock so rapid uploads/updates never race on XML files.
+     */
+    public static function refreshAuto(string $trigger = 'auto-catalog'): void
+    {
+        try {
+            $settings = self::getSettings();
+            if (($settings['autoGenerateEnabled'] ?? true) === false) {
+                return;
+            }
+            if (!is_writable(public_path())) {
+                return;
+            }
+
+            $lock = \Illuminate\Support\Facades\Cache::lock('seo_auto_refresh_lock', 10);
+            if ($lock->get()) {
+                try {
+                    self::generateAll($trigger);
+                } finally {
+                    $lock->release();
+                }
+            }
+        } catch (\Throwable $e) {
+            // Never block upload/edit/delete requests if sitemap writing encounters an environmental issue
+        }
+    }
 }
 

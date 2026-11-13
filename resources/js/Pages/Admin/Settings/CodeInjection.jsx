@@ -74,7 +74,10 @@ export default function CodeInjectionPage() {
                     {/* Page Header */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
-                            <h1 className="text-3xl font-bold text-foreground mb-1">Code &amp; Script Injection</h1>
+                            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
+                                <Code2 className="w-7 h-7 text-primary-glow shrink-0" />
+                                <span>Code &amp; Script Injection</span>
+                            </h1>
                             <p className="text-foreground/60 text-sm">
                                 Embed custom HTML, tracking pixels, CSS overrides, or verification meta tags across your site without code deployments.
                             </p>

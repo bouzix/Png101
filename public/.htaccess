@@ -13,6 +13,9 @@
     RewriteCond %{HTTP:x-xsrf-token} .
     RewriteRule .* - [E=HTTP_X_XSRF_TOKEN:%{HTTP:X-XSRF-Token}]
 
+    # Force all /uploads/* requests through Laravel (direct-visit redirect, bot control, anti-hotlink, cache headers)
+    RewriteRule ^uploads/ index.php [L]
+
     # Redirect Trailing Slashes If Not A Folder...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_URI} (.+)/$

@@ -4,8 +4,7 @@ import Header from '@/components/Header';
 import ImageCard from '@/components/ImageCard';
 import { slugify } from '@/lib/utils';
 import { Layers, ArrowRight } from 'lucide-react';
-
-const BATCH_SIZE = 30;
+import { useIsDesktopXl } from '@/hooks/useIsDesktopXl';
 
 export default function Search({
     query = '',
@@ -15,6 +14,12 @@ export default function Search({
     websiteInfo = {},
 }) {
     const siteName = websiteInfo?.websiteName || 'Png101';
+    const isDesktopXl = useIsDesktopXl();
+    const batchSize = isDesktopXl ? 28 : 24;
+    const initialSkeletonCount = isDesktopXl ? 14 : 12;
+    const loadMoreSkeletonCount = isDesktopXl ? 7 : 6;
+    const batchSizeRef = useRef(batchSize);
+    batchSizeRef.current = batchSize;
 
     const [images, setImages] = useState(initialImages || []);
     const [total, setTotal] = useState(typeof initialTotal === 'number' ? initialTotal : null);
@@ -58,7 +63,7 @@ export default function Search({
             try {
                 const currentOffset = isInitial ? 0 : offsetRef.current;
                 const res = await fetch(
-                    `/api/images?status=published&paginated=1&limit=${BATCH_SIZE}&offset=${currentOffset}&q=${encodeURIComponent(
+                    `/api/images?status=published&paginated=1&limit=${batchSizeRef.current}&offset=${currentOffset}&q=${encodeURIComponent(
                         query
                     )}`
                 );
@@ -145,7 +150,7 @@ export default function Search({
             <Head title={query ? `Search "${query}" - ${siteName}` : `Search PNG Images - ${siteName}`} />
             <Header initialQuery={query || ''} siteName={siteName} />
 
-            <main className="container mx-auto px-4 py-8 max-w-7xl">
+            <main className="w-full px-6 sm:px-10 md:px-16 py-8">
                 <div>
                     {/* Header info */}
                     <div className="text-center mb-10">
@@ -186,21 +191,21 @@ export default function Search({
                     )}
 
                     {loadingInitial ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                            {Array.from({ length: 15 }).map((_, i) => (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-6">
+                            {Array.from({ length: initialSkeletonCount }).map((_, i) => (
                                 <ImageCard key={`search-skel-${i}`} />
                             ))}
                         </div>
                     ) : images.length > 0 ? (
                         <>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-6">
                                 {images.map((image) => (
                                     <Link
                                         key={image.id}
                                         href={`/images/${image.id}-${slugify(image.name || image.filename || '')}`}
                                     >
                                         <ImageCard
-                                            src={image.path}
+                                            src={image.thumbPath || image.path}
                                             luminance={image.luminance}
                                             contrastBgDark={image.contrastBgDark}
                                             contrastBgLight={image.contrastBgLight}
@@ -210,8 +215,8 @@ export default function Search({
                             </div>
 
                             {loadingMore && (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 mt-6">
-                                    {Array.from({ length: 5 }).map((_, i) => (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-6 mt-6">
+                                    {Array.from({ length: loadMoreSkeletonCount }).map((_, i) => (
                                         <ImageCard key={`search-more-skel-${i}`} />
                                     ))}
                                 </div>
@@ -225,7 +230,7 @@ export default function Search({
                                     <div className="flex flex-col items-center gap-3">
                                         <div className="w-10 h-10 rounded-full border-4 border-primary-glow/20 border-t-primary-glow animate-spin shadow-[0_0_15px_rgba(59,130,246,0.3)]" />
                                         <span className="text-foreground/60 text-xs font-semibold tracking-wider uppercase">
-                                            Loading next 30 images...
+                                            Loading next {batchSize} images...
                                         </span>
                                     </div>
                                 ) : hasMore ? (

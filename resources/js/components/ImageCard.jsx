@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 
 const ImageCard = ({ src, image, luminance, contrastBgDark, contrastBgLight }) => {
-    const resolvedSrc = src ?? image?.path;
+    const resolvedSrc = src ?? image?.thumbPath ?? image?.path;
     const resolvedAlt = image?.altText || image?.name || 'PNG Image';
     const resolvedLuminance = luminance ?? image?.luminance;
     const resolvedContrastBgDark = contrastBgDark ?? image?.contrastBgDark;

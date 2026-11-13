@@ -7,6 +7,7 @@ use App\Models\CollectionImage;
 use App\Models\Image;
 use App\Services\CollectionService;
 use App\Services\GeminiService;
+use App\Services\SeoGeneratorService;
 use App\Services\TeamService;
 use Illuminate\Http\Request;
 
@@ -89,6 +90,8 @@ class CollectionApiController extends Controller
             }
         }
 
+        SeoGeneratorService::refreshAuto('auto-collection');
+
         return response()->json(array_merge($collection->toArray(), [
             'success' => true,
             'collection' => $collection,
@@ -164,6 +167,8 @@ class CollectionApiController extends Controller
             }
         }
 
+        SeoGeneratorService::refreshAuto('auto-collection');
+
         return response()->json(array_merge($collection->toArray(), [
             'success' => true,
             'collection' => $collection,
@@ -178,6 +183,7 @@ class CollectionApiController extends Controller
         }
 
         Collection::where('id', $id)->delete();
+        SeoGeneratorService::refreshAuto('auto-collection-delete');
         return response()->json(['success' => true]);
     }
 

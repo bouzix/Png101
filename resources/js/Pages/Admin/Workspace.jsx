@@ -18,6 +18,7 @@ import {
     BarChart3,
     Clock,
     ShieldCheck,
+    LayoutGrid,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AdminLayout from '@/Layouts/AdminLayout';
@@ -177,8 +178,9 @@ export default function TeamWorkspace() {
                                 <Sparkles className="w-3.5 h-3.5" />
                                 Team Workspace · Search Intelligence Hub
                             </div>
-                            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
-                                Welcome back{session?.name ? `, ${session.name}` : ''}
+                            <h1 className="text-2xl sm:text-3xl font-bold text-foreground flex items-center gap-3">
+                                <LayoutGrid className="w-7 h-7 text-primary-glow shrink-0" />
+                                <span>Welcome back{session?.name ? `, ${session.name}` : ''}</span>
                             </h1>
                             <p className="text-sm text-foreground/60 max-w-2xl">
                                 Spot missing visitor searches, fill zero-result keyword gaps with new PNG uploads, and fix low-SEO metadata items to grow organic traffic.

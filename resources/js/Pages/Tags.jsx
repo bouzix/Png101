@@ -15,7 +15,7 @@ export default function Tags({ groupedTags = {}, totalTagsCount = 0, websiteInfo
             <Head title={`All PNG Tags & Brand Directory - ${siteName}`} />
             <Header siteName={siteName} />
 
-            <main className="container mx-auto px-4 py-10 max-w-6xl flex-1">
+            <main className="w-full px-6 sm:px-10 md:px-16 py-10 flex-1">
                 {/* Header Section */}
                 <div className="text-center mb-10">
                     <nav aria-label="Breadcrumb" className="mb-4 text-xs text-foreground/50 flex items-center justify-center gap-1.5">

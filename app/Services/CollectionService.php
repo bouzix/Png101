@@ -146,7 +146,7 @@ class CollectionService
         $collections = $query->get();
 
         $publishedImages = Image::where('status', 'published')
-            ->select(['id', 'filename', 'path', 'previewPath', 'name', 'tags', 'luminance', 'contrastBgDark', 'contrastBgLight', 'createdAt'])
+            ->select(['id', 'filename', 'path', 'thumbPath', 'previewPath', 'name', 'tags', 'luminance', 'contrastBgDark', 'contrastBgLight', 'createdAt'])
             ->orderByDesc('createdAt')
             ->get();
 
@@ -197,6 +197,7 @@ class CollectionService
                 'id' => $img->id,
                 'filename' => $img->filename,
                 'path' => $img->path,
+                'thumbPath' => $img->thumbPath,
                 'previewPath' => $img->previewPath,
                 'name' => $img->name,
                 'luminance' => $img->luminance,

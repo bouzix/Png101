@@ -1,32 +1,82 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import { Users, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import CaptchaWidget from '@/components/CaptchaWidget';
 
-export default function TeamLogin() {
+export default function TeamLogin({ captcha }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [captchaConfig, setCaptchaConfig] = useState(captcha || null);
+    const [captchaData, setCaptchaData] = useState({
+        token: '',
+        challengeToken: captcha?.challenge?.token || '',
+    });
+    const [captchaResetKey, setCaptchaResetKey] = useState(0);
+
+    const requiresCaptcha = Boolean(captchaConfig?.provider && captchaConfig.provider !== 'none');
+
+    // Refresh captcha on pageshow (bfcache back navigation) so solved/expired nonces are never reused
+    useEffect(() => {
+        const refreshConfig = async () => {
+            try {
+                const res = await fetch(`/api/captcha/config?context=team_login&_t=${Date.now()}`, { cache: 'no-store' });
+                const cfg = await res.json();
+                if (cfg?.provider) {
+                    setCaptchaConfig(cfg);
+                    setCaptchaData({ token: '', challengeToken: cfg?.challenge?.token || '' });
+                    setCaptchaResetKey((k) => k + 1);
+                }
+            } catch {
+                // Keep initial SSR config
+            }
+        };
+
+        const handlePageShow = (e) => {
+            if (e.persisted) refreshConfig();
+        };
+        window.addEventListener('pageshow', handlePageShow);
+        return () => window.removeEventListener('pageshow', handlePageShow);
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+
+        if (requiresCaptcha && !captchaData.token) {
+            setError('Please complete the security captcha first.');
+            return;
+        }
+
         setLoading(true);
 
         try {
             const res = await fetch('/api/team/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
+                body: JSON.stringify({
+                    email,
+                    password,
+                    captchaToken: captchaData.token,
+                    captchaChallenge: captchaData.challengeToken || captchaConfig?.challenge?.token || '',
+                }),
             });
 
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
 
             if (res.ok && data.success) {
                 router.visit(data.redirectTo || '/admin/dashboard');
             } else {
-                setError(data.error || 'Invalid email or password.');
+                setError(data?.error || data?.message || 'Invalid email or password.');
+                if (data?.freshChallenge) {
+                    setCaptchaConfig((prev) => ({ ...(prev || {}), challenge: data.freshChallenge }));
+                    setCaptchaData({ token: '', challengeToken: data.freshChallenge.token });
+                } else {
+                    setCaptchaData((prev) => ({ ...prev, token: '' }));
+                }
+                setCaptchaResetKey((k) => k + 1);
             }
         } catch {
             setError('Failed to connect to server. Please try again.');
@@ -96,6 +146,20 @@ export default function TeamLogin() {
                             </button>
                         </div>
                     </div>
+
+                    {requiresCaptcha && (
+                        <div>
+                            <CaptchaWidget
+                                config={captchaConfig}
+                                context="team_login"
+                                resetKey={captchaResetKey}
+                                onChange={(val) => setCaptchaData(val)}
+                                onChallengeChange={(fresh) =>
+                                    setCaptchaConfig((prev) => ({ ...(prev || {}), challenge: fresh }))
+                                }
+                            />
+                        </div>
+                    )}
 
                     <button
                         type="submit"

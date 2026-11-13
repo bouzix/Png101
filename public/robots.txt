@@ -1,2 +1,12 @@
+# robots.txt for PNG Finder
+# Generated at 2026-11-13T15:18:29.321268Z
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: https://png-finder.com/sitemap.xml
+Sitemap: https://png-finder.com/sitemap-pages.xml
+Sitemap: https://png-finder.com/sitemap-images.xml
+Sitemap: https://png-finder.com/sitemap-collections.xml
+Sitemap: https://png-finder.com/sitemap-tags.xml

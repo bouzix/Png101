@@ -140,6 +140,7 @@ export default function AdminLayout({ children }) {
                     { name: 'Code Injection', href: '/admin/dashboard/settings/code-injection', permitted: hasPerm('manage_code_injection'), reason: 'Requires Code Injection permission' },
                     { name: 'Data Management', href: '/admin/dashboard/settings/data-management', permitted: hasPerm('manage_data_seo'), reason: 'Requires Data, Backup & SEO permission' },
                     { name: 'Error Pages', href: '/admin/dashboard/settings/error-pages', permitted: hasPerm('manage_general_settings'), reason: 'Requires General & Website Settings permission' },
+                    { name: 'Captcha', href: '/admin/dashboard/settings/captcha', permitted: hasPerm('manage_general_settings'), reason: 'Requires General & Website Settings permission' },
                     { name: 'Update App', href: '/admin/dashboard/settings/update-app', permitted: isSuperAdmin, reason: 'Super Admin only' },
                 ],
             },
@@ -173,7 +174,11 @@ export default function AdminLayout({ children }) {
         if (pathname.startsWith('/admin/dashboard/settings/api-keys')) return hasPerm('manage_api_keys');
         if (pathname.startsWith('/admin/dashboard/settings/code-injection')) return hasPerm('manage_code_injection');
         if (pathname.startsWith('/admin/dashboard/settings/data-management')) return hasPerm('manage_data_seo');
-        if (pathname.startsWith('/admin/dashboard/settings/error-pages') || pathname.startsWith('/admin/dashboard/settings/website-info')) {
+        if (
+            pathname.startsWith('/admin/dashboard/settings/error-pages') ||
+            pathname.startsWith('/admin/dashboard/settings/website-info') ||
+            pathname.startsWith('/admin/dashboard/settings/captcha')
+        ) {
             return hasPerm('manage_general_settings');
         }
         if (pathname.startsWith('/admin/dashboard/team') || pathname.startsWith('/admin/dashboard/settings/team') || pathname.startsWith('/admin/dashboard/settings/update-app')) return false;
@@ -398,7 +403,9 @@ export default function AdminLayout({ children }) {
             {/* Main Content */}
             <main className="flex-1 p-8 overflow-y-auto">
                 {isCurrentRoutePermitted ? (
-                    children
+                    <div className="w-full p-6 md:p-8 max-w-[1600px] mx-auto">
+                        {children}
+                    </div>
                 ) : (
                     <div className="max-w-lg mx-auto mt-20 bg-card-bg border border-card-border rounded-2xl p-8 text-center shadow-2xl space-y-4">
                         <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">

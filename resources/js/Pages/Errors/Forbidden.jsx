@@ -12,7 +12,7 @@ export default function Forbidden({ config = {}, websiteInfo = {} }) {
             <Head title={`403 Forbidden - ${siteName}`} />
             <Header siteName={siteName} showOnScrollOnly={false} />
 
-            <main className="flex-1 flex items-center justify-center px-4 py-16">
+            <main className="flex-1 w-full flex items-center justify-center px-6 sm:px-10 md:px-16 py-16">
                 <div className="w-full max-w-lg mx-auto text-center space-y-8">
                     <div className="relative mx-auto w-64 h-52 sm:w-72 sm:h-60 flex items-center justify-center">
                         <div

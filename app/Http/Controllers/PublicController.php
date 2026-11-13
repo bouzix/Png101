@@ -62,7 +62,7 @@ class PublicController extends Controller
 
         AnalyticsService::recordImageView($image->id);
 
-        $related = RelatedImagesService::getRankedRelatedImages($imageId, 10, 0);
+        $related = RelatedImagesService::getRankedRelatedImages($imageId, 14, 0);
         $collections = CollectionService::getCollectionsForImage($image->id, is_array($image->tags) ? $image->tags : []);
 
         $siteName = $info['websiteName'] ?: 'Png101';
@@ -261,16 +261,39 @@ class PublicController extends Controller
 
     public function serveUpload(Request $request, string $path)
     {
-        $cleanPath = '/uploads/' . ltrim($path, '/');
-        $fullPath = public_path($cleanPath);
+        $uploadsRoot = realpath(public_path('uploads'));
+        $normalizedRel = ltrim(str_replace('\\', '/', rawurldecode($path)), '/');
+        if (!$uploadsRoot || $normalizedRel === '' || str_contains($normalizedRel, "\0")) {
+            abort(404);
+        }
+
+        // Block any directory traversal segments before hitting filesystem
+        foreach (explode('/', $normalizedRel) as $segment) {
+            if ($segment === '..' || $segment === '.' || str_starts_with($segment, '.')) {
+                abort(403);
+            }
+        }
+
+        $cleanPath = '/uploads/' . $normalizedRel;
+        $candidatePath = $uploadsRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $normalizedRel);
 
         $filename = basename($cleanPath);
-        $isPreviewJpg = str_starts_with($filename, 'preview-') || str_ends_with(strtolower($cleanPath), '.jpg');
+        $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+        $allowedExtensions = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'ico', 'avif'];
+        if (!in_array($ext, $allowedExtensions, true)) {
+            abort(403);
+        }
+
+        $isPreviewJpg = str_starts_with($filename, 'preview-') || in_array($ext, ['jpg', 'jpeg'], true);
         $userAgent = (string) $request->header('User-Agent', '');
         $isBot = (bool) preg_match('/googlebot|googlebot-image|mediapartners-google|adsbot-google|bingbot|slurp|duckduckbot|baiduspider|yandex|facebookexternalhit|twitterbot|linkedinbot|applebot/i', $userAgent);
 
         $redirectToImagePage = function () use ($cleanPath) {
-            $image = Image::where('previewPath', $cleanPath)->orWhere('path', $cleanPath)->first();
+            $image = Image::where(function ($q) use ($cleanPath) {
+                $q->where('previewPath', $cleanPath)
+                    ->orWhere('path', $cleanPath)
+                    ->orWhere('thumbPath', $cleanPath);
+            })->first();
             if ($image) {
                 $slug = CollectionService::slugify($image->name ?: $image->filename ?: 'image');
                 return redirect('/images/' . $image->id . ($slug ? "-{$slug}" : ''), 307);
@@ -297,8 +320,25 @@ class PublicController extends Controller
             return $redirectToImagePage();
         }
 
-        if (!file_exists($fullPath) || !is_file($fullPath)) {
+        $referer = (string) $request->header('Referer', '');
+        $refererHost = strtolower((string) (parse_url($referer, PHP_URL_HOST) ?? ''));
+        $requestHost = strtolower((string) $request->getHost());
+        $secFetchSite = strtolower((string) $request->header('Sec-Fetch-Site', ''));
+        $isSameOrigin = $secFetchSite === 'same-origin' || ($requestHost !== '' && $refererHost === $requestHost);
+
+        // For raw transparent PNGs / non-preview files, block external hotlinking when Referer/Sec-Fetch-Site is foreign or missing
+        if (!$isPreviewJpg && !$isSameOrigin && !$isExplicitDownload) {
+            return $redirectToImagePage();
+        }
+
+        $realPath = realpath($candidatePath);
+        if (!$realPath || !is_file($realPath)) {
             abort(404);
+        }
+
+        $rootPrefix = rtrim($uploadsRoot, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        if (!str_starts_with($realPath, $rootPrefix)) {
+            abort(403);
         }
 
         $headers = [];
@@ -306,10 +346,30 @@ class PublicController extends Controller
             $headers['X-Robots-Tag'] = 'noindex, noimageindex';
         }
         if ($isExplicitDownload) {
-            return response()->download($fullPath, $filename, $headers);
+            $headers['Cache-Control'] = 'private, no-cache, must-revalidate';
+            return response()->download($realPath, $filename, $headers);
         }
 
-        return response()->file($fullPath, $headers);
+        $mtime = @filemtime($realPath) ?: time();
+        $size = @filesize($realPath) ?: 0;
+        $etag = '"' . md5($realPath . '|' . $mtime . '|' . $size) . '"';
+        $lastModified = gmdate('D, d M Y H:i:s', $mtime) . ' GMT';
+
+        $headers['ETag'] = $etag;
+        $headers['Last-Modified'] = $lastModified;
+        $headers['Cache-Control'] = 'public, max-age=31536000, immutable';
+
+        $ifNoneMatch = trim((string) $request->header('If-None-Match', ''));
+        if ($ifNoneMatch !== '' && ($ifNoneMatch === $etag || $ifNoneMatch === 'W/' . $etag)) {
+            return response('', 304, $headers);
+        }
+
+        $ifModifiedSince = $request->header('If-Modified-Since');
+        if ($ifModifiedSince && strtotime($ifModifiedSince) !== false && strtotime($ifModifiedSince) >= $mtime) {
+            return response('', 304, $headers);
+        }
+
+        return response()->file($realPath, $headers);
     }
 }
 

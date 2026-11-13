@@ -11,7 +11,9 @@ use App\Services\CollectionService;
 use App\Services\GeminiService;
 use App\Services\ImageProcessingService;
 use App\Services\RelatedImagesService;
+use App\Services\SeoGeneratorService;
 use App\Services\TeamService;
+use App\Services\TrashService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -22,13 +24,13 @@ class ImageApiController extends Controller
         try {
             $cacheKey = 'homepage_weekly_popular_v1';
             $cacheTtlSeconds = 24 * 60 * 60;
-            $popularLimit = 15;
-            $latestLimit = 30;
+            $popularLimit = 14;
+            $latestLimit = 28;
 
             $latestImages = Image::where('status', 'published')
                 ->orderByDesc('createdAt')
                 ->limit($latestLimit)
-                ->get(['id', 'name', 'filename', 'path', 'createdAt', 'luminance', 'contrastBgDark', 'contrastBgLight']);
+                ->get(['id', 'name', 'filename', 'path', 'thumbPath', 'createdAt', 'luminance', 'contrastBgDark', 'contrastBgLight']);
 
             $totalPublishedCount = Image::where('status', 'published')->count();
             $targetPopularCount = min($popularLimit, $totalPublishedCount);
@@ -43,7 +45,7 @@ class ImageApiController extends Controller
                     if ($ageSeconds < $cacheTtlSeconds) {
                         $cachedRecords = Image::whereIn('id', $parsed['imageIds'])
                             ->where('status', 'published')
-                            ->get(['id', 'name', 'filename', 'path', 'luminance', 'contrastBgDark', 'contrastBgLight'])
+                            ->get(['id', 'name', 'filename', 'path', 'thumbPath', 'luminance', 'contrastBgDark', 'contrastBgLight'])
                             ->keyBy('id');
 
                         $ordered = [];
@@ -65,6 +67,7 @@ class ImageApiController extends Controller
                 $sevenDaysAgo = now()->subDays(7);
                 $topRows = DB::table('Download as d')
                     ->join('Image as i', 'd.imageId', '=', 'i.id')
+                    ->whereNull('i.deletedAt')
                     ->where('d.createdAt', '>=', $sevenDaysAgo)
                     ->where('i.status', 'published')
                     ->select('d.imageId', DB::raw('COUNT(*) as dlCount'))
@@ -76,7 +79,7 @@ class ImageApiController extends Controller
                 $topIds = $topRows->pluck('imageId')->all();
                 $topImages = !empty($topIds)
                     ? Image::whereIn('id', $topIds)->where('status', 'published')
-                        ->get(['id', 'name', 'filename', 'path', 'luminance', 'contrastBgDark', 'contrastBgLight'])
+                        ->get(['id', 'name', 'filename', 'path', 'thumbPath', 'luminance', 'contrastBgDark', 'contrastBgLight'])
                         ->keyBy('id')
                     : collect();
 
@@ -94,7 +97,7 @@ class ImageApiController extends Controller
                     if (!empty($orderedTop)) {
                         $q->whereNotIn('id', array_map(fn($img) => $img->id, $orderedTop));
                     }
-                    $pool = $q->get(['id', 'name', 'filename', 'path', 'luminance', 'contrastBgDark', 'contrastBgLight'])->all();
+                    $pool = $q->get(['id', 'name', 'filename', 'path', 'thumbPath', 'luminance', 'contrastBgDark', 'contrastBgLight'])->all();
                     shuffle($pool);
                     $filler = array_slice($pool, 0, $remaining);
                 }
@@ -136,6 +139,7 @@ class ImageApiController extends Controller
         $qParam = trim((string) $request->query('q', ''));
 
         try {
+            TrashService::runAutoPurgeIfDue();
             $query = Image::query();
 
             if ($status) {
@@ -152,7 +156,7 @@ class ImageApiController extends Controller
                 if ($qParam !== '') {
                     $qLower = strtolower($qParam);
                     $allMatching = $query->orderByDesc('createdAt')
-                        ->get(['id', 'name', 'filename', 'path', 'tags', 'createdAt', 'luminance', 'contrastBgDark', 'contrastBgLight']);
+                        ->get(['id', 'name', 'filename', 'path', 'thumbPath', 'tags', 'createdAt', 'luminance', 'contrastBgDark', 'contrastBgLight']);
 
                     $filtered = $allMatching->filter(function ($img) use ($qLower) {
                         if ($img->name && str_contains(strtolower($img->name), $qLower)) {
@@ -188,7 +192,7 @@ class ImageApiController extends Controller
                 $images = $query->orderByDesc('createdAt')
                     ->offset($offset)
                     ->limit($pageSize)
-                    ->get(['id', 'name', 'filename', 'path', 'createdAt', 'luminance', 'contrastBgDark', 'contrastBgLight']);
+                    ->get(['id', 'name', 'filename', 'path', 'thumbPath', 'createdAt', 'luminance', 'contrastBgDark', 'contrastBgLight']);
 
                 return response()->json([
                     'images' => $images,
@@ -266,6 +270,9 @@ class ImageApiController extends Controller
             $previewFilename = "preview-{$filename}.jpg";
             $previewFilepath = $uploadDir . '/' . $previewFilename;
             $previewOk = ImageProcessingService::generateCheckerboardPreview($filepath, $previewFilepath, $width, $height);
+            $thumbFilename = "thumb-{$filename}.png";
+            $thumbFilepath = $uploadDir . '/' . $thumbFilename;
+            $thumbOk = ImageProcessingService::generateThumbnail($filepath, $thumbFilepath, 450);
             $luminanceResult = ImageProcessingService::calculateLuminance($filepath);
 
             $tags = [];
@@ -280,6 +287,7 @@ class ImageApiController extends Controller
                 'filename' => $filename,
                 'path' => "{$relativeDir}/{$filename}",
                 'previewPath' => $previewOk ? "{$relativeDir}/{$previewFilename}" : null,
+                'thumbPath' => $thumbOk ? "{$relativeDir}/{$thumbFilename}" : null,
                 'name' => $name ?: $filename,
                 'tags' => $tags,
                 'status' => 'draft',
@@ -314,6 +322,8 @@ class ImageApiController extends Controller
         if (!$image) {
             return response()->json(['success' => false, 'message' => 'Image not found'], 404);
         }
+
+        $wasPublished = $image->status === 'published';
 
         if ($request->has('tags')) {
             $image->tags = $request->input('tags');
@@ -366,6 +376,10 @@ class ImageApiController extends Controller
 
         $image->save();
 
+        if ($wasPublished || $image->status === 'published') {
+            SeoGeneratorService::refreshAuto('auto-image-update');
+        }
+
         return response()->json(['success' => true, 'image' => $image]);
     }
 
@@ -381,23 +395,163 @@ class ImageApiController extends Controller
             return response()->json(['success' => false, 'message' => 'No IDs provided'], 400);
         }
 
-        $images = Image::whereIn('id', $ids)->get();
-        foreach ($images as $img) {
-            $filePath = public_path($img->path);
-            if (file_exists($filePath)) {
-                @unlink($filePath);
-            }
-            if ($img->previewPath) {
-                $previewPath = public_path($img->previewPath);
-                if (file_exists($previewPath)) {
-                    @unlink($previewPath);
+        $hadPublished = Image::whereIn('id', $ids)->where('status', 'published')->exists();
+        Image::whereIn('id', $ids)->delete();
+
+        if ($hadPublished) {
+            SeoGeneratorService::refreshAuto('auto-image-trash');
+        }
+
+        return response()->json([
+            'success' => true,
+            'softDeleted' => true,
+            'retentionDays' => TrashService::getRetentionDays(),
+        ]);
+    }
+
+    public function trash(Request $request)
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!TeamService::hasAnyPermission($session, ['delete_images', 'edit_images', 'upload_images'])) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        TrashService::runAutoPurgeIfDue();
+        $retentionDays = TrashService::getRetentionDays();
+
+        $trashed = Image::onlyTrashed()
+            ->with(['categories.category'])
+            ->orderByDesc('deletedAt')
+            ->get()
+            ->map(function (Image $img) use ($retentionDays) {
+                $arr = $img->toArray();
+                if ($retentionDays > 0 && $img->deletedAt) {
+                    $expiresAt = $img->deletedAt->copy()->addDays($retentionDays);
+                    $daysRemaining = max(0, (int) ceil(now()->floatDiffInDays($expiresAt, false)));
+                    $arr['expiresAt'] = $expiresAt->toISOString();
+                    $arr['daysRemaining'] = $daysRemaining;
+                } else {
+                    $arr['expiresAt'] = null;
+                    $arr['daysRemaining'] = null;
                 }
+                return $arr;
+            })
+            ->values();
+
+        return response()->json([
+            'images' => $trashed,
+            'retentionDays' => $retentionDays,
+        ]);
+    }
+
+    public function restore(Request $request)
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!TeamService::hasAnyPermission($session, ['delete_images', 'edit_images'])) {
+            return response()->json(['success' => false, 'message' => 'Forbidden'], 403);
+        }
+
+        $ids = $request->input('ids');
+        if (!is_array($ids) || empty($ids)) {
+            return response()->json(['success' => false, 'message' => 'No IDs provided'], 400);
+        }
+
+        $restoredImages = Image::onlyTrashed()->whereIn('id', $ids)->get();
+        $hasPublished = $restoredImages->contains(fn ($img) => $img->status === 'published');
+        Image::onlyTrashed()->whereIn('id', $ids)->restore();
+
+        if ($hasPublished) {
+            SeoGeneratorService::refreshAuto('auto-image-restore');
+        }
+
+        return response()->json([
+            'success' => true,
+            'restoredCount' => $restoredImages->count(),
+        ]);
+    }
+
+    public function forceDestroy(Request $request)
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!TeamService::hasPermission($session, 'delete_images')) {
+            return response()->json(['success' => false, 'message' => 'Forbidden: Missing permission to permanently delete images.'], 403);
+        }
+
+        $ids = $request->input('ids');
+        if (!is_array($ids) || empty($ids)) {
+            return response()->json(['success' => false, 'message' => 'No IDs provided'], 400);
+        }
+
+        $images = Image::withTrashed()->whereIn('id', $ids)->get();
+        $hadPublished = false;
+        foreach ($images as $img) {
+            if (!$img->deletedAt && $img->status === 'published') {
+                $hadPublished = true;
+            }
+            TrashService::permanentlyDeleteImage($img);
+        }
+
+        if ($hadPublished) {
+            SeoGeneratorService::refreshAuto('auto-image-purge');
+        }
+
+        return response()->json(['success' => true, 'deletedCount' => $images->count()]);
+    }
+
+    public function emptyTrash(Request $request)
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!TeamService::hasPermission($session, 'delete_images')) {
+            return response()->json(['success' => false, 'message' => 'Forbidden: Missing permission to empty trash.'], 403);
+        }
+
+        $trashed = Image::onlyTrashed()->get();
+        foreach ($trashed as $img) {
+            TrashService::permanentlyDeleteImage($img);
+        }
+
+        return response()->json(['success' => true, 'purgedCount' => $trashed->count()]);
+    }
+
+    public function backfillThumbnails(Request $request)
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!TeamService::hasAnyPermission($session, ['manage_general_settings', 'manage_data_seo', 'upload_images'])) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $missing = Image::where(function ($q) {
+            $q->whereNull('thumbPath')->orWhere('thumbPath', '');
+        })->limit(100)->get();
+
+        $generated = 0;
+        $skipped = 0;
+        foreach ($missing as $img) {
+            $src = public_path('/' . ltrim((string) $img->path, '/'));
+            if (!is_file($src)) {
+                $skipped++;
+                continue;
+            }
+            $dir = dirname($src);
+            $relDir = str_replace('\\', '/', dirname('/' . ltrim((string) $img->path, '/')));
+            $thumbName = 'thumb-' . basename($src) . '.png';
+            $thumbDest = $dir . '/' . $thumbName;
+
+            if (ImageProcessingService::generateThumbnail($src, $thumbDest, 450)) {
+                $img->thumbPath = "{$relDir}/{$thumbName}";
+                $img->save();
+                $generated++;
+            } else {
+                $skipped++;
             }
         }
 
-        Image::whereIn('id', $ids)->delete();
-
-        return response()->json(['success' => true]);
+        return response()->json([
+            'success' => true,
+            'processed' => $missing->count(),
+            'generated' => $generated,
+            'skipped' => $skipped,
+        ]);
     }
 
     public function generateMeta(Request $request)
