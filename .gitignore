@@ -25,6 +25,7 @@
 /storage/framework/*_csrf.json
 /storage/framework/update_auth.json
 /vendor
+/*.zip
 _ide_helper.php
 Homestead.json
 Homestead.yaml
