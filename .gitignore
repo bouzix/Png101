@@ -19,6 +19,10 @@
 /public/storage
 /public/uploads/*
 !/public/uploads/.gitkeep
+/public/llms.txt
+/public/manifest.webmanifest
+/public/robots.txt
+/public/sitemap*.xml
 /storage/*.key
 /storage/installed
 /storage/pail
