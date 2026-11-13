@@ -1,20 +1,18 @@
 import React from 'react';
-import { Link, usePage } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
 
-export default function Footer() {
-    const { url, props } = usePage();
-    const websiteInfo = props?.websiteInfo;
-    const pathname = url.split('?')[0];
+export default function Footer({ info = {}, currentUrl = '' }) {
+    const pathname = currentUrl || (typeof window !== 'undefined' ? window.location.pathname : '');
 
-    if (pathname.startsWith('/admin') || pathname.startsWith('/team')) {
+    if (
+        pathname?.startsWith('/admin') ||
+        pathname?.startsWith('/team') ||
+        pathname === '/maintenance'
+    ) {
         return null;
     }
 
-    const siteName = websiteInfo?.siteName || 'Png101';
-    const logoPath = websiteInfo?.logoPath || '/assets/logo.png';
-    const logoWidth = websiteInfo?.logoWidth || 120;
-    const logoHeight = websiteInfo?.logoHeight || 36;
-    const description = websiteInfo?.description || 'Free High-Resolution Transparent PNG Images for designers and creators.';
+    const currentYear = new Date().getFullYear();
 
     const footerLinks = [
         { name: 'About Us', href: '/about-us' },
@@ -24,55 +22,141 @@ export default function Footer() {
         { name: 'DMCA Policy', href: '/dmca-policy' },
     ];
 
-    const currentYear = new Date().getFullYear();
+    const siteName = info.websiteName || 'Png101';
 
     return (
-        <footer className="w-full border-t border-card-border bg-card-bg/60 backdrop-blur-md transition-colors duration-300 mt-auto">
-            <div className="max-w-7xl mx-auto px-4 md:px-8 py-10 md:py-12">
-                <div className="flex flex-col md:flex-row items-center justify-between gap-8 pb-8 border-b border-card-border">
-                    {/* Brand & Tagline */}
-                    <div className="flex flex-col items-center md:items-start gap-2">
-                        <Link href="/" className="flex items-center gap-2 group">
-                            <img
-                                src={logoPath}
-                                alt={`${siteName} Logo`}
-                                style={{ width: `${logoWidth}px`, height: `${logoHeight}px` }}
-                                className="object-contain transition-transform duration-300 group-hover:scale-105"
-                            />
+        <footer className="mt-auto border-t border-card-border bg-card-bg/80 backdrop-blur-md text-foreground">
+            <div className="max-w-7xl mx-auto px-6 py-12">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b border-card-border">
+                    {/* Brand Column */}
+                    <div className="md:col-span-5 space-y-4">
+                        <Link href="/" className="inline-flex items-center gap-3 hover:opacity-80 transition-opacity">
+                            <div className="w-8 h-8 bg-primary-glow/20 rounded-lg flex items-center justify-center border border-primary-glow/50 shadow-[0_0_10px_rgba(59,130,246,0.3)]">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-primary-glow">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                                </svg>
+                            </div>
+                            <span className="text-xl font-bold text-foreground tracking-wide">
+                                {siteName}
+                            </span>
                         </Link>
-                        <p className="text-xs text-muted-text max-w-xs text-center md:text-left">
-                            {description}
+                        <p className="text-sm text-foreground/60 max-w-md leading-relaxed">
+                            {info.tagline}
                         </p>
+                        {info.contactEmail && (
+                            <p className="text-sm text-foreground/60">
+                                Contact:{' '}
+                                <a
+                                    href={`mailto:${info.contactEmail}`}
+                                    className="text-primary-glow hover:underline font-medium"
+                                >
+                                    {info.contactEmail}
+                                </a>
+                            </p>
+                        )}
                     </div>
 
-                    {/* Legal & Info Navigation */}
-                    <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
+                    {/* Company & Info Links */}
+                    <div className="md:col-span-3 space-y-3">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">
+                            Explore &amp; Company
+                        </h3>
+                        <ul className="space-y-2.5 text-sm">
+                            <li>
+                                <Link
+                                    href="/"
+                                    className="text-foreground/60 hover:text-primary-glow transition-colors"
+                                >
+                                    Home
+                                </Link>
+                            </li>
+                            <li>
+                                <Link
+                                    href="/latest"
+                                    className="text-foreground/60 hover:text-primary-glow transition-colors"
+                                >
+                                    Latest Uploads
+                                </Link>
+                            </li>
+                            <li>
+                                <Link
+                                    href="/tags"
+                                    className="text-foreground/60 hover:text-primary-glow transition-colors font-medium text-primary-glow/90"
+                                >
+                                    Tags Directory (A–Z)
+                                </Link>
+                            </li>
+                            <li>
+                                <Link
+                                    href="/about-us"
+                                    className="text-foreground/60 hover:text-primary-glow transition-colors"
+                                >
+                                    About Us
+                                </Link>
+                            </li>
+                            <li>
+                                <Link
+                                    href="/contact-us"
+                                    className="text-foreground/60 hover:text-primary-glow transition-colors"
+                                >
+                                    Contact Us
+                                </Link>
+                            </li>
+                        </ul>
+                    </div>
+
+                    {/* Legal & Policies Links */}
+                    <div className="md:col-span-4 space-y-3">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">
+                            Legal &amp; Policies
+                        </h3>
+                        <ul className="space-y-2.5 text-sm">
+                            <li>
+                                <Link
+                                    href="/terms-of-service"
+                                    className="text-foreground/60 hover:text-primary-glow transition-colors"
+                                >
+                                    Terms of Service
+                                </Link>
+                            </li>
+                            <li>
+                                <Link
+                                    href="/privacy-policy"
+                                    className="text-foreground/60 hover:text-primary-glow transition-colors"
+                                >
+                                    Privacy Policy
+                                </Link>
+                            </li>
+                            <li>
+                                <Link
+                                    href="/dmca-policy"
+                                    className="text-foreground/60 hover:text-primary-glow transition-colors"
+                                >
+                                    DMCA Policy
+                                </Link>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                {/* Bottom Bar */}
+                <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-foreground/50">
+                    <p>
+                        &copy; {currentYear} {info.companyName || siteName}. All rights reserved.
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
                         {footerLinks.map((link) => (
                             <Link
                                 key={link.href}
                                 href={link.href}
-                                className={`text-sm font-medium transition-colors ${
-                                    pathname === link.href
-                                        ? 'text-primary-glow'
-                                        : 'text-foreground/70 hover:text-foreground'
-                                }`}
+                                className="hover:text-primary-glow transition-colors"
                             >
                                 {link.name}
                             </Link>
                         ))}
-                    </nav>
-                </div>
-
-                {/* Bottom Copyright */}
-                <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-text">
-                    <p>&copy; {currentYear} {siteName}. All rights reserved.</p>
-                    <p className="flex items-center gap-1.5">
-                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        <span>100% Free Transparent PNGs</span>
-                    </p>
+                    </div>
                 </div>
             </div>
         </footer>
     );
 }
-

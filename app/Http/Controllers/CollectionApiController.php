@@ -17,7 +17,7 @@ class CollectionApiController extends Controller
         $sort = $request->query('sort');
         $limit = $request->query('limit') ? (int) $request->query('limit') : null;
         $q = $request->query('q');
-        $includeDrafts = $request->query('includeDrafts') === '1';
+        $includeDrafts = $request->query('includeDrafts') === '1' || $request->query('admin') === '1';
 
         if ($includeDrafts) {
             $session = TeamService::getCurrentSession($request);
@@ -47,7 +47,7 @@ class CollectionApiController extends Controller
         }
 
         $slug = $request->input('slug')
-            ? CollectionService::slugify((string) $request->input('slug'))
+            ? CollectionService::getUniqueSlug((string) $request->input('slug'))
             : CollectionService::getUniqueSlug($name);
 
         $type = $request->input('type', 'manual');
@@ -70,8 +70,6 @@ class CollectionApiController extends Controller
 
         $imageIds = $request->input('imageIds', []);
         if ($type === 'smart_snapshot' && !empty($tagRules) && empty($imageIds)) {
-            $preview = CollectionService::previewTagMatches($tagRules, $ruleMatchMode);
-            // Fetch all matching IDs
             $allPublished = Image::where('status', 'published')->get(['id', 'tags']);
             foreach ($allPublished as $img) {
                 $imgTags = CollectionService::normalizeTags($img->tags ?? []);
@@ -91,14 +89,24 @@ class CollectionApiController extends Controller
             }
         }
 
-        return response()->json(['success' => true, 'collection' => $collection]);
+        return response()->json(array_merge($collection->toArray(), [
+            'success' => true,
+            'collection' => $collection,
+        ]));
     }
 
     public function show(Request $request, string $id)
     {
-        $includeDrafts = $request->query('includeDrafts') === '1';
+        $includeDrafts = $request->query('includeDrafts') === '1' || $request->query('admin') === '1';
         $page = max(1, (int) $request->query('page', 1));
         $limit = max(1, (int) $request->query('limit', 50));
+
+        if ($includeDrafts) {
+            $session = TeamService::getCurrentSession($request);
+            if (!TeamService::hasPermission($session, 'manage_collections')) {
+                $includeDrafts = false;
+            }
+        }
 
         $data = CollectionService::getCollectionWithImages(['id' => $id], [
             'includeDrafts' => $includeDrafts,
@@ -156,7 +164,10 @@ class CollectionApiController extends Controller
             }
         }
 
-        return response()->json(['success' => true, 'collection' => $collection]);
+        return response()->json(array_merge($collection->toArray(), [
+            'success' => true,
+            'collection' => $collection,
+        ]));
     }
 
     public function destroy(Request $request, string $id)
@@ -177,6 +188,27 @@ class CollectionApiController extends Controller
             return response()->json(['error' => 'Forbidden'], 403);
         }
 
+        $collection = Collection::find($id);
+        if (!$collection) {
+            return response()->json(['error' => 'Collection not found'], 404);
+        }
+
+        // Handle DELETE /api/collections/{id}/images?imageId=...
+        if ($request->isMethod('delete')) {
+            $imageId = $request->query('imageId') ?: $request->input('imageId');
+            if ($imageId) {
+                if ($collection->type === 'smart_dynamic') {
+                    CollectionImage::updateOrCreate(
+                        ['collectionId' => $id, 'imageId' => $imageId],
+                        ['isExcluded' => true, 'isPinned' => false]
+                    );
+                } else {
+                    CollectionImage::where('collectionId', $id)->where('imageId', $imageId)->delete();
+                }
+            }
+            return response()->json(['success' => true]);
+        }
+
         $action = $request->input('action');
         $imageId = $request->input('imageId');
         $imageIds = $request->input('imageIds', []);
@@ -188,6 +220,28 @@ class CollectionApiController extends Controller
                     ['isExcluded' => false]
                 );
             }
+        } elseif ($action === 'set_cover' && $imageId) {
+            $img = Image::find($imageId);
+            if ($img) {
+                $collection->coverImageId = $img->id;
+                $collection->coverImagePath = $img->path;
+                $collection->save();
+            }
+        } elseif ($action === 'update' && $imageId) {
+            $updateData = [];
+            if ($request->has('isPinned')) {
+                $updateData['isPinned'] = (bool) $request->input('isPinned');
+                if ($updateData['isPinned']) {
+                    $updateData['isExcluded'] = false;
+                }
+            }
+            if ($request->has('position')) {
+                $updateData['position'] = (int) $request->input('position');
+            }
+            CollectionImage::updateOrCreate(
+                ['collectionId' => $id, 'imageId' => $imageId],
+                $updateData
+            );
         } elseif ($action === 'remove' && $imageId) {
             CollectionImage::where('collectionId', $id)->where('imageId', $imageId)->delete();
         } elseif ($action === 'pin' && $imageId) {
@@ -207,8 +261,8 @@ class CollectionApiController extends Controller
 
     public function previewTags(Request $request)
     {
-        $tagRules = $request->input('tagRules', []);
-        $mode = $request->input('ruleMatchMode', 'any');
+        $tagRules = $request->input('tags', $request->input('tagRules', []));
+        $mode = $request->input('mode', $request->input('ruleMatchMode', 'any'));
         return response()->json(CollectionService::previewTagMatches(is_array($tagRules) ? $tagRules : [], $mode));
     }
 
@@ -219,9 +273,9 @@ class CollectionApiController extends Controller
             return response()->json(['error' => 'Forbidden'], 403);
         }
 
-        $topic = trim((string) $request->input('topic', ''));
+        $topic = trim((string) ($request->input('prompt') ?: $request->input('topic', '')));
         if ($topic === '') {
-            return response()->json(['error' => 'Topic is required'], 400);
+            return response()->json(['error' => 'Prompt is required'], 400);
         }
 
         $images = Image::where('status', 'published')->get(['tags']);
@@ -247,16 +301,27 @@ Generate a JSON object with:
   "name": "Catchy SEO Collection Title",
   "slug": "url-friendly-slug",
   "description": "Engaging 1-2 sentence SEO description of this PNG collection.",
-  "tagRules": ["tag1", "tag2", ... 5-10 relevant tags, preferring tags from the available catalog]
+  "tags": ["tag1", "tag2", ... 5-10 relevant tags, preferring tags from the available catalog]
 }
 PROMPT;
 
         try {
             $result = GeminiService::generateTextJson($prompt);
-            return response()->json(['success' => true, 'data' => $result]);
+            $generatedTags = CollectionService::normalizeTags($result['tags'] ?? $result['tagRules'] ?? []);
+            $preview = CollectionService::previewTagMatches($generatedTags, 'any');
+
+            return response()->json([
+                'success' => true,
+                'name' => $result['name'] ?? '',
+                'slug' => $result['slug'] ?? CollectionService::slugify($result['name'] ?? $topic),
+                'description' => $result['description'] ?? '',
+                'tags' => $generatedTags,
+                'matchCount' => $preview['count'],
+                'sampleImages' => $preview['sampleImages'],
+                'data' => $result,
+            ]);
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
 }
-

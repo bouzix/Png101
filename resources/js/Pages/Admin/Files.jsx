@@ -1,77 +1,95 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Head } from '@inertiajs/react';
-import { toast } from 'sonner';
 import AdminLayout from '@/Layouts/AdminLayout';
 import AssetCard from '@/components/admin/AssetCard';
 import BulkEditSidebar from '@/components/admin/BulkEditSidebar';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import Pagination from '@/components/ui/Pagination';
+import { toast } from 'sonner';
 
 export default function AdminFiles() {
     const [images, setImages] = useState([]);
-    const [selectedIds, setSelectedIds] = useState([]);
     const [search, setSearch] = useState('');
+    const [selectedIds, setSelectedIds] = useState([]);
+
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
-    const [loading, setLoading] = useState(false);
+    const [permissions, setPermissions] = useState(['*']);
+
     const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
     const [editingFileId, setEditingFileId] = useState(null);
-    const [session, setSession] = useState(null);
+    const [loading, setLoading] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState({
         isOpen: false,
         title: '',
         message: '',
-        onConfirm: () => {},
+        onConfirm: () => {}
     });
 
     useEffect(() => {
+        fetchImages();
         fetch('/api/auth/me')
-            .then(r => (r.ok ? r.json() : null))
-            .then(data => {
-                if (data) setSession(data);
+            .then((res) => res.json())
+            .then((data) => {
+                if (Array.isArray(data.permissions)) {
+                    setPermissions(data.permissions);
+                }
             })
             .catch(() => {});
-        fetchImages();
     }, []);
 
-    const canEdit = !session || session.role === 'super_admin' || session.permissions?.includes('files_edit');
-    const canDelete = !session || session.role === 'super_admin' || session.permissions?.includes('files_delete');
+    const canEdit = permissions.includes('*') || permissions.includes('edit_images');
+    const canDelete = permissions.includes('*') || permissions.includes('delete_images');
 
-    const fetchImages = async () => {
-        try {
-            const res = await fetch('/api/images?limit=1000');
-            if (res.ok) {
-                const data = await res.json();
-                setImages(data.images || data || []);
-            }
-        } catch (error) {
-            console.error('Failed to fetch images', error);
-        }
+    const fetchImages = () => {
+        fetch('/api/images?status=published')
+            .then((res) => res.json())
+            .then((data) => {
+                if (Array.isArray(data)) {
+                    setImages(data);
+                }
+            })
+            .catch(err => {
+                console.error('Failed to load images', err);
+                toast.error('Failed to load images');
+            });
     };
 
     const filteredImages = useMemo(() => {
-        if (!search.trim()) return images;
-        const q = search.toLowerCase();
-        return images.filter(
-            img =>
-                (img.name && img.name.toLowerCase().includes(q)) ||
-                (img.filename && img.filename.toLowerCase().includes(q)) ||
-                (Array.isArray(img.tags) && img.tags.some(t => t.toLowerCase().includes(q)))
-        );
+        const q = search.trim().toLowerCase();
+        if (!q) return images;
+
+        return images.filter((img) => {
+            const nameMatch = (img.name || img.filename || '').toLowerCase().includes(q);
+            const filenameMatch = (img.filename || '').toLowerCase().includes(q);
+            const altMatch = (img.altText || '').toLowerCase().includes(q);
+            const descMatch = (img.description || '').toLowerCase().includes(q);
+            const tagMatch = Array.isArray(img.tags) && img.tags.some(t => String(t).toLowerCase().includes(q));
+            return nameMatch || filenameMatch || altMatch || descMatch || tagMatch;
+        });
     }, [images, search]);
 
     const totalPages = Math.max(1, Math.ceil(filteredImages.length / itemsPerPage));
-    const paginatedImages = useMemo(() => {
-        const start = (currentPage - 1) * itemsPerPage;
-        return filteredImages.slice(start, start + itemsPerPage);
-    }, [filteredImages, currentPage, itemsPerPage]);
 
     useEffect(() => {
         setCurrentPage(1);
     }, [search, itemsPerPage]);
 
+    useEffect(() => {
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [totalPages, currentPage]);
+
+    const paginatedImages = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return filteredImages.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredImages, currentPage, itemsPerPage]);
+
     const handleToggleSelect = (id) => {
-        setSelectedIds(prev => (prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]));
+        setSelectedIds(prev =>
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
     };
 
     const handleEdit = (id) => {
@@ -101,16 +119,21 @@ export default function AdminFiles() {
                 const res = await fetch('/api/images/update', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(update),
+                    body: JSON.stringify(update)
                 });
 
                 if (res.ok) {
                     successCount++;
-                    setImages(prev => prev.map(img => (img.id === update.id ? { ...img, ...update } : img)));
+                    setImages(prev => prev.map(img => {
+                        if (img.id === update.id) {
+                            return { ...img, ...update };
+                        }
+                        return img;
+                    }));
                 } else {
                     failCount++;
                 }
-            } catch {
+            } catch (error) {
                 failCount++;
             }
         }
@@ -134,7 +157,7 @@ export default function AdminFiles() {
             const res = await fetch('/api/images/delete', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids: selectedIds }),
+                body: JSON.stringify({ ids: selectedIds })
             });
 
             if (res.ok) {
@@ -144,7 +167,8 @@ export default function AdminFiles() {
             } else {
                 toast.error('Failed to delete images');
             }
-        } catch {
+        } catch (error) {
+            console.error('Delete failed', error);
             toast.error('Delete failed: Network or server error');
         } finally {
             setLoading(false);
@@ -153,11 +177,14 @@ export default function AdminFiles() {
 
     const editingImage = images.find(img => img.id === editingFileId);
     const selectedImages = images.filter(img => selectedIds.includes(img.id));
-    const imagesToEdit = editingImage ? [editingImage] : selectedImages;
+
+    const imagesToEdit = editingImage
+        ? [editingImage]
+        : selectedImages;
 
     return (
         <AdminLayout>
-            <Head title="Files Manager - Png101 Admin" />
+            <Head title="My Files - Admin" />
             <div className="max-w-6xl mx-auto pb-24">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
@@ -174,7 +201,7 @@ export default function AdminFiles() {
                             <span className="text-foreground/50 text-xs font-medium whitespace-nowrap">Per page:</span>
                             <select
                                 value={itemsPerPage}
-                                onChange={e => setItemsPerPage(Number(e.target.value))}
+                                onChange={(e) => setItemsPerPage(Number(e.target.value))}
                                 className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer"
                             >
                                 <option value={20} className="bg-card-bg text-foreground">20</option>
@@ -189,7 +216,7 @@ export default function AdminFiles() {
                                 type="text"
                                 placeholder="Search all files by title, tag..."
                                 value={search}
-                                onChange={e => setSearch(e.target.value)}
+                                onChange={(e) => setSearch(e.target.value)}
                                 className="w-full bg-card-bg border border-card-border text-foreground px-4 py-2 rounded-lg focus:outline-none focus:border-primary-glow pl-10 pr-8"
                             />
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-foreground/50 absolute left-3 top-1/2 -translate-y-1/2">
@@ -197,8 +224,10 @@ export default function AdminFiles() {
                             </svg>
                             {search && (
                                 <button
+                                    type="button"
                                     onClick={() => setSearch('')}
                                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground cursor-pointer"
+                                    title="Clear search"
                                 >
                                     ✕
                                 </button>
@@ -210,7 +239,7 @@ export default function AdminFiles() {
                 {paginatedImages.length > 0 ? (
                     <>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                            {paginatedImages.map(img => (
+                            {paginatedImages.map((img) => (
                                 <AssetCard
                                     key={img.id}
                                     file={null}
@@ -232,7 +261,7 @@ export default function AdminFiles() {
                                 totalPages={totalPages}
                                 totalItems={filteredImages.length}
                                 itemsPerPage={itemsPerPage}
-                                onPageChange={page => {
+                                onPageChange={(page) => {
                                     setCurrentPage(page);
                                     window.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
@@ -246,11 +275,14 @@ export default function AdminFiles() {
                 )}
 
                 {selectedIds.length > 0 && (
-                    <div className="fixed bottom-0 right-0 left-0 lg:left-64 bg-card-bg border-t border-card-border p-4 flex justify-end items-center gap-4 z-40">
-                        <span className="text-foreground/60 font-medium mr-4">{selectedIds.length} Selected</span>
+                    <div className="fixed bottom-0 right-0 left-64 bg-card-bg border-t border-card-border p-4 flex justify-end items-center gap-4 z-40">
+                        <span className="text-foreground/60 font-medium mr-4">
+                            {selectedIds.length} Selected
+                        </span>
 
                         {canEdit && (
                             <button
+                                type="button"
                                 onClick={selectedIds.length === 1 ? () => handleEdit(selectedIds[0]) : handleBulkEdit}
                                 className="bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 px-6 py-2 rounded-lg font-bold transition-colors cursor-pointer"
                             >
@@ -260,14 +292,13 @@ export default function AdminFiles() {
 
                         {canDelete && (
                             <button
-                                onClick={() =>
-                                    setConfirmDialog({
-                                        isOpen: true,
-                                        title: 'Delete Images',
-                                        message: `Are you sure you want to delete ${selectedIds.length} image(s)? This action cannot be undone.`,
-                                        onConfirm: handleDelete,
-                                    })
-                                }
+                                type="button"
+                                onClick={() => setConfirmDialog({
+                                    isOpen: true,
+                                    title: 'Delete Images',
+                                    message: `Are you sure you want to delete ${selectedIds.length} image(s)? This action cannot be undone.`,
+                                    onConfirm: handleDelete
+                                })}
                                 disabled={loading}
                                 className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-6 py-2 rounded-lg font-bold transition-colors disabled:opacity-50 cursor-pointer"
                             >
@@ -293,7 +324,7 @@ export default function AdminFiles() {
                         categoryIds: img.categories?.map(c => c.categoryId),
                         luminance: img.luminance,
                         contrastBgDark: img.contrastBgDark,
-                        contrastBgLight: img.contrastBgLight,
+                        contrastBgLight: img.contrastBgLight
                     }))}
                     onSave={handleBulkSave}
                 />
@@ -312,4 +343,3 @@ export default function AdminFiles() {
         </AdminLayout>
     );
 }
-

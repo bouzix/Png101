@@ -100,6 +100,7 @@ Route::prefix('api')->group(function () {
         Route::patch('/collections/{id}', [CollectionApiController::class, 'update']);
         Route::delete('/collections/{id}', [CollectionApiController::class, 'destroy']);
         Route::post('/collections/{id}/images', [CollectionApiController::class, 'manageImages']);
+        Route::delete('/collections/{id}/images', [CollectionApiController::class, 'manageImages']);
         Route::post('/collections/preview-tags', [CollectionApiController::class, 'previewTags']);
         Route::post('/collections/generate-ai', [CollectionApiController::class, 'generateAi']);
 
@@ -136,8 +137,12 @@ Route::prefix('api')->group(function () {
         Route::patch('/admin/team', [AdminController::class, 'updateTeam']);
         Route::delete('/admin/team', [AdminController::class, 'deleteTeamMember']);
 
+        Route::get('/admin/me', [AuthController::class, 'me']);
+
         Route::delete('/admin/clear-db', [AdminController::class, 'clearDb']);
         Route::delete('/admin/clear-uploads', [AdminController::class, 'clearUploads']);
+        Route::post('/admin/data/clear-database', [AdminController::class, 'clearDb']);
+        Route::post('/admin/data/clear-uploads', [AdminController::class, 'clearUploads']);
     });
 });
 

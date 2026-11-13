@@ -82,7 +82,7 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
                 <div className="p-4 space-y-4">
                     <div className="flex justify-between items-center text-sm">
                         <div className="flex items-center gap-2 text-slate-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 ">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                             </svg>
                             <span>Dimensions</span>
@@ -124,7 +124,7 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
                 </div>
                 <div className="p-4 space-y-4">
                     <div className="flex items-center gap-2">
-                        {/* Width Input Box */}
+                        {/* Width Input Box with Branded Steppers */}
                         <div className="relative flex-1 flex items-center bg-input-bg border border-input-border rounded-lg overflow-hidden focus-within:border-blue-500 transition-colors">
                             <input
                                 type="number"
@@ -162,9 +162,10 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
 
                         {/* Chainlink Icon - Toggle Lock */}
                         <button
+                            type="button"
                             onClick={() => setIsLocked(!isLocked)}
                             className={`p-2 rounded-lg transition-colors cursor-pointer flex-shrink-0 ${isLocked ? 'bg-blue-500/20 text-blue-400' : 'text-slate-600 hover:text-slate-400'}`}
-                            title={isLocked ? 'Unlock Aspect Ratio' : 'Lock Aspect Ratio'}
+                            title={isLocked ? "Unlock Aspect Ratio" : "Lock Aspect Ratio"}
                         >
                             {isLocked ? (
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
@@ -177,7 +178,7 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
                             )}
                         </button>
 
-                        {/* Height Input Box */}
+                        {/* Height Input Box with Branded Steppers */}
                         <div className="relative flex-1 flex items-center bg-input-bg border border-input-border rounded-lg overflow-hidden focus-within:border-blue-500 transition-colors">
                             <input
                                 type="number"
@@ -225,6 +226,7 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
                     )}
 
                     <button
+                        type="button"
                         onClick={handleResizeClick}
                         className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2.5 rounded-lg transition-colors text-sm shadow-lg shadow-blue-600/20 cursor-pointer"
                     >
@@ -306,4 +308,3 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
 };
 
 export default ImageDetails;
-

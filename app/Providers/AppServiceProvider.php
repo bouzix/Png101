@@ -11,7 +11,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        if (!is_file(base_path('.env'))) {
+            config([
+                'session.driver' => 'file',
+                'cache.default' => 'file',
+                'queue.default' => 'sync',
+            ]);
+        }
     }
 
     /**

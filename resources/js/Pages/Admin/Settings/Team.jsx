@@ -1,7 +1,10 @@
-import React from 'react';
-import AdminTeam from '@/Pages/Admin/Team';
+import { useEffect } from 'react';
+import { router } from '@inertiajs/react';
 
-export default function SettingsTeam() {
-    return <AdminTeam />;
+export default function RedirectOldTeamPage() {
+    useEffect(() => {
+        router.visit('/admin/dashboard/team', { replace: true });
+    }, []);
+
+    return null;
 }
-

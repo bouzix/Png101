@@ -14,6 +14,9 @@ class AdminAuthMiddleware
         $session = TeamService::getCurrentSession($request);
 
         if (empty($session['authenticated'])) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return response()->json(['error' => 'Unauthorized'], 401);
+            }
             return redirect('/admin');
         }
 

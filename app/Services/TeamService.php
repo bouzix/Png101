@@ -77,6 +77,94 @@ class TeamService
         return in_array('*', $perms, true) || in_array($permission, $perms, true);
     }
 
+    private static function formatMember(TeamMember $m): array
+    {
+        return [
+            'id' => $m->id,
+            'name' => $m->name,
+            'email' => $m->email,
+            'permissions' => is_array($m->permissions) ? $m->permissions : [],
+            'isActive' => (bool) $m->isActive,
+            'lastLoginAt' => $m->lastLoginAt?->toISOString(),
+            'createdAt' => $m->createdAt?->toISOString(),
+        ];
+    }
+
+    public static function getAllMembers(): array
+    {
+        return TeamMember::orderByDesc('createdAt')
+            ->get()
+            ->map(fn (TeamMember $m) => self::formatMember($m))
+            ->all();
+    }
+
+    public static function getMemberById(string $id): ?array
+    {
+        $m = TeamMember::find($id);
+        return $m ? self::formatMember($m) : null;
+    }
+
+    public static function getMemberByEmail(string $email): ?array
+    {
+        $normalized = strtolower(trim($email));
+        $m = TeamMember::whereRaw('LOWER(email) = ?', [$normalized])->first();
+        return $m ? self::formatMember($m) : null;
+    }
+
+    public static function createMember(array $data): array
+    {
+        $created = TeamMember::create([
+            'name' => trim((string) ($data['name'] ?? '')),
+            'email' => strtolower(trim((string) ($data['email'] ?? ''))),
+            'passwordHash' => password_hash((string) ($data['passwordPlain'] ?? ''), PASSWORD_BCRYPT),
+            'permissions' => array_values(array_map('strval', $data['permissions'] ?? [])),
+            'isActive' => array_key_exists('isActive', $data) ? (bool) $data['isActive'] : true,
+        ]);
+
+        return self::formatMember($created);
+    }
+
+    public static function updateMember(string $id, array $data): ?array
+    {
+        $member = TeamMember::find($id);
+        if (!$member) {
+            return null;
+        }
+
+        if (array_key_exists('name', $data)) {
+            $member->name = trim((string) $data['name']);
+        }
+        if (array_key_exists('email', $data)) {
+            $newEmail = strtolower(trim((string) $data['email']));
+            if ($newEmail !== strtolower($member->email)) {
+                $conflict = TeamMember::whereRaw('LOWER(email) = ?', [$newEmail])
+                    ->where('id', '!=', $id)
+                    ->exists();
+                if ($conflict) {
+                    throw new \RuntimeException('A team member with this email already exists.');
+                }
+                $member->email = $newEmail;
+            }
+        }
+        if (!empty($data['passwordPlain'])) {
+            $member->passwordHash = password_hash((string) $data['passwordPlain'], PASSWORD_BCRYPT);
+        }
+        if (array_key_exists('permissions', $data) && is_array($data['permissions'])) {
+            $member->permissions = array_values(array_map('strval', $data['permissions']));
+        }
+        if (array_key_exists('isActive', $data)) {
+            $member->isActive = (bool) $data['isActive'];
+        }
+
+        $member->save();
+        return self::formatMember($member);
+    }
+
+    public static function deleteMember(string $id): void
+    {
+        TeamMember::where('id', $id)->delete();
+    }
+
     public static function getSmtpConfig(): array
     {
         $defaults = [

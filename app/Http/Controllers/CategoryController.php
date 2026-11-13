@@ -10,13 +10,21 @@ class CategoryController extends Controller
 {
     public function index()
     {
-        $categories = Category::with(['parent', 'children'])
+        $categories = Category::with([
+            'parent',
+            'children' => fn ($q) => $q->withCount('images')->orderBy('name'),
+        ])
             ->withCount('images')
             ->orderBy('name')
             ->get()
             ->map(function ($cat) {
                 $arr = $cat->toArray();
-                $arr['_count'] = ['images' => $cat->images_count];
+                $arr['_count'] = ['images' => $cat->images_count ?? 0];
+                $arr['children'] = $cat->children->map(function ($child) {
+                    $cArr = $child->toArray();
+                    $cArr['_count'] = ['images' => $child->images_count ?? 0];
+                    return $cArr;
+                })->values()->all();
                 return $arr;
             });
 
@@ -26,6 +34,7 @@ class CategoryController extends Controller
     public function store(Request $request)
     {
         $name = trim((string) $request->input('name', ''));
+        $requestedSlug = trim((string) $request->input('slug', ''));
         $description = $request->input('description');
         $parentId = $request->input('parentId') ?: null;
 
@@ -33,7 +42,11 @@ class CategoryController extends Controller
             return response()->json(['error' => 'Category name is required'], 400);
         }
 
-        $baseSlug = CollectionService::slugify($name) ?: 'category';
+        $baseSlug = $requestedSlug !== '' ? (CollectionService::slugify($requestedSlug) ?: 'category') : (CollectionService::slugify($name) ?: 'category');
+        if ($requestedSlug !== '' && Category::where('slug', $baseSlug)->exists()) {
+            return response()->json(['error' => 'A category with this name/slug already exists'], 409);
+        }
+
         $slug = $baseSlug;
         $counter = 1;
         while (Category::where('slug', $slug)->exists()) {
@@ -58,10 +71,26 @@ class CategoryController extends Controller
             return response()->json(['error' => 'Category not found'], 404);
         }
 
+        if ($request->has('parentId') && $request->input('parentId') === $id) {
+            return response()->json(['error' => 'Category cannot be its own parent'], 400);
+        }
+
         if ($request->has('name')) {
             $category->name = trim((string) $request->input('name'));
+        }
+        if ($request->has('slug')) {
+            $slug = trim((string) $request->input('slug'));
+            if ($slug !== '') {
+                $exists = Category::where('slug', $slug)->where('id', '!=', $id)->exists();
+                if ($exists) {
+                    return response()->json(['error' => 'A category with this name/slug already exists'], 409);
+                }
+                $category->slug = $slug;
+            }
+        } elseif ($request->has('name')) {
             $category->slug = CollectionService::slugify($category->name) ?: $category->slug;
         }
+
         if ($request->has('description')) {
             $category->description = $request->input('description');
         }
@@ -82,4 +111,3 @@ class CategoryController extends Controller
         return response()->json(['success' => true]);
     }
 }
-

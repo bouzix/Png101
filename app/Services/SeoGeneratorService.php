@@ -90,6 +90,33 @@ class SeoGeneratorService
         return self::getSettings();
     }
 
+    public static function checkScheduled(): void
+    {
+        try {
+            $settings = self::getSettings();
+            if (empty($settings['autoRegenerate'])) {
+                return;
+            }
+            if (empty($settings['lastGeneratedAt'])) {
+                return;
+            }
+
+            $last = \Carbon\Carbon::parse($settings['lastGeneratedAt']);
+            $due = match ($settings['scheduleFrequency'] ?? 'daily') {
+                'hourly' => $last->addHour(),
+                'weekly' => $last->addWeek(),
+                'monthly' => $last->addMonth(),
+                default => $last->addDay(),
+            };
+
+            if (now()->greaterThanOrEqualTo($due)) {
+                self::generateAll('auto-schedule');
+            }
+        } catch (\Throwable $e) {
+            // Ignore background check failures
+        }
+    }
+
     public static function generateAll(string $trigger = 'manual'): array
     {
         $info = WebsiteInfoService::get();

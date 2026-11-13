@@ -1,25 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Head } from '@inertiajs/react';
-import { toast } from 'sonner';
-import { CheckCircle2, CheckSquare, Loader2, Square, Trash2 } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import DropZone from '@/components/admin/DropZone';
 import AssetCard from '@/components/admin/AssetCard';
 import BulkEditSidebar from '@/components/admin/BulkEditSidebar';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
+import { toast } from 'sonner';
+import { CheckSquare, Square, Trash2, Loader2, CheckCircle2 } from 'lucide-react';
 
 export default function Dashboard() {
     const [stagedFiles, setStagedFiles] = useState([]);
-    const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
-    const [editingFileId, setEditingFileId] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [deleting, setDeleting] = useState(false);
-    const [confirmDialog, setConfirmDialog] = useState({
-        isOpen: false,
-        title: '',
-        message: '',
-        onConfirm: () => {},
-    });
+
     const [progress, setProgress] = useState({
         active: false,
         mode: 'staging',
@@ -30,21 +23,30 @@ export default function Dashboard() {
         currentFileName: '',
     });
 
+    const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
+    const [editingFileId, setEditingFileId] = useState(null);
+
+    const [confirmDialog, setConfirmDialog] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => {},
+    });
+
     useEffect(() => {
-        const fetchDrafts = async () => {
-            try {
-                const res = await fetch('/api/images?status=draft&limit=50');
-                if (res.ok) {
-                    const data = await res.json();
-                    const drafts = data.images.map(img => ({
+        fetch('/api/images?status=draft')
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data)) {
+                    const drafts = data.map(img => ({
                         id: img.id,
                         file: null,
                         preview: img.path,
-                        name: img.name || img.filename,
-                        tags: Array.isArray(img.tags) ? img.tags : [],
+                        name: img.name,
+                        tags: img.tags || [],
                         altText: img.altText || '',
                         description: img.description || '',
-                        categoryIds: img.categories ? img.categories.map(c => c.id) : [],
+                        categoryIds: img.categories?.map(c => c.categoryId) || [],
                         hasMetadata: !!(img.name && img.tags && img.tags.length > 0),
                         isSelected: false,
                         luminance: img.luminance || null,
@@ -53,11 +55,7 @@ export default function Dashboard() {
                     }));
                     setStagedFiles(drafts);
                 }
-            } catch (error) {
-                console.error('Failed to fetch drafts:', error);
-            }
-        };
-        fetchDrafts();
+            });
     }, []);
 
     const handleFilesDropped = async (files) => {
@@ -78,7 +76,10 @@ export default function Dashboard() {
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
-            setProgress(prev => ({ ...prev, currentFileName: file.name }));
+            setProgress(prev => ({
+                ...prev,
+                currentFileName: file.name,
+            }));
 
             const formData = new FormData();
             formData.append('file', file);
@@ -93,7 +94,7 @@ export default function Dashboard() {
                     const data = await res.json();
                     const newFile = {
                         id: data.image.id,
-                        file,
+                        file: file,
                         preview: data.image.path,
                         name: data.image.name,
                         tags: [],
@@ -125,7 +126,11 @@ export default function Dashboard() {
         }
 
         if (failed === 0) {
-            toast.success(succeeded === 1 ? 'Image uploaded successfully' : `Successfully uploaded all ${succeeded} images!`);
+            toast.success(
+                succeeded === 1
+                    ? 'Image uploaded successfully'
+                    : `Successfully uploaded all ${succeeded} images!`
+            );
         } else {
             toast.warning(`Uploaded ${succeeded} images. ${failed} failed.`);
         }
@@ -159,17 +164,16 @@ export default function Dashboard() {
 
                 if (res.ok) {
                     successCount++;
-                    setStagedFiles(prev =>
-                        prev.map(f =>
-                            f.id === update.id
-                                ? {
-                                      ...f,
-                                      ...update,
-                                      hasMetadata: !!(update.name && update.tags && update.tags.length > 0),
-                                  }
-                                : f
-                        )
-                    );
+                    setStagedFiles(prev => prev.map(f => {
+                        if (f.id === update.id) {
+                            return {
+                                ...f,
+                                ...update,
+                                hasMetadata: !!(update.name && update.tags && update.tags.length > 0),
+                            };
+                        }
+                        return f;
+                    }));
                 } else {
                     failCount++;
                 }
@@ -189,7 +193,12 @@ export default function Dashboard() {
     };
 
     const handleToggleSelect = (id) => {
-        setStagedFiles(prev => prev.map(f => (f.id === id ? { ...f, isSelected: !f.isSelected } : f)));
+        setStagedFiles(prev => prev.map(f => {
+            if (f.id === id) {
+                return { ...f, isSelected: !f.isSelected };
+            }
+            return f;
+        }));
     };
 
     const allSelected = stagedFiles.length > 0 && stagedFiles.every(f => f.isSelected);
@@ -219,11 +228,14 @@ export default function Dashboard() {
 
                     if (res.ok) {
                         setStagedFiles(prev => prev.filter(f => !idsToDelete.includes(f.id)));
-                        toast.success(`Deleted ${idsToDelete.length} ${idsToDelete.length === 1 ? 'image' : 'images'} successfully`);
+                        toast.success(
+                            `Deleted ${idsToDelete.length} ${idsToDelete.length === 1 ? 'image' : 'images'} successfully`
+                        );
                     } else {
                         toast.error('Failed to delete selected images');
                     }
-                } catch {
+                } catch (error) {
+                    console.error('Delete failed:', error);
                     toast.error('An error occurred while deleting images');
                 } finally {
                     setDeleting(false);
@@ -252,7 +264,10 @@ export default function Dashboard() {
 
         for (let i = 0; i < selectedReady.length; i++) {
             const stagedFile = selectedReady[i];
-            setProgress(prev => ({ ...prev, currentFileName: stagedFile.name }));
+            setProgress(prev => ({
+                ...prev,
+                currentFileName: stagedFile.name,
+            }));
 
             try {
                 const res = await fetch('/api/images/update', {
@@ -295,11 +310,14 @@ export default function Dashboard() {
     const selectedFiles = stagedFiles.filter(f => f.isSelected);
     const readyToUploadCount = stagedFiles.filter(f => f.isSelected && f.hasMetadata).length;
     const progressPercent = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
-    const imagesToEdit = editingFile ? [editingFile] : selectedFiles;
+
+    const imagesToEdit = editingFile
+        ? [editingFile]
+        : selectedFiles;
 
     return (
         <AdminLayout>
-            <Head title="Upload Images - Png101 Admin" />
+            <Head title="Upload Image - Admin" />
             <div className="max-w-6xl mx-auto pb-24">
                 <h2 className="text-2xl font-bold text-foreground mb-6">Upload Image</h2>
 
@@ -308,7 +326,7 @@ export default function Dashboard() {
                 </div>
 
                 {progress.active && (
-                    <div className="mb-8 bg-card-bg border border-card-border rounded-xl p-5 shadow-xl">
+                    <div className="mb-8 bg-card-bg border border-card-border rounded-xl p-5 shadow-xl animate-in fade-in duration-200">
                         <div className="flex items-center justify-between gap-4 mb-3">
                             <div className="flex items-center gap-3 min-w-0">
                                 {progress.completed < progress.total ? (
@@ -412,6 +430,11 @@ export default function Dashboard() {
                                         className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-bold bg-primary-glow hover:bg-primary-glow/90 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors cursor-pointer"
                                     >
                                         {uploading ? 'PUBLISHING...' : 'UPLOAD SELECTED'}
+                                        {!uploading && (
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                                            </svg>
+                                        )}
                                     </button>
                                 </div>
                             )}
@@ -446,6 +469,9 @@ export default function Dashboard() {
                         ...f,
                         path: f.preview,
                         filename: f.name,
+                        luminance: f.luminance,
+                        contrastBgDark: f.contrastBgDark,
+                        contrastBgLight: f.contrastBgLight,
                     }))}
                     onSave={handleBulkSave}
                 />
@@ -464,4 +490,3 @@ export default function Dashboard() {
         </AdminLayout>
     );
 }
-

@@ -1,17 +1,18 @@
 import React from 'react';
 import { Link } from '@inertiajs/react';
 
-const KeywordList = ({ keywords = [] }) => {
-    const defaultKeywords = ['Nature', 'Technology', 'Abstract', 'Animals', 'Food', 'People', 'Business', 'Icons'];
-    const displayKeywords = keywords.length > 0 ? keywords : defaultKeywords;
+const keywords = [
+    'science', 'book', 'stamp', 'chart', 'macbook', 'fist', 'circuit', 'food', 'badge', 'easter', 'clown', 'paper'
+];
 
+const KeywordList = () => {
     return (
-        <div className="flex flex-wrap justify-center items-center gap-2 max-w-3xl mx-auto px-4 mb-12">
-            {displayKeywords.map((keyword, index) => (
+        <div className="flex flex-wrap justify-center gap-4 text-sm text-foreground/60 mt-6">
+            {keywords.map((keyword) => (
                 <Link
-                    key={index}
+                    key={keyword}
                     href={`/search?q=${encodeURIComponent(keyword)}`}
-                    className="px-4 py-1.5 rounded-full text-xs md:text-sm font-medium bg-tag-bg text-tag-text border border-tag-border hover:bg-tag-bg-hover hover:border-blue-500/40 transition-all duration-200"
+                    className="cursor-pointer hover:text-primary-glow transition-colors duration-200"
                 >
                     {keyword}
                 </Link>
@@ -21,4 +22,3 @@ const KeywordList = ({ keywords = [] }) => {
 };
 
 export default KeywordList;
-

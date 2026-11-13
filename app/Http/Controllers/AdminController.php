@@ -182,7 +182,7 @@ class AdminController extends Controller
         try {
             $name = trim((string) $request->input('name', ''));
             $key = trim((string) $request->input('key', ''));
-            $modelVersion = trim((string) $request->input('modelVersion', 'gemini-2.5-flash'));
+            $modelVersion = trim((string) $request->input('modelVersion', '2.5'));
             $isActive = (bool) $request->input('isActive', false);
 
             if ($name === '' || $key === '') {
@@ -196,7 +196,7 @@ class AdminController extends Controller
             $created = ApiKey::create([
                 'name' => $name,
                 'key' => $key,
-                'modelVersion' => $modelVersion ?: 'gemini-2.5-flash',
+                'modelVersion' => $modelVersion ?: '2.5',
                 'isActive' => $isActive,
             ]);
 
@@ -575,9 +575,9 @@ class AdminController extends Controller
     {
         try {
             Image::query()->delete();
-            return response()->json(['success' => true]);
+            return response()->json(['success' => true, 'message' => 'Database images cleared successfully.']);
         } catch (\Throwable $e) {
-            return response()->json(['success' => false], 500);
+            return response()->json(['success' => false, 'error' => 'Failed to clear database images.'], 500);
         }
     }
 
@@ -588,7 +588,7 @@ class AdminController extends Controller
             if (File::exists($uploadDir)) {
                 File::cleanDirectory($uploadDir);
             }
-            return response()->json(['success' => true]);
+            return response()->json(['success' => true, 'message' => 'Upload directory cleared successfully.']);
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'error' => 'Failed to clear uploads'], 500);
         }

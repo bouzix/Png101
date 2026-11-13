@@ -1,34 +1,74 @@
 import React from 'react';
 import { Head, Link } from '@inertiajs/react';
+import Header from '@/components/Header';
+import { ShieldAlert, Home, Sparkles } from 'lucide-react';
 
-export default function Forbidden({ config = {} }) {
-    const title = config.title || 'Access Denied';
-    const message = config.message || 'You do not have permission to access this resource or directory.';
-    const buttonText = config.buttonText || 'Return to Home';
-    const buttonUrl = config.buttonUrl || '/';
+export default function Forbidden({ config = {}, websiteInfo = {} }) {
+    const p403 = config || {};
+    const siteName = websiteInfo?.websiteName || 'Png101';
 
     return (
-        <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative overflow-hidden">
-            <Head title={`403 - ${title}`} />
+        <div className="min-h-screen bg-background flex flex-col justify-between">
+            <Head title={`403 Forbidden - ${siteName}`} />
+            <Header siteName={siteName} showOnScrollOnly={false} />
 
-            <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-red-500/10 blur-[120px] rounded-full pointer-events-none" />
+            <main className="flex-1 flex items-center justify-center px-4 py-16">
+                <div className="w-full max-w-lg mx-auto text-center space-y-8">
+                    <div className="relative mx-auto w-64 h-52 sm:w-72 sm:h-60 flex items-center justify-center">
+                        <div
+                            className="w-full h-full rounded-3xl border border-purple-500/20 bg-card-bg/60 backdrop-blur-md p-4 flex items-center justify-center overflow-hidden shadow-2xl relative"
+                            style={{
+                                backgroundImage:
+                                    'linear-gradient(45deg, #80808012 25%, transparent 25%), linear-gradient(-45deg, #80808012 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #80808012 75%), linear-gradient(-45deg, transparent 75%, #80808012 75%)',
+                                backgroundSize: '14px 14px',
+                                backgroundPosition: '0 0, 0 7px, 7px -7px, -7px 0px',
+                            }}
+                        >
+                            <img
+                                src={p403.imagePath || '/assets/errors/403.svg'}
+                                alt={p403.imageAlt || '403 Forbidden Access'}
+                                className="max-h-full max-w-full object-contain pointer-events-none drop-shadow-lg"
+                            />
+                        </div>
+                    </div>
 
-            <div className="relative z-10 max-w-md w-full text-center space-y-6 bg-card-bg border border-card-border rounded-3xl p-8 md:p-12 shadow-2xl">
-                <div className="text-7xl font-black tracking-tighter bg-gradient-to-br from-red-500 to-orange-500 bg-clip-text text-transparent">
-                    403
+                    <div className="space-y-3">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-500 text-xs font-bold uppercase tracking-wider">
+                            <ShieldAlert className="w-3.5 h-3.5" />
+                            <span>{p403.subtitle || '403 - Access Forbidden'}</span>
+                        </div>
+
+                        <h1 className="text-3xl sm:text-4xl font-black text-foreground tracking-tight">
+                            {p403.title || 'Access Restricted'}
+                        </h1>
+
+                        <p className="text-sm sm:text-base text-foreground/60 max-w-md mx-auto leading-relaxed">
+                            {p403.message ||
+                                "You don't have authorization or sufficient permissions to access this page."}
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                        <Link
+                            href={p403.primaryButtonLink || '/'}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-sm shadow-lg shadow-purple-600/25 transition-all hover:-translate-y-0.5 cursor-pointer"
+                        >
+                            <Home className="w-4 h-4" />
+                            <span>{p403.primaryButtonText || 'Back to Homepage'}</span>
+                        </Link>
+
+                        {p403.secondaryButtonText && (
+                            <Link
+                                href={p403.secondaryButtonLink || '/collections'}
+                                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-card-bg hover:bg-foreground/5 border border-card-border text-foreground font-semibold text-sm transition-all hover:-translate-y-0.5 cursor-pointer"
+                            >
+                                <Sparkles className="w-4 h-4 text-purple-500" />
+                                <span>{p403.secondaryButtonText}</span>
+                            </Link>
+                        )}
+                    </div>
                 </div>
-                <div className="space-y-2">
-                    <h1 className="text-2xl font-bold text-foreground">{title}</h1>
-                    <p className="text-sm text-muted-text leading-relaxed">{message}</p>
-                </div>
-                <Link
-                    href={buttonUrl}
-                    className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition-colors shadow-lg shadow-blue-600/20"
-                >
-                    {buttonText}
-                </Link>
-            </div>
+            </main>
         </div>
     );
 }
-

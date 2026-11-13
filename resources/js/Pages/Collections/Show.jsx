@@ -1,141 +1,242 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import Header from '@/components/Header';
 import ImageCard from '@/components/ImageCard';
-import { ArrowLeft, Layers, Search, Sparkles } from 'lucide-react';
+import { slugify } from '@/lib/utils';
+import {
+    Layers,
+    Share2,
+    Check,
+    Tag,
+    ChevronRight,
+    ArrowLeft,
+    Sparkles,
+} from 'lucide-react';
+import { toast } from 'sonner';
 
-export default function CollectionShow({ collection, images = [] }) {
-    const [searchFilter, setSearchFilter] = useState('');
-    const [sortBy, setSortBy] = useState('order');
+export default function CollectionShow({
+    collection,
+    initialImages = [],
+    total = 0,
+    relatedCollections = [],
+    websiteInfo = {},
+}) {
+    const siteName = websiteInfo?.websiteName || 'Png101';
+    const [images] = useState(initialImages);
+    const [copied, setCopied] = useState(false);
 
-    const filteredImages = useMemo(() => {
-        let list = [...images];
-        if (searchFilter.trim()) {
-            const q = searchFilter.toLowerCase();
-            list = list.filter(
-                (img) =>
-                    (img.title && img.title.toLowerCase().includes(q)) ||
-                    (Array.isArray(img.tags) && img.tags.some((t) => t.toLowerCase().includes(q)))
-            );
+    const handleShare = () => {
+        if (typeof window !== 'undefined') {
+            navigator.clipboard.writeText(window.location.href);
+            setCopied(true);
+            toast.success('Collection URL copied to clipboard!');
+            setTimeout(() => setCopied(false), 2500);
         }
-        if (sortBy === 'newest') {
-            list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        } else if (sortBy === 'title') {
-            list.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-        }
-        return list;
-    }, [images, searchFilter, sortBy]);
-
-    if (!collection) {
-        return null;
-    }
+    };
 
     return (
-        <main className="min-h-screen bg-background text-foreground selection:bg-blue-500/30">
-            <Head title={`${collection.name} - PNG Collection`} />
-            <Header />
+        <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
+            <Head title={`${collection?.name || 'Collection'} PNG Collection - ${siteName}`} />
+            <Header siteName={siteName} />
 
-            <div className="max-w-7xl mx-auto px-4 md:px-8 py-10">
-                {/* Back Link */}
-                <Link
-                    href="/collections"
-                    className="inline-flex items-center gap-2 text-xs font-semibold text-muted-text hover:text-foreground mb-6 transition-colors"
-                >
-                    <ArrowLeft className="w-4 h-4" />
-                    All Collections
-                </Link>
+            <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-8">
+                <div className="space-y-10 pb-16">
+                    {/* Breadcrumb Navigation */}
+                    <nav className="flex items-center gap-2 text-xs text-foreground/50">
+                        <Link href="/" className="hover:text-foreground transition-colors">
+                            Home
+                        </Link>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                        <Link href="/collections" className="hover:text-foreground transition-colors">
+                            Collections
+                        </Link>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                        <span className="text-foreground/90 font-semibold truncate max-w-xs">
+                            {collection.name}
+                        </span>
+                    </nav>
 
-                {/* Hero Banner */}
-                <div className="relative rounded-3xl bg-card-bg border border-card-border p-6 md:p-10 mb-10 overflow-hidden shadow-xl">
-                    <div className="absolute top-0 right-0 w-72 h-72 bg-blue-500/10 blur-[90px] rounded-full pointer-events-none" />
-                    <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                        <div className="space-y-3 max-w-2xl">
-                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-500 text-xs font-bold uppercase tracking-wider">
-                                <Layers className="w-3.5 h-3.5" />
-                                Curated Collection
+                    {/* Collection Hero Banner Card */}
+                    <div className="relative rounded-2xl border border-card-border bg-card-bg p-6 sm:p-10 shadow-xl overflow-hidden">
+                        <div className="absolute -top-24 -right-24 w-80 h-80 bg-primary-glow/10 rounded-full blur-3xl pointer-events-none" />
+                        <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+
+                        <div className="relative z-10 max-w-3xl space-y-4">
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                <Link
+                                    href="/collections"
+                                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground/70 hover:text-foreground py-1 px-3 rounded-lg border border-card-border hover:bg-white/5 transition-colors"
+                                >
+                                    <ArrowLeft className="w-3.5 h-3.5" />
+                                    <span>All Collections</span>
+                                </Link>
+
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-primary-glow/10 text-primary-glow border border-primary-glow/20">
+                                    <Layers className="w-3 h-3" />
+                                    <span>Curated Pack</span>
+                                </span>
+
+                                <span className="inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full bg-card-header-bg border border-card-border text-foreground/80">
+                                    {total} Transparent PNG{total === 1 ? '' : 's'}
+                                </span>
                             </div>
-                            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">
+
+                            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-foreground tracking-tight">
                                 {collection.name}
                             </h1>
+
                             {collection.description && (
-                                <p className="text-sm md:text-base text-muted-text leading-relaxed">
+                                <p className="text-sm sm:text-base text-foreground/70 leading-relaxed max-w-2xl">
                                     {collection.description}
                                 </p>
                             )}
-                            <div className="flex flex-wrap items-center gap-3 pt-1">
-                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-lg bg-foreground/5 border border-card-border">
-                                    <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-                                    {images.length} Transparent PNGs
-                                </span>
-                                {collection.tags && collection.tags.length > 0 && (
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {collection.tags.slice(0, 6).map((tag, idx) => (
-                                            <Link
-                                                key={idx}
-                                                href={`/search?q=${encodeURIComponent(tag)}`}
-                                                className="text-xs px-2.5 py-0.5 rounded-md bg-tag-bg text-tag-text border border-tag-border hover:bg-tag-bg-hover transition-colors"
-                                            >
-                                                #{tag}
-                                            </Link>
-                                        ))}
-                                    </div>
-                                )}
+
+                            {Array.isArray(collection.tagRules) && collection.tagRules.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                    <span className="text-xs font-semibold text-foreground/50 mr-1 flex items-center gap-1">
+                                        <Tag className="w-3.5 h-3.5 text-primary-glow" /> Themes:
+                                    </span>
+                                    {collection.tagRules.map((t) => (
+                                        <Link
+                                            key={t}
+                                            href={`/search?q=${encodeURIComponent(t)}`}
+                                            className="text-xs font-medium px-2.5 py-1 rounded-md bg-tag-bg hover:bg-tag-bg-hover text-tag-text border border-tag-border transition-colors"
+                                        >
+                                            #{t}
+                                        </Link>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="pt-3 flex flex-wrap items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={handleShare}
+                                    className="px-4 py-2 rounded-xl bg-card-bg hover:bg-white/5 border border-card-border hover:border-primary-glow/50 text-foreground text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md"
+                                >
+                                    {copied ? (
+                                        <>
+                                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                            <span>Link Copied!</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Share2 className="w-3.5 h-3.5 text-primary-glow" />
+                                            <span>Share Collection</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Graphics Grid Section */}
+                    <section className="space-y-6">
+                        <div className="flex items-center justify-between pb-3 border-b border-card-border">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-1.5 h-6 rounded-full bg-primary-glow shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+                                <div>
+                                    <h2 className="text-lg font-bold text-foreground">
+                                        Graphics in this Pack ({total})
+                                    </h2>
+                                    <p className="text-xs text-foreground/50 mt-0.5">
+                                        Click any graphic for dimensions, high-res previews, and instant download
+                                    </p>
+                                </div>
                             </div>
                         </div>
 
-                        {collection.coverImagePath && (
-                            <div className="w-28 h-28 md:w-36 md:h-36 rounded-2xl bg-foreground/5 border border-card-border p-3 flex items-center justify-center shrink-0">
-                                <img
-                                    src={collection.coverImagePath}
-                                    alt={collection.name}
-                                    className="max-w-full max-h-full object-contain"
-                                />
+                        {images.length === 0 ? (
+                            <div className="py-20 text-center border border-dashed border-card-border rounded-xl p-8 bg-card-bg shadow-xl">
+                                <Layers className="w-10 h-10 mx-auto mb-2 text-foreground/30" />
+                                <p className="text-sm font-bold text-foreground">No graphics in this collection currently</p>
+                                <p className="text-xs text-foreground/60 mt-1">Check back soon as assets are added.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                                {images.map((img) => (
+                                    <Link
+                                        key={img.id}
+                                        href={`/images/${img.id}-${slugify(img.name || img.filename || '')}`}
+                                        className="group block"
+                                    >
+                                        <ImageCard
+                                            src={img.path}
+                                            luminance={img.luminance}
+                                            contrastBgDark={img.contrastBgDark}
+                                            contrastBgLight={img.contrastBgLight}
+                                        />
+                                    </Link>
+                                ))}
                             </div>
                         )}
-                    </div>
+                    </section>
+
+                    {/* More Collections Recommendation */}
+                    {relatedCollections.length > 0 && (
+                        <section className="space-y-6 pt-10 border-t border-card-border">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                                        <Sparkles className="w-4 h-4 text-purple-400" />
+                                        <span>More Collections You May Like</span>
+                                    </h3>
+                                    <p className="text-xs text-foreground/50 mt-0.5">
+                                        Browse more cohesive transparent graphic kits
+                                    </p>
+                                </div>
+
+                                <Link
+                                    href="/collections"
+                                    className="text-xs font-bold text-primary-glow hover:underline flex items-center gap-1"
+                                >
+                                    <span>Browse All</span>
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                </Link>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {relatedCollections.map((rel) => (
+                                    <Link
+                                        key={rel.id}
+                                        href={`/collections/${rel.slug}`}
+                                        className="group rounded-xl border border-card-border bg-card-bg p-4 hover:border-primary-glow/50 hover:shadow-xl transition-all flex items-center gap-4"
+                                    >
+                                        <div
+                                            className="w-16 h-16 rounded-lg bg-foreground/[0.03] border border-card-border p-2 flex items-center justify-center shrink-0 overflow-hidden"
+                                            style={{
+                                                backgroundImage:
+                                                    'linear-gradient(45deg, #80808012 25%, transparent 25%), linear-gradient(-45deg, #80808012 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #80808012 75%), linear-gradient(-45deg, transparent 75%, #80808012 75%)',
+                                                backgroundSize: '10px 10px',
+                                                backgroundPosition: '0 0, 0 5px, 5px -5px, -5px 0px',
+                                            }}
+                                        >
+                                            {rel.coverImagePath ? (
+                                                <img
+                                                    src={rel.coverImagePath}
+                                                    alt={rel.name}
+                                                    className="max-h-full max-w-full object-contain pointer-events-none group-hover:scale-105 transition-transform"
+                                                />
+                                            ) : (
+                                                <Layers className="w-6 h-6 text-foreground/30" />
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="text-sm font-bold text-foreground group-hover:text-primary-glow transition-colors truncate">
+                                                {rel.name}
+                                            </h4>
+                                            <span className="text-xs text-foreground/50 mt-0.5 block">
+                                                {rel.imageCount} PNG{rel.imageCount === 1 ? '' : 's'}
+                                            </span>
+                                        </div>
+                                        <ChevronRight className="w-4 h-4 text-foreground/40 group-hover:text-primary-glow group-hover:translate-x-1 transition-all" />
+                                    </Link>
+                                ))}
+                            </div>
+                        </section>
+                    )}
                 </div>
-
-                {/* Filter / Sort Bar */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
-                    <div className="relative w-full sm:w-80">
-                        <Search className="w-4 h-4 text-muted-text absolute left-3.5 top-1/2 -translate-y-1/2" />
-                        <input
-                            type="text"
-                            value={searchFilter}
-                            onChange={(e) => setSearchFilter(e.target.value)}
-                            placeholder="Filter within this collection..."
-                            className="w-full bg-input-bg border border-input-border rounded-xl pl-10 pr-4 py-2 text-sm text-input-text focus:outline-none focus:border-blue-500"
-                        />
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-text">Sort:</span>
-                        <select
-                            value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value)}
-                            className="bg-input-bg border border-input-border rounded-lg px-3 py-1.5 text-xs font-medium text-input-text focus:outline-none focus:border-blue-500 cursor-pointer"
-                        >
-                            <option value="order">Curated Order</option>
-                            <option value="newest">Newest First</option>
-                            <option value="title">Title (A-Z)</option>
-                        </select>
-                    </div>
-                </div>
-
-                {/* Images Grid */}
-                {filteredImages.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
-                        {filteredImages.map((img, idx) => (
-                            <ImageCard key={img.id} image={img} priority={idx < 8} />
-                        ))}
-                    </div>
-                ) : (
-                    <div className="text-center py-20 text-muted-text">
-                        No images match your filter in this collection.
-                    </div>
-                )}
-            </div>
-        </main>
+            </main>
+        </div>
     );
 }
-

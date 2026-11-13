@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { Head, router } from '@inertiajs/react';
-import { ShieldCheck, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { Users, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 
 export default function TeamLogin() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setLoading(true);
         setError('');
+        setLoading(true);
 
         try {
             const res = await fetch('/api/team/login', {
@@ -21,91 +22,91 @@ export default function TeamLogin() {
             });
 
             const data = await res.json();
+
             if (res.ok && data.success) {
-                router.visit(data.redirectPath || '/admin/dashboard');
+                router.visit(data.redirectTo || '/admin/dashboard');
             } else {
                 setError(data.error || 'Invalid email or password.');
             }
         } catch {
-            setError('Failed to sign in. Please try again.');
+            setError('Failed to connect to server. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative overflow-hidden">
-            <Head title="Team Login - Png101" />
-
-            <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-blue-600/10 blur-[120px] rounded-full pointer-events-none" />
-            <div className="absolute bottom-1/4 right-1/3 w-96 h-96 bg-purple-600/10 blur-[120px] rounded-full pointer-events-none" />
-
-            <div className="relative z-10 w-full max-w-md bg-card-bg border border-card-border rounded-3xl p-8 shadow-2xl">
-                <div className="text-center mb-8">
-                    <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-blue-600/15 border border-blue-500/25 flex items-center justify-center text-blue-500">
-                        <ShieldCheck className="w-7 h-7" />
+        <div className="min-h-screen flex items-center justify-center bg-background p-4">
+            <Head title="Team Portal Login" />
+            <div className="w-full max-w-md bg-card-bg border border-card-border rounded-2xl shadow-2xl overflow-hidden">
+                <div className="p-8 border-b border-card-border text-center bg-gradient-to-b from-primary-glow/10 to-transparent">
+                    <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-primary-glow/15 border border-primary-glow/30 flex items-center justify-center text-primary-glow shadow-[0_0_20px_rgba(59,130,246,0.25)]">
+                        <Users className="w-7 h-7" />
                     </div>
-                    <h1 className="text-2xl font-bold text-foreground">Team Member Login</h1>
-                    <p className="text-sm text-muted-text mt-1">Sign in to your Png101 workspace</p>
+                    <h1 className="text-2xl font-bold text-foreground">Team Portal Login</h1>
+                    <p className="text-sm text-foreground/60 mt-1">
+                        Sign in with the email and password sent to your inbox
+                    </p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-5">
-                    <div>
-                        <label className="block text-xs font-semibold text-foreground/70 mb-1.5">Email Address</label>
-                        <div className="relative">
-                            <Mail className="w-4 h-4 text-muted-text absolute left-3.5 top-1/2 -translate-y-1/2" />
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                placeholder="you@png101.com"
-                                className="w-full bg-input-bg border border-input-border rounded-xl pl-10 pr-4 py-3 text-sm text-input-text focus:outline-none focus:border-blue-500"
-                                required
-                            />
-                        </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-semibold text-foreground/70 mb-1.5">Password</label>
-                        <div className="relative">
-                            <Lock className="w-4 h-4 text-muted-text absolute left-3.5 top-1/2 -translate-y-1/2" />
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Enter your password"
-                                className="w-full bg-input-bg border border-input-border rounded-xl pl-10 pr-4 py-3 text-sm text-input-text focus:outline-none focus:border-blue-500"
-                                required
-                            />
-                        </div>
-                    </div>
-
+                <form onSubmit={handleSubmit} className="p-8 space-y-5">
                     {error && (
-                        <div className="text-red-400 text-xs text-center bg-red-500/10 py-2.5 px-3 rounded-xl border border-red-500/20">
+                        <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium text-center">
                             {error}
                         </div>
                     )}
 
+                    <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">
+                            Email Address
+                        </label>
+                        <div className="relative">
+                            <Mail className="w-4 h-4 text-foreground/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                            <input
+                                type="email"
+                                required
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="you@example.com"
+                                className="w-full bg-background border border-card-border text-foreground pl-10 pr-4 py-3 rounded-xl text-sm focus:outline-none focus:border-primary-glow transition-colors"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">
+                            Password
+                        </label>
+                        <div className="relative">
+                            <Lock className="w-4 h-4 text-foreground/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                            <input
+                                type={showPassword ? 'text' : 'password'}
+                                required
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="Enter your team password"
+                                className="w-full bg-background border border-card-border text-foreground pl-10 pr-10 py-3 rounded-xl text-sm focus:outline-none focus:border-primary-glow transition-colors"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground cursor-pointer"
+                            >
+                                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            </button>
+                        </div>
+                    </div>
+
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold py-3 rounded-xl transition-all shadow-lg hover:shadow-blue-500/25 disabled:opacity-50 cursor-pointer"
+                        className="w-full bg-primary-glow hover:bg-primary-glow/90 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-primary-glow/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                     >
-                        {loading ? (
-                            <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Signing in...
-                            </>
-                        ) : (
-                            <>
-                                Sign In
-                                <ArrowRight className="w-4 h-4" />
-                            </>
-                        )}
+                        <span>{loading ? 'Signing in...' : 'Sign In to Dashboard'}</span>
+                        {!loading && <ArrowRight className="w-4 h-4" />}
                     </button>
                 </form>
             </div>
         </div>
     );
 }
-

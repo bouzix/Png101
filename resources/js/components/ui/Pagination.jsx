@@ -1,62 +1,110 @@
 import React from 'react';
 
-export default function Pagination({ currentPage, totalPages, totalItems, itemsPerPage, onPageChange }) {
-    if (totalPages <= 1) return null;
-
+export default function Pagination({
+    currentPage,
+    totalPages,
+    totalItems,
+    itemsPerPage,
+    onPageChange
+}) {
     const startItem = (currentPage - 1) * itemsPerPage + 1;
     const endItem = Math.min(currentPage * itemsPerPage, totalItems);
 
-    const getPages = () => {
+    const getPageNumbers = () => {
         const pages = [];
         const maxVisible = 5;
-        let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-        let end = Math.min(totalPages, start + maxVisible - 1);
-        if (end - start + 1 < maxVisible) {
-            start = Math.max(1, end - maxVisible + 1);
+
+        if (totalPages <= maxVisible + 2) {
+            for (let i = 1; i <= totalPages; i++) {
+                pages.push(i);
+            }
+        } else {
+            pages.push(1);
+
+            if (currentPage > 3) {
+                pages.push('...');
+            }
+
+            const start = Math.max(2, currentPage - 1);
+            const end = Math.min(totalPages - 1, currentPage + 1);
+
+            for (let i = start; i <= end; i++) {
+                pages.push(i);
+            }
+
+            if (currentPage < totalPages - 2) {
+                pages.push('...');
+            }
+
+            pages.push(totalPages);
         }
-        for (let i = start; i <= end; i++) {
-            pages.push(i);
-        }
+
         return pages;
     };
 
+    if (totalPages <= 1) {
+        return (
+            <div className="text-sm text-foreground/60 text-center py-4">
+                Showing {totalItems} image{totalItems !== 1 ? 's' : ''}
+            </div>
+        );
+    }
+
     return (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-xs text-foreground/60">
-                Showing <span className="font-semibold text-foreground">{startItem}</span> to{' '}
-                <span className="font-semibold text-foreground">{endItem}</span> of{' '}
-                <span className="font-semibold text-foreground">{totalItems}</span> items
-            </p>
-            <div className="flex items-center gap-1.5">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4">
+            <div className="text-sm text-foreground/60">
+                Showing {startItem}-{endItem} of {totalItems} images
+            </div>
+
+            <div className="flex items-center gap-2">
                 <button
+                    type="button"
                     onClick={() => onPageChange(currentPage - 1)}
                     disabled={currentPage === 1}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-card-bg border border-card-border text-foreground/80 hover:bg-foreground/5 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                    className="px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-card-bg border border-card-border text-foreground/80 hover:text-foreground"
                 >
-                    Prev
+                    ← Prev
                 </button>
-                {getPages().map(p => (
-                    <button
-                        key={p}
-                        onClick={() => onPageChange(p)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
-                            p === currentPage
-                                ? 'bg-primary-glow text-white border-primary-glow'
-                                : 'bg-card-bg border-card-border text-foreground/70 hover:text-foreground'
-                        }`}
-                    >
-                        {p}
-                    </button>
-                ))}
+
+                <div className="flex items-center gap-1">
+                    {getPageNumbers().map((page, index) => {
+                        if (page === '...') {
+                            return (
+                                <span key={`ellipsis-${index}`} className="px-2 text-foreground/40">
+                                    ...
+                                </span>
+                            );
+                        }
+
+                        const pageNum = page;
+                        const isActive = pageNum === currentPage;
+
+                        return (
+                            <button
+                                key={pageNum}
+                                type="button"
+                                onClick={() => onPageChange(pageNum)}
+                                className={`w-10 h-10 rounded-lg text-sm font-medium transition-all ${
+                                    isActive
+                                        ? 'bg-primary-glow text-white shadow-lg shadow-primary-glow/20'
+                                        : 'text-foreground/80 hover:text-foreground hover:bg-card-bg border border-card-border'
+                                }`}
+                            >
+                                {pageNum}
+                            </button>
+                        );
+                    })}
+                </div>
+
                 <button
+                    type="button"
                     onClick={() => onPageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-card-bg border border-card-border text-foreground/80 hover:bg-foreground/5 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                    className="px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:bg-card-bg border border-card-border text-foreground/80 hover:text-foreground"
                 >
-                    Next
+                    Next →
                 </button>
             </div>
         </div>
     );
 }
-

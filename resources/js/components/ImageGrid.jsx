@@ -1,209 +1,166 @@
-import React, { useState, useEffect } from 'react';
-import { Link, router } from '@inertiajs/react';
+import React, { useEffect, useState } from 'react';
 import ImageCard from './ImageCard';
+import { Link } from '@inertiajs/react';
+import { slugify } from '@/lib/utils';
 import TrendingCollections from './TrendingCollections';
 
-const ImageGrid = ({
-    initialImages = [],
-    initialLatest = [],
-    initialCategories = [],
-    initialCategoryGroups = [],
-}) => {
-    const [images, setImages] = useState(initialImages);
-    const [latestImages, setLatestImages] = useState(initialLatest);
-    const [categories, setCategories] = useState(initialCategories);
-    const [categoryGroups, setCategoryGroups] = useState(initialCategoryGroups);
-    const [activeCategory, setActiveCategory] = useState('all');
-    const [loading, setLoading] = useState(false);
+const ImageGrid = () => {
+    const [popularImages, setPopularImages] = useState([]);
+    const [latestImages, setLatestImages] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (initialImages.length === 0 && initialLatest.length === 0 && initialCategoryGroups.length === 0) {
-            fetchHomepageData();
-        }
+        fetch('/api/images/homepage')
+            .then((res) => res.json())
+            .then((data) => {
+                setPopularImages(Array.isArray(data.popularImages) ? data.popularImages : []);
+                setLatestImages(Array.isArray(data.latestImages) ? data.latestImages : []);
+                setLoading(false);
+            })
+            .catch((err) => {
+                console.error('Failed to load homepage images', err);
+                setLoading(false);
+            });
     }, []);
 
-    const fetchHomepageData = async () => {
-        setLoading(true);
-        try {
-            const res = await fetch('/api/images/homepage');
-            if (res.ok) {
-                const data = await res.json();
-                setLatestImages(data.latest || []);
-                setCategoryGroups(data.categoryGroups || []);
-                setCategories(data.categories || []);
-            }
-        } catch (error) {
-            console.error('Failed to fetch homepage data:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleCategorySelect = async (slug) => {
-        setActiveCategory(slug);
-        if (slug === 'all') {
-            return;
-        }
-        setLoading(true);
-        try {
-            const res = await fetch(`/api/images?category=${encodeURIComponent(slug)}&limit=12`);
-            if (res.ok) {
-                const data = await res.json();
-                setImages(data.images || data);
-            }
-        } catch (error) {
-            console.error('Failed to filter images:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleMoreClick = (targetUrl) => {
-        router.visit(targetUrl);
-    };
-
     return (
-        <div className="w-full max-w-7xl mx-auto px-4 md:px-8 pb-20">
-            {/* Category Filter Bar */}
-            {categories.length > 0 && (
-                <div className="flex flex-wrap items-center justify-center gap-2 mb-12">
-                    <button
-                        onClick={() => handleCategorySelect('all')}
-                        className={`px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all cursor-pointer ${
-                            activeCategory === 'all'
-                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25'
-                                : 'bg-tag-bg text-tag-text border border-tag-border hover:bg-tag-bg-hover'
-                        }`}
-                    >
-                        All Categories
-                    </button>
-                    {categories.map((cat) => (
-                        <button
-                            key={cat.id}
-                            onClick={() => handleCategorySelect(cat.slug)}
-                            className={`px-4 py-2 rounded-full text-xs md:text-sm font-medium transition-all cursor-pointer ${
-                                activeCategory === cat.slug
-                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25'
-                                    : 'bg-tag-bg text-tag-text border border-tag-border hover:bg-tag-bg-hover'
-                            }`}
-                        >
-                            {cat.name}
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            {/* Filtered View */}
-            {activeCategory !== 'all' ? (
-                <div>
-                    <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-xl md:text-2xl font-bold text-foreground capitalize">
-                            {categories.find((c) => c.slug === activeCategory)?.name || activeCategory} PNGs
-                        </h2>
-                        <button
-                            onClick={() => handleCategorySelect('all')}
-                            className="text-xs font-medium text-blue-500 hover:underline cursor-pointer"
-                        >
-                            Back to Overview
-                        </button>
+        <div className="w-full max-w-6xl mx-auto px-4 pb-24 space-y-20">
+            {/* Section 1: Most Popular Images This Week (Max 15, refreshed every 24h) */}
+            <section>
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-8 pb-4 border-b border-card-border">
+                    <div className="flex items-center gap-3">
+                        <div className="w-1.5 h-8 rounded-full bg-primary-glow shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
+                        <div>
+                            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
+                                Most Popular Images
+                            </h2>
+                            <p className="text-xs text-foreground/50 mt-0.5">
+                                Top downloaded and trending transparent PNGs this week
+                            </p>
+                        </div>
                     </div>
+                    {!loading && popularImages.length > 0 && (
+                        <span className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/25 text-blue-500 dark:text-blue-400 text-xs font-semibold select-none shadow-sm">
+                            <div className="ring-container">
+                                <div className="ringring"></div>
+                                <div className="circle"></div>
+                            </div>
+                            <span>Trending</span>
+                        </span>
+                    )}
+                </div>
 
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
                     {loading ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
-                            {[...Array(8)].map((_, i) => (
-                                <div key={i} className="aspect-square rounded-xl bg-foreground/5 animate-pulse border border-card-border" />
-                            ))}
-                        </div>
-                    ) : images.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
-                            {images.map((img, idx) => (
-                                <ImageCard key={img.id} image={img} priority={idx < 4} />
-                            ))}
-                        </div>
+                        Array.from({ length: 15 }).map((_, i) => <ImageCard key={`pop-skel-${i}`} />)
+                    ) : popularImages.length > 0 ? (
+                        popularImages.map((img) => (
+                            <Link
+                                key={img.id}
+                                href={`/images/${img.id}-${slugify(img.name || img.filename || '')}`}
+                            >
+                                <ImageCard
+                                    src={img.path}
+                                    luminance={img.luminance}
+                                    contrastBgDark={img.contrastBgDark}
+                                    contrastBgLight={img.contrastBgLight}
+                                />
+                            </Link>
+                        ))
                     ) : (
-                        <div className="text-center py-20 text-muted-text">
-                            No images found in this category yet.
+                        <div className="col-span-full text-center text-foreground/40 py-10">
+                            No images found.
                         </div>
                     )}
+                </div>
+            </section>
 
-                    <div className="mt-10 flex justify-center">
-                        <Link
-                            href={`/search?category=${encodeURIComponent(activeCategory)}`}
-                            className="more-btn-glow px-8 py-3 rounded-full text-sm font-bold text-white cursor-pointer"
+            {/* Trending Collections Section (Last 7 Days) */}
+            <TrendingCollections />
+
+            {/* Section 2: Latest Uploaded Images (Max 30 + "More" button) */}
+            <section>
+                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-8 pb-4 border-b border-card-border">
+                    <div className="flex items-center gap-3">
+                        <div className="w-1.5 h-8 rounded-full bg-primary-glow shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
+                        <div>
+                            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
+                                Latest Uploaded Images
+                            </h2>
+                            <p className="text-xs text-foreground/50 mt-0.5">
+                                Freshly added high-resolution PNGs and brand logos
+                            </p>
+                        </div>
+                    </div>
+                    <Link
+                        href="/latest"
+                        className="self-start sm:self-auto inline-flex items-center gap-1.5 text-xs font-semibold text-primary-glow hover:underline group"
+                    >
+                        <span>View all uploads</span>
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                            className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform"
                         >
-                            Explore More {categories.find((c) => c.slug === activeCategory)?.name || ''}
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+                        </svg>
+                    </Link>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                    {loading ? (
+                        Array.from({ length: 15 }).map((_, i) => <ImageCard key={`lat-skel-${i}`} />)
+                    ) : latestImages.length > 0 ? (
+                        latestImages.map((img) => (
+                            <Link
+                                key={img.id}
+                                href={`/images/${img.id}-${slugify(img.name || img.filename || '')}`}
+                            >
+                                <ImageCard
+                                    src={img.path}
+                                    luminance={img.luminance}
+                                    contrastBgDark={img.contrastBgDark}
+                                    contrastBgLight={img.contrastBgLight}
+                                />
+                            </Link>
+                        ))
+                    ) : (
+                        <div className="col-span-full text-center text-foreground/40 py-10">
+                            No images found.
+                        </div>
+                    )}
+                </div>
+
+                {!loading && latestImages.length > 0 && (
+                    <div className="mt-12 flex justify-center">
+                        <Link
+                            href="/latest"
+                            className="more-btn-glow inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl bg-card-bg hover:bg-primary-glow text-foreground hover:text-white font-bold text-sm tracking-wide transition-all duration-300 group cursor-pointer"
+                        >
+                            <span>More</span>
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth={2}
+                                stroke="currentColor"
+                                className="w-4 h-4 transform group-hover:translate-x-1 transition-transform"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
+                                />
+                            </svg>
                         </Link>
                     </div>
-                </div>
-            ) : (
-                <div className="space-y-16">
-                    {/* Latest PNGs Section */}
-                    {latestImages.length > 0 && (
-                        <section>
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-xl md:text-2xl font-bold text-foreground">
-                                    Latest Transparent PNGs
-                                </h2>
-                                <Link
-                                    href="/latest"
-                                    className="text-sm font-medium text-blue-500 hover:text-blue-400 transition-colors"
-                                >
-                                    View all &rarr;
-                                </Link>
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
-                                {latestImages.map((img, idx) => (
-                                    <ImageCard key={img.id} image={img} priority={idx < 4} />
-                                ))}
-                            </div>
-                            <div className="mt-8 flex justify-center">
-                                <button
-                                    onClick={() => handleMoreClick('/latest')}
-                                    className="more-btn-glow px-8 py-2.5 rounded-full text-xs md:text-sm font-bold text-white cursor-pointer"
-                                >
-                                    View More Latest PNGs
-                                </button>
-                            </div>
-                        </section>
-                    )}
-
-                    {/* Trending Collections Section */}
-                    <TrendingCollections />
-
-                    {/* Category Showcase Sections */}
-                    {categoryGroups.map((group) => (
-                        <section key={group.category.id}>
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-xl md:text-2xl font-bold text-foreground">
-                                    {group.category.name}
-                                </h2>
-                                <Link
-                                    href={`/search?category=${encodeURIComponent(group.category.slug)}`}
-                                    className="text-sm font-medium text-blue-500 hover:text-blue-400 transition-colors"
-                                >
-                                    View all &rarr;
-                                </Link>
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
-                                {group.images.map((img) => (
-                                    <ImageCard key={img.id} image={img} />
-                                ))}
-                            </div>
-                            <div className="mt-8 flex justify-center">
-                                <button
-                                    onClick={() => handleMoreClick(`/search?category=${encodeURIComponent(group.category.slug)}`)}
-                                    className="more-btn-glow px-8 py-2.5 rounded-full text-xs md:text-sm font-bold text-white cursor-pointer"
-                                >
-                                    Explore {group.category.name}
-                                </button>
-                            </div>
-                        </section>
-                    ))}
-                </div>
-            )}
+                )}
+            </section>
         </div>
     );
 };
 
 export default ImageGrid;
-

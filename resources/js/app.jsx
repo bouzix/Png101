@@ -28,7 +28,7 @@ createInertiaApp({
                     <div className="flex-1 flex flex-col">
                         <App {...propsObj} />
                     </div>
-                    {!hideFooter && <Footer info={websiteInfo} />}
+                    {!hideFooter && <Footer info={websiteInfo} currentUrl={url} />}
                     <Toaster position="bottom-right" richColors />
                 </div>
             );

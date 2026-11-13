@@ -1,42 +1,117 @@
 import React from 'react';
 import { Head, Link } from '@inertiajs/react';
+import Header from '@/components/Header';
+import { Search, Home, ArrowRight, Layers } from 'lucide-react';
 
-export default function NotFound({ config = {} }) {
-    const title = config.title || 'Page Not Found';
-    const message = config.message || "Oops! The transparent PNG or page you're looking for seems to have vanished into thin air.";
-    const buttonText = config.buttonText || 'Back to Homepage';
-    const buttonUrl = config.buttonUrl || '/';
+export default function NotFound({ config = {}, websiteInfo = {} }) {
+    const p404 = config || {};
+    const siteName = websiteInfo?.websiteName || 'Png101';
 
     return (
-        <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative overflow-hidden">
-            <Head title={`404 - ${title}`} />
+        <div className="min-h-screen bg-background flex flex-col justify-between">
+            <Head title={`404 Not Found - ${siteName}`} />
+            <Header siteName={siteName} showOnScrollOnly={false} />
 
-            <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[500px] h-[300px] bg-blue-500/10 blur-[120px] rounded-full pointer-events-none" />
+            <main className="flex-1 flex items-center justify-center px-4 py-16 sm:py-24">
+                <div className="w-full max-w-2xl mx-auto text-center space-y-8">
+                    {/* Illustration / Custom Image */}
+                    <div className="relative mx-auto w-64 h-52 sm:w-80 sm:h-64 flex items-center justify-center">
+                        <div
+                            className="w-full h-full rounded-3xl border border-card-border/80 bg-card-bg/60 backdrop-blur-md p-4 flex items-center justify-center overflow-hidden shadow-2xl relative group"
+                            style={{
+                                backgroundImage:
+                                    'linear-gradient(45deg, #80808012 25%, transparent 25%), linear-gradient(-45deg, #80808012 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #80808012 75%), linear-gradient(-45deg, transparent 75%, #80808012 75%)',
+                                backgroundSize: '14px 14px',
+                                backgroundPosition: '0 0, 0 7px, 7px -7px, -7px 0px',
+                            }}
+                        >
+                            <img
+                                src={p404.imagePath || '/assets/errors/404.svg'}
+                                alt={p404.imageAlt || '404 Page Not Found'}
+                                className="max-h-full max-w-full object-contain pointer-events-none drop-shadow-lg transform group-hover:scale-105 transition-transform duration-300"
+                            />
+                        </div>
+                    </div>
 
-            <div className="relative z-10 max-w-md w-full text-center space-y-6 bg-card-bg border border-card-border rounded-3xl p-8 md:p-12 shadow-2xl">
-                <div className="text-7xl font-black tracking-tighter bg-gradient-to-br from-blue-500 to-purple-500 bg-clip-text text-transparent">
-                    404
+                    {/* Badge & Titles */}
+                    <div className="space-y-3">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-500 text-xs font-bold uppercase tracking-wider">
+                            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                            <span>{p404.subtitle || '404 - Not Found'}</span>
+                        </div>
+
+                        <h1 className="text-3xl sm:text-5xl font-black text-foreground tracking-tight">
+                            {p404.title || 'Lost in Transparency?'}
+                        </h1>
+
+                        <p className="text-sm sm:text-base text-foreground/60 max-w-lg mx-auto leading-relaxed">
+                            {p404.message ||
+                                "The transparent PNG, collection, or page you were looking for doesn't exist, has been moved, or faded away."}
+                        </p>
+                    </div>
+
+                    {/* Integrated Search Bar on 404 */}
+                    {p404.showSearchBar !== false && (
+                        <div className="max-w-md mx-auto">
+                            <form action="/search" method="GET" className="relative flex items-center">
+                                <input
+                                    type="text"
+                                    name="q"
+                                    placeholder="Search 10,000+ transparent PNGs & clipart..."
+                                    className="w-full pl-11 pr-24 py-3 rounded-xl bg-card-bg border border-card-border text-foreground text-sm placeholder:text-foreground/40 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 shadow-md transition-all"
+                                />
+                                <Search className="w-5 h-5 text-foreground/40 absolute left-3.5 pointer-events-none" />
+                                <button
+                                    type="submit"
+                                    className="absolute right-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+                                >
+                                    Search
+                                </button>
+                            </form>
+                        </div>
+                    )}
+
+                    {/* Suggested Tag Keywords */}
+                    {p404.showSuggestedTags !== false && p404.suggestedTags && p404.suggestedTags.length > 0 && (
+                        <div className="space-y-2">
+                            <p className="text-xs text-foreground/40 font-medium">Popular transparent searches:</p>
+                            <div className="flex flex-wrap justify-center gap-1.5 max-w-lg mx-auto">
+                                {p404.suggestedTags.map((tag, idx) => (
+                                    <Link
+                                        key={idx}
+                                        href={`/search?q=${encodeURIComponent(tag)}`}
+                                        className="px-2.5 py-1 rounded-lg bg-tag-bg hover:bg-blue-600 hover:text-white text-tag-text text-xs border border-tag-border transition-colors"
+                                    >
+                                        #{tag}
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                        <Link
+                            href={p404.primaryButtonLink || '/'}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm shadow-lg shadow-blue-600/25 transition-all hover:-translate-y-0.5 cursor-pointer"
+                        >
+                            <Home className="w-4 h-4" />
+                            <span>{p404.primaryButtonText || 'Back to Home'}</span>
+                        </Link>
+
+                        {p404.secondaryButtonText && (
+                            <Link
+                                href={p404.secondaryButtonLink || '/collections'}
+                                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-card-bg hover:bg-foreground/5 border border-card-border text-foreground font-semibold text-sm transition-all hover:-translate-y-0.5 cursor-pointer"
+                            >
+                                <Layers className="w-4 h-4 text-blue-500" />
+                                <span>{p404.secondaryButtonText}</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                            </Link>
+                        )}
+                    </div>
                 </div>
-                <div className="space-y-2">
-                    <h1 className="text-2xl font-bold text-foreground">{title}</h1>
-                    <p className="text-sm text-muted-text leading-relaxed">{message}</p>
-                </div>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-                    <Link
-                        href={buttonUrl}
-                        className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition-colors shadow-lg shadow-blue-600/20"
-                    >
-                        {buttonText}
-                    </Link>
-                    <Link
-                        href="/search"
-                        className="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 rounded-xl bg-foreground/5 hover:bg-foreground/10 border border-card-border text-foreground font-semibold text-sm transition-colors"
-                    >
-                        Search PNGs
-                    </Link>
-                </div>
-            </div>
+            </main>
         </div>
     );
 }
-

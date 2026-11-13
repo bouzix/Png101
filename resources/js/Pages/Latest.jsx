@@ -1,96 +1,181 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import Header from '@/components/Header';
 import ImageCard from '@/components/ImageCard';
+import { slugify } from '@/lib/utils';
 
-export default function Latest({ initialImages = [], initialTotal = 0 }) {
-    const [images, setImages] = useState(initialImages);
-    const [page, setPage] = useState(1);
+const BATCH_SIZE = 30;
+
+export default function Latest({ websiteInfo = {} }) {
+    const siteName = websiteInfo?.websiteName || 'Png101';
+
+    const [images, setImages] = useState([]);
+    const [total, setTotal] = useState(null);
+    const [loadingInitial, setLoadingInitial] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
-    const [hasMore, setHasMore] = useState(initialImages.length < initialTotal);
+    const [hasMore, setHasMore] = useState(true);
 
-    const LIMIT = 24;
+    const offsetRef = useRef(0);
+    const loadingRef = useRef(false);
+    const hasMoreRef = useRef(true);
+    const sentinelRef = useRef(null);
 
-    const handleLoadMore = useCallback(async () => {
-        if (loadingMore || !hasMore) return;
-        setLoadingMore(true);
-        const nextPage = page + 1;
+    const fetchBatch = useCallback(async (isInitial) => {
+        if (loadingRef.current) return;
+        if (!isInitial && !hasMoreRef.current) return;
+
+        loadingRef.current = true;
+
+        if (isInitial) {
+            setLoadingInitial(true);
+        } else {
+            setLoadingMore(true);
+            await new Promise((resolve) => setTimeout(resolve, 450));
+        }
 
         try {
-            const res = await fetch(`/api/images?sort=newest&page=${nextPage}&limit=${LIMIT}`);
-            if (res.ok) {
-                const data = await res.json();
-                const fetched = data.images || [];
-                const total = data.total ?? 0;
+            const currentOffset = isInitial ? 0 : offsetRef.current;
+            const res = await fetch(
+                `/api/images?status=published&paginated=1&limit=${BATCH_SIZE}&offset=${currentOffset}`
+            );
+            const data = await res.json();
+            const newBatch = Array.isArray(data.images) ? data.images : [];
+            const nextHasMore = Boolean(data.hasMore) && newBatch.length > 0;
 
-                setImages(prev => {
-                    const existing = new Set(prev.map(i => i.id));
-                    return [...prev, ...fetched.filter(i => !existing.has(i.id))];
+            setTotal(typeof data.total === 'number' ? data.total : null);
+            setHasMore(nextHasMore);
+            hasMoreRef.current = nextHasMore;
+
+            if (isInitial) {
+                setImages(newBatch);
+                offsetRef.current = newBatch.length;
+            } else {
+                setImages((prev) => {
+                    const existingIds = new Set(prev.map((img) => img.id));
+                    const uniqueNew = newBatch.filter((img) => !existingIds.has(img.id));
+                    return [...prev, ...uniqueNew];
                 });
-                setPage(nextPage);
-                setHasMore(nextPage * LIMIT < total);
+                offsetRef.current = currentOffset + newBatch.length;
             }
-        } catch (err) {
-            console.error('Failed to load more latest images:', err);
+        } catch (error) {
+            console.error('Failed to load latest images:', error);
+            setHasMore(false);
+            hasMoreRef.current = false;
         } finally {
+            setLoadingInitial(false);
             setLoadingMore(false);
+            loadingRef.current = false;
         }
-    }, [loadingMore, hasMore, page]);
+    }, []);
+
+    useEffect(() => {
+        fetchBatch(true);
+    }, [fetchBatch]);
+
+    useEffect(() => {
+        if (loadingInitial || !hasMore) return;
+
+        const sentinel = sentinelRef.current;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const first = entries[0];
+                if (first && first.isIntersecting && hasMoreRef.current && !loadingRef.current) {
+                    fetchBatch(false);
+                }
+            },
+            { rootMargin: '250px' }
+        );
+
+        if (sentinel) {
+            observer.observe(sentinel);
+        }
+
+        const handleScroll = () => {
+            if (!hasMoreRef.current || loadingRef.current) return;
+            if (sentinelRef.current) {
+                const rect = sentinelRef.current.getBoundingClientRect();
+                if (rect.top <= window.innerHeight + 250) {
+                    fetchBatch(false);
+                }
+            }
+        };
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('scroll', handleScroll);
+        };
+    }, [loadingInitial, hasMore, images.length, fetchBatch]);
 
     return (
-        <main className="min-h-screen bg-background text-foreground selection:bg-blue-500/30">
-            <Head title="Latest Transparent PNGs" />
-            <Header />
+        <div className="min-h-screen bg-background text-foreground font-sans selection:bg-blue-500/30">
+            <Head title={`Latest Uploaded PNG Images - ${siteName}`} />
+            <Header siteName={siteName} />
 
-            <div className="max-w-7xl mx-auto px-4 md:px-8 py-12">
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10 pb-6 border-b border-card-border">
-                    <div>
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-500 text-xs font-bold uppercase tracking-wider mb-3">
-                            Fresh Uploads
-                        </div>
-                        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">
-                            Latest Transparent PNGs
-                        </h1>
-                        <p className="text-sm text-muted-text mt-1">
-                            The newest high-resolution cut-out assets added to our library ({initialTotal} total)
-                        </p>
-                    </div>
-
-                    <Link
-                        href="/search"
-                        className="text-sm font-semibold text-blue-500 hover:text-blue-400 transition-colors"
-                    >
-                        Search & Filter All &rarr;
-                    </Link>
+            <main className="container mx-auto px-4 py-10 max-w-6xl">
+                <div className="text-center mb-4">
+                    <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
+                        Latest Uploaded Images
+                    </h1>
                 </div>
 
-                {images.length > 0 ? (
-                    <>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 md:gap-6">
-                            {images.map((img, idx) => (
-                                <ImageCard key={img.id} image={img} priority={idx < 8} />
+                <div>
+                    {total !== null && (
+                        <p className="text-center text-foreground/50 text-sm mb-10">
+                            Showing {images.length} of {total} latest PNG {total === 1 ? 'image' : 'images'}
+                        </p>
+                    )}
+
+                    {loadingInitial ? (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                            {Array.from({ length: 15 }).map((_, i) => (
+                                <ImageCard key={`init-skel-${i}`} />
                             ))}
                         </div>
-
-                        {hasMore && (
-                            <div className="mt-12 flex justify-center">
-                                <button
-                                    onClick={handleLoadMore}
-                                    disabled={loadingMore}
-                                    className="more-btn-glow px-8 py-3 rounded-full text-sm font-bold text-white cursor-pointer disabled:opacity-50"
-                                >
-                                    {loadingMore ? 'Loading More...' : 'Load More Latest PNGs'}
-                                </button>
+                    ) : images.length > 0 ? (
+                        <>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                                {images.map((img) => (
+                                    <Link
+                                        key={img.id}
+                                        href={`/images/${img.id}-${slugify(img.name || img.filename || '')}`}
+                                    >
+                                        <ImageCard
+                                            src={img.path}
+                                            luminance={img.luminance}
+                                            contrastBgDark={img.contrastBgDark}
+                                            contrastBgLight={img.contrastBgLight}
+                                        />
+                                    </Link>
+                                ))}
                             </div>
-                        )}
-                    </>
-                ) : (
-                    <div className="text-center py-24 text-muted-text">
-                        No PNG images uploaded yet.
-                    </div>
-                )}
-            </div>
-        </main>
+
+                            <div ref={sentinelRef} className="py-14 flex flex-col items-center justify-center min-h-[100px]">
+                                {loadingMore ? (
+                                    <div className="flex flex-col items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full border-4 border-primary-glow/20 border-t-primary-glow animate-spin shadow-[0_0_15px_rgba(59,130,246,0.3)]" />
+                                        <span className="text-foreground/60 text-xs font-semibold tracking-wider uppercase">
+                                            Loading next 30 images...
+                                        </span>
+                                    </div>
+                                ) : hasMore ? (
+                                    <div className="w-8 h-8 rounded-full border-3 border-primary-glow/20 border-t-primary-glow/60 animate-spin" />
+                                ) : (
+                                    <p className="text-foreground/40 text-xs uppercase tracking-widest">
+                                        You&apos;ve reached the end of the catalog ({images.length} images)
+                                    </p>
+                                )}
+                            </div>
+                        </>
+                    ) : (
+                        <div className="text-center py-20 text-foreground/50">
+                            No published images found.
+                        </div>
+                    )}
+                </div>
+            </main>
+        </div>
     );
 }
-

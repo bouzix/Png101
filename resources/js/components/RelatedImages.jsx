@@ -1,188 +1,228 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ImageCard from './ImageCard';
 import { Link } from '@inertiajs/react';
+import { slugify } from '@/lib/utils';
 
-export default function RelatedImages({ imageId, initialImages = [], initialHasMore = true }) {
-    const [images, setImages] = useState(initialImages);
-    const [loading, setLoading] = useState(initialImages.length === 0);
+const BATCH_SIZE = 30;
+
+const RelatedImages = ({ images: initialImages = [], currentId, totalCount }) => {
+    const initialFiltered = initialImages.filter((img) => img.id !== currentId).slice(0, 10);
+
+    const [displayedImages, setDisplayedImages] = useState(initialFiltered);
+    const [total, setTotal] = useState(
+        typeof totalCount === 'number' ? totalCount : initialFiltered.length
+    );
+    const [expanded, setExpanded] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
-    const [hasMore, setHasMore] = useState(initialHasMore);
-    const [offset, setOffset] = useState(initialImages.length);
-    const [isExpanded, setIsExpanded] = useState(false);
-    const hasFetchedRef = useRef(false);
+    const [hasMore, setHasMore] = useState(
+        typeof totalCount === 'number' ? totalCount > initialFiltered.length : false
+    );
 
-    const LIMIT = 4;
-
-    const fetchRelated = useCallback(async (currentOffset, isInitial = false) => {
-        if (!imageId) return;
-
-        if (isInitial) {
-            setLoading(true);
-        } else {
-            setLoadingMore(true);
-        }
-
-        try {
-            const res = await fetch(`/api/images/related?imageId=${imageId}&limit=${LIMIT}&offset=${currentOffset}`);
-            if (!res.ok) throw new Error('Failed to fetch related images');
-            const data = await res.json();
-
-            if (isInitial) {
-                setImages(data.images || []);
-            } else {
-                setImages(prev => {
-                    const existingIds = new Set(prev.map(img => img.id));
-                    const uniqueNew = (data.images || []).filter(img => !existingIds.has(img.id));
-                    return [...prev, ...uniqueNew];
-                });
-            }
-
-            setHasMore(data.hasMore);
-            setOffset(currentOffset + (data.images?.length || 0));
-        } catch (error) {
-            console.error('Error loading related images:', error);
-        } finally {
-            setLoading(false);
-            setLoadingMore(false);
-        }
-    }, [imageId]);
+    const offsetRef = useRef(initialFiltered.length);
+    const loadingRef = useRef(false);
+    const hasMoreRef = useRef(
+        typeof totalCount === 'number' ? totalCount > initialFiltered.length : false
+    );
+    const sentinelRef = useRef(null);
 
     useEffect(() => {
-        if (initialImages.length === 0 && !hasFetchedRef.current) {
-            hasFetchedRef.current = true;
-            fetchRelated(0, true);
-        }
-    }, [imageId, initialImages.length, fetchRelated]);
+        const filtered = initialImages.filter((img) => img.id !== currentId).slice(0, 10);
+        const nextTotal = typeof totalCount === 'number' ? totalCount : filtered.length;
+        const nextHasMore = nextTotal > filtered.length;
 
-    const handleLoadMore = () => {
-        if (!loadingMore && hasMore) {
-            setIsExpanded(true);
-            fetchRelated(offset, false);
-        }
+        setDisplayedImages(filtered);
+        setTotal(nextTotal);
+        setExpanded(false);
+        setLoadingMore(false);
+        setHasMore(nextHasMore);
+        offsetRef.current = filtered.length;
+        loadingRef.current = false;
+        hasMoreRef.current = nextHasMore;
+    }, [currentId, initialImages, totalCount]);
+
+    const fetchBatch = useCallback(
+        async (isFirstExpand) => {
+            if (loadingRef.current || !hasMoreRef.current) return;
+
+            loadingRef.current = true;
+            setLoadingMore(true);
+
+            if (!isFirstExpand) {
+                await new Promise((resolve) => setTimeout(resolve, 450));
+            }
+
+            try {
+                const requestOffset = isFirstExpand ? 0 : offsetRef.current;
+                const res = await fetch(
+                    `/api/images/related?id=${encodeURIComponent(currentId)}&limit=${BATCH_SIZE}&offset=${requestOffset}`
+                );
+                const data = await res.json();
+                const newBatch = Array.isArray(data.images) ? data.images : [];
+                const nextHasMore = Boolean(data.hasMore) && newBatch.length > 0;
+
+                if (typeof data.total === 'number') {
+                    setTotal(data.total);
+                }
+
+                setHasMore(nextHasMore);
+                hasMoreRef.current = nextHasMore;
+
+                if (isFirstExpand) {
+                    setDisplayedImages(newBatch);
+                    offsetRef.current = newBatch.length;
+                } else {
+                    setDisplayedImages((prev) => {
+                        const existingIds = new Set(prev.map((img) => img.id));
+                        const uniqueNew = newBatch.filter((img) => !existingIds.has(img.id));
+                        return [...prev, ...uniqueNew];
+                    });
+                    offsetRef.current = requestOffset + newBatch.length;
+                }
+            } catch (error) {
+                console.error('Failed to load more related images:', error);
+                setHasMore(false);
+                hasMoreRef.current = false;
+            } finally {
+                setLoadingMore(false);
+                loadingRef.current = false;
+            }
+        },
+        [currentId]
+    );
+
+    const handleLoadMoreClick = () => {
+        setExpanded(true);
+        fetchBatch(true);
     };
 
-    const handleShowLess = () => {
-        setIsExpanded(false);
-    };
+    useEffect(() => {
+        if (!expanded || !hasMore) return;
 
-    if (loading) {
-        return (
-            <div className="w-full max-w-7xl mx-auto mt-16 mb-12">
-                <div className="flex items-center justify-between mb-6">
-                    <div className="h-7 w-48 bg-foreground/10 rounded animate-pulse"></div>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 md:gap-6">
-                    {[1, 2, 3, 4].map((i) => (
-                        <div
-                            key={i}
-                            className="aspect-square rounded-2xl bg-card-bg border border-card-border animate-pulse flex items-center justify-center p-4"
-                        >
-                            <div className="w-16 h-16 rounded-full bg-foreground/5"></div>
-                        </div>
-                    ))}
-                </div>
-            </div>
+        const sentinel = sentinelRef.current;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const first = entries[0];
+                if (first && first.isIntersecting && hasMoreRef.current && !loadingRef.current) {
+                    fetchBatch(false);
+                }
+            },
+            { rootMargin: '250px' }
         );
-    }
 
-    if (images.length === 0) {
+        if (sentinel) {
+            observer.observe(sentinel);
+        }
+
+        const handleScroll = () => {
+            if (!hasMoreRef.current || loadingRef.current) return;
+            if (sentinelRef.current) {
+                const rect = sentinelRef.current.getBoundingClientRect();
+                if (rect.top <= window.innerHeight + 250) {
+                    fetchBatch(false);
+                }
+            }
+        };
+
+        window.addEventListener('scroll', handleScroll, { passive: true });
+
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('scroll', handleScroll);
+        };
+    }, [expanded, hasMore, displayedImages.length, fetchBatch]);
+
+    if (displayedImages.length === 0) {
         return null;
     }
 
-    const displayedImages = isExpanded ? images : images.slice(0, 4);
-
     return (
-        <section className="w-full max-w-7xl mx-auto mt-16 mb-12 animate-fade-in">
-            <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                    <div className="w-1.5 h-6 bg-blue-500 rounded-full"></div>
-                    <h2 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
-                        Related PNGs
-                    </h2>
-                </div>
-                <span className="text-xs font-medium text-muted-text uppercase tracking-wider">
-                    Discover Similar Assets
-                </span>
+        <div className="mt-16">
+            <div
+                className="w-full py-3.5 px-6 rounded-2xl mb-8 border shadow-sm text-center flex items-center justify-center gap-2"
+                style={{
+                    backgroundColor: 'var(--related-heading-bg)',
+                    borderColor: 'var(--related-heading-border)',
+                }}
+            >
+                <span className="w-1.5 h-1.5 rounded-full bg-primary-glow inline-block" />
+                <h3
+                    className="font-bold tracking-widest text-xs md:text-sm uppercase"
+                    style={{ color: 'var(--related-heading-text)' }}
+                >
+                    Related PNG Images
+                </h3>
+                <span className="w-1.5 h-1.5 rounded-full bg-primary-glow inline-block" />
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-                {displayedImages.map((img) => {
-                    const isLight = img.luminance === 'light';
-                    const checkerboardUrl = isLight
-                        ? "url('/assets/checkerboard-dark.png')"
-                        : "url('/assets/checkerboard-light.png')";
+            {expanded && (
+                <p className="text-center text-foreground/50 text-sm mb-8">
+                    Showing {displayedImages.length} of {total} related PNG {total === 1 ? 'image' : 'images'}
+                </p>
+            )}
 
-                    return (
-                        <Link
-                            key={img.id}
-                            href={`/images/${img.slug || img.id}`}
-                            className={`image-card-glow group relative block w-full overflow-hidden rounded-xl border border-card-border shadow-md aspect-square ${isLight ? 'contrast-stage-dark' : ''}`}
-                            style={{
-                                backgroundImage: checkerboardUrl,
-                                backgroundSize: '20px 20px',
-                                backgroundRepeat: 'repeat',
-                            }}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                {displayedImages.map((image) => (
+                    <Link
+                        key={image.id}
+                        href={`/images/${image.id}-${slugify(image.name || image.filename || '')}`}
+                    >
+                        <ImageCard
+                            src={image.path}
+                            luminance={image.luminance}
+                            contrastBgDark={image.contrastBgDark}
+                            contrastBgLight={image.contrastBgLight}
+                        />
+                    </Link>
+                ))}
+            </div>
+
+            {!expanded && hasMore && (
+                <div className="mt-12 flex justify-center">
+                    <button
+                        type="button"
+                        onClick={handleLoadMoreClick}
+                        className="more-btn-glow inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl bg-card-bg hover:bg-primary-glow text-foreground hover:text-white font-bold text-sm tracking-wide transition-all duration-300 group cursor-pointer"
+                    >
+                        <span>More</span>
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                            className="w-4 h-4 transform group-hover:translate-x-1 transition-transform"
                         >
-                            <div className="relative w-full h-full flex items-center justify-center p-4">
-                                <img
-                                    src={img.previewPath || img.path || img.filePath}
-                                    alt={img.altText || img.name || img.title}
-                                    loading="lazy"
-                                    decoding="async"
-                                    className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
-                                />
-                            </div>
-
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3 pointer-events-none">
-                                <p className="text-white text-xs font-medium truncate">{img.name || img.title}</p>
-                                {img.width && img.height && (
-                                    <span className="text-[10px] text-slate-300 font-mono">
-                                        {img.width} x {img.height}
-                                    </span>
-                                )}
-                            </div>
-                        </Link>
-                    );
-                })}
-            </div>
-
-            <div className="mt-10 flex items-center justify-center gap-4">
-                {hasMore && (
-                    <button
-                        onClick={handleLoadMore}
-                        disabled={loadingMore}
-                        className="group relative inline-flex items-center justify-center gap-2.5 px-8 py-3 rounded-xl font-bold text-sm text-foreground bg-card-bg border border-card-border hover:border-blue-500/50 hover:bg-blue-500/5 transition-all duration-300 shadow-sm hover:shadow-md cursor-pointer disabled:opacity-50"
-                    >
-                        {loadingMore ? (
-                            <>
-                                <svg className="animate-spin h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                                <span>Loading Related Assets...</span>
-                            </>
-                        ) : (
-                            <>
-                                <span>Load More Related PNGs</span>
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-blue-500 transition-transform group-hover:translate-y-0.5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                                </svg>
-                            </>
-                        )}
-                    </button>
-                )}
-
-                {isExpanded && images.length > 4 && (
-                    <button
-                        onClick={handleShowLess}
-                        className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm text-muted-text hover:text-foreground bg-foreground/5 hover:bg-foreground/10 border border-card-border transition-all cursor-pointer"
-                    >
-                        <span>Show Less</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5" />
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
+                            />
                         </svg>
                     </button>
-                )}
-            </div>
-        </section>
+                </div>
+            )}
+
+            {expanded && (
+                <div ref={sentinelRef} className="py-14 flex flex-col items-center justify-center min-h-[100px]">
+                    {loadingMore ? (
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-10 h-10 rounded-full border-4 border-primary-glow/20 border-t-primary-glow animate-spin shadow-[0_0_15px_rgba(59,130,246,0.3)]" />
+                            <span className="text-foreground/60 text-xs font-semibold tracking-wider uppercase">
+                                Loading next 30 images...
+                            </span>
+                        </div>
+                    ) : hasMore ? (
+                        <div className="w-8 h-8 rounded-full border-3 border-primary-glow/20 border-t-primary-glow/60 animate-spin" />
+                    ) : (
+                        <p className="text-foreground/40 text-xs uppercase tracking-widest">
+                            You&apos;ve reached the end of related images ({displayedImages.length} images)
+                        </p>
+                    )}
+                </div>
+            )}
+        </div>
     );
-}
+};
+
+export default RelatedImages;

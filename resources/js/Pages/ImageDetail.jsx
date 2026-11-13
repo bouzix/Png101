@@ -742,11 +742,7 @@ export default function ImageDetail({
                 </div>
 
                 {/* Related Images */}
-                <RelatedImages
-                    imageId={image.id}
-                    initialImages={relatedImages}
-                    initialHasMore={totalRelatedImages > relatedImages.length}
-                />
+                <RelatedImages images={relatedImages} currentId={image.id} totalCount={totalRelatedImages} />
             </main>
         </div>
     );
