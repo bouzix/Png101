@@ -2,7 +2,7 @@ const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 
-const dev = process.env.NODE_ENV !== 'production';
+const dev = false;
 const hostname = '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
 
@@ -23,3 +23,4 @@ app.prepare().then(() => {
         console.log(`> Ready on http://${hostname}:${port}`);
     });
 });
+
