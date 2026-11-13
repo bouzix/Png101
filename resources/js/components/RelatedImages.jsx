@@ -204,22 +204,32 @@ const RelatedImages = ({ images: initialImages = [], currentId, totalCount }) =>
             )}
 
             {expanded && (
-                <div ref={sentinelRef} className="py-14 flex flex-col items-center justify-center min-h-[100px]">
-                    {loadingMore ? (
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="w-10 h-10 rounded-full border-4 border-primary-glow/20 border-t-primary-glow animate-spin shadow-[0_0_15px_rgba(59,130,246,0.3)]" />
-                            <span className="text-foreground/60 text-xs font-semibold tracking-wider uppercase">
-                                Loading next 30 images...
-                            </span>
+                <>
+                    {loadingMore && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 mt-6">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                                <ImageCard key={`rel-more-skel-${i}`} />
+                            ))}
                         </div>
-                    ) : hasMore ? (
-                        <div className="w-8 h-8 rounded-full border-3 border-primary-glow/20 border-t-primary-glow/60 animate-spin" />
-                    ) : (
-                        <p className="text-foreground/40 text-xs uppercase tracking-widest">
-                            You&apos;ve reached the end of related images ({displayedImages.length} images)
-                        </p>
                     )}
-                </div>
+
+                    <div ref={sentinelRef} className="py-14 flex flex-col items-center justify-center min-h-[100px]">
+                        {loadingMore ? (
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="w-10 h-10 rounded-full border-4 border-primary-glow/20 border-t-primary-glow animate-spin shadow-[0_0_15px_rgba(59,130,246,0.3)]" />
+                                <span className="text-foreground/60 text-xs font-semibold tracking-wider uppercase">
+                                    Loading next 30 images...
+                                </span>
+                            </div>
+                        ) : hasMore ? (
+                            <div className="w-8 h-8 rounded-full border-3 border-primary-glow/20 border-t-primary-glow/60 animate-spin" />
+                        ) : (
+                            <p className="text-foreground/40 text-xs uppercase tracking-widest">
+                                You&apos;ve reached the end of related images ({displayedImages.length} images)
+                            </p>
+                        )}
+                    </div>
+                </>
             )}
         </div>
     );

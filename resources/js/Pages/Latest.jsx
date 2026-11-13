@@ -152,6 +152,14 @@ export default function Latest({ websiteInfo = {} }) {
                                 ))}
                             </div>
 
+                            {loadingMore && (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 mt-6">
+                                    {Array.from({ length: 5 }).map((_, i) => (
+                                        <ImageCard key={`more-skel-${i}`} />
+                                    ))}
+                                </div>
+                            )}
+
                             <div ref={sentinelRef} className="py-14 flex flex-col items-center justify-center min-h-[100px]">
                                 {loadingMore ? (
                                     <div className="flex flex-col items-center gap-3">
