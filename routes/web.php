@@ -40,6 +40,7 @@ Route::get('/team/login', [AuthController::class, 'teamLoginPage'])->name('team.
 // Admin Dashboard (protected by admin.auth middleware)
 Route::middleware(['admin.auth'])->prefix('admin/dashboard')->group(function () {
     Route::get('/', [AdminController::class, 'dashboard'])->name('admin.dashboard');
+    Route::get('/workspace', [AdminController::class, 'teamWorkspace'])->name('admin.workspace');
     Route::get('/files', [AdminController::class, 'files'])->name('admin.files');
     Route::get('/categories', [AdminController::class, 'categories'])->name('admin.categories');
     Route::get('/collections', [AdminController::class, 'collections'])->name('admin.collections');
@@ -136,6 +137,8 @@ Route::prefix('api')->group(function () {
         Route::post('/admin/team', [AdminController::class, 'createTeamMember']);
         Route::patch('/admin/team', [AdminController::class, 'updateTeam']);
         Route::delete('/admin/team', [AdminController::class, 'deleteTeamMember']);
+
+        Route::get('/team/workspace', [AdminController::class, 'teamWorkspaceData']);
 
         Route::get('/admin/me', [AuthController::class, 'me']);
 

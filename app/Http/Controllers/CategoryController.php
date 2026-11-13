@@ -33,6 +33,11 @@ class CategoryController extends Controller
 
     public function store(Request $request)
     {
+        $session = \App\Services\TeamService::getCurrentSession($request);
+        if (!\App\Services\TeamService::hasPermission($session, 'manage_collections')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
         $name = trim((string) $request->input('name', ''));
         $requestedSlug = trim((string) $request->input('slug', ''));
         $description = $request->input('description');
@@ -66,6 +71,11 @@ class CategoryController extends Controller
 
     public function update(Request $request, string $id)
     {
+        $session = \App\Services\TeamService::getCurrentSession($request);
+        if (!\App\Services\TeamService::hasPermission($session, 'manage_collections')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
         $category = Category::find($id);
         if (!$category) {
             return response()->json(['error' => 'Category not found'], 404);
@@ -105,8 +115,13 @@ class CategoryController extends Controller
         return response()->json($category);
     }
 
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
+        $session = \App\Services\TeamService::getCurrentSession($request);
+        if (!\App\Services\TeamService::hasPermission($session, 'manage_collections')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
         Category::where('id', $id)->delete();
         return response()->json(['success' => true]);
     }

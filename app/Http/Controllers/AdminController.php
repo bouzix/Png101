@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ApiKey;
 use App\Models\Image;
+use App\Models\SearchLog;
 use App\Models\Setting;
 use App\Services\CodeInjectionService;
 use App\Services\ErrorPagesService;
@@ -12,26 +13,45 @@ use App\Services\TeamService;
 use App\Services\WebsiteInfoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class AdminController extends Controller
 {
-    private function checkPermission(Request $request, string $permission): ?Response
+    private function checkPermission(Request $request, string|array $permissions): ?Response
     {
         $session = TeamService::getCurrentSession($request);
-        if (!TeamService::hasPermission($session, $permission)) {
+        if (!TeamService::hasAnyPermission($session, (array) $permissions)) {
             return Inertia::render('Errors/Forbidden');
+        }
+        return null;
+    }
+
+    private function authorizeApi(Request $request, string|array $permissions): ?JsonResponse
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!TeamService::hasAnyPermission($session, (array) $permissions)) {
+            return response()->json(['error' => 'Forbidden: Missing required permission.'], 403);
         }
         return null;
     }
 
     // --- Inertia Admin Pages ---
 
+    public function teamWorkspace(Request $request): Response
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!$session['authenticated']) {
+            return Inertia::render('Errors/Forbidden');
+        }
+        return Inertia::render('Admin/Workspace');
+    }
+
     public function dashboard(Request $request): Response
     {
-        if ($forbidden = $this->checkPermission($request, 'upload')) {
+        if ($forbidden = $this->checkPermission($request, 'upload_images')) {
             return $forbidden;
         }
         return Inertia::render('Admin/Dashboard');
@@ -39,7 +59,7 @@ class AdminController extends Controller
 
     public function files(Request $request): Response
     {
-        if ($forbidden = $this->checkPermission($request, 'files')) {
+        if ($forbidden = $this->checkPermission($request, ['upload_images', 'edit_images', 'delete_images'])) {
             return $forbidden;
         }
         return Inertia::render('Admin/Files');
@@ -47,7 +67,7 @@ class AdminController extends Controller
 
     public function categories(Request $request): Response
     {
-        if ($forbidden = $this->checkPermission($request, 'categories')) {
+        if ($forbidden = $this->checkPermission($request, 'manage_collections')) {
             return $forbidden;
         }
         return Inertia::render('Admin/Categories');
@@ -55,7 +75,7 @@ class AdminController extends Controller
 
     public function collections(Request $request): Response
     {
-        if ($forbidden = $this->checkPermission($request, 'collections')) {
+        if ($forbidden = $this->checkPermission($request, 'manage_collections')) {
             return $forbidden;
         }
         return Inertia::render('Admin/Collections');
@@ -63,7 +83,7 @@ class AdminController extends Controller
 
     public function analytics(Request $request): Response
     {
-        if ($forbidden = $this->checkPermission($request, 'analytics')) {
+        if ($forbidden = $this->checkPermission($request, 'view_analytics')) {
             return $forbidden;
         }
         return Inertia::render('Admin/Analytics');
@@ -80,7 +100,7 @@ class AdminController extends Controller
 
     public function settings(Request $request): Response
     {
-        if ($forbidden = $this->checkPermission($request, 'settings')) {
+        if ($forbidden = $this->checkPermission($request, 'manage_general_settings')) {
             return $forbidden;
         }
         return Inertia::render('Admin/Settings/Index');
@@ -88,7 +108,7 @@ class AdminController extends Controller
 
     public function apiKeys(Request $request): Response
     {
-        if ($forbidden = $this->checkPermission($request, 'settings')) {
+        if ($forbidden = $this->checkPermission($request, 'manage_api_keys')) {
             return $forbidden;
         }
         return Inertia::render('Admin/Settings/ApiKeys');
@@ -96,7 +116,7 @@ class AdminController extends Controller
 
     public function codeInjection(Request $request): Response
     {
-        if ($forbidden = $this->checkPermission($request, 'settings')) {
+        if ($forbidden = $this->checkPermission($request, 'manage_code_injection')) {
             return $forbidden;
         }
         return Inertia::render('Admin/Settings/CodeInjection');
@@ -104,7 +124,7 @@ class AdminController extends Controller
 
     public function dataManagement(Request $request): Response
     {
-        if ($forbidden = $this->checkPermission($request, 'settings')) {
+        if ($forbidden = $this->checkPermission($request, 'manage_data_seo')) {
             return $forbidden;
         }
         return Inertia::render('Admin/Settings/DataManagement');
@@ -112,7 +132,7 @@ class AdminController extends Controller
 
     public function errorPages(Request $request): Response
     {
-        if ($forbidden = $this->checkPermission($request, 'settings')) {
+        if ($forbidden = $this->checkPermission($request, 'manage_general_settings')) {
             return $forbidden;
         }
         return Inertia::render('Admin/Settings/ErrorPages');
@@ -129,7 +149,7 @@ class AdminController extends Controller
 
     public function websiteInfo(Request $request): Response
     {
-        if ($forbidden = $this->checkPermission($request, 'settings')) {
+        if ($forbidden = $this->checkPermission($request, 'manage_general_settings')) {
             return $forbidden;
         }
         return Inertia::render('Admin/Settings/WebsiteInfo');
@@ -153,6 +173,10 @@ class AdminController extends Controller
 
     public function saveSettings(Request $request): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+
         try {
             $body = $request->all();
             foreach ($body as $key => $value) {
@@ -167,10 +191,28 @@ class AdminController extends Controller
         }
     }
 
-    public function listApiKeys(): JsonResponse
+    public function listApiKeys(Request $request): JsonResponse
     {
+        $session = TeamService::getCurrentSession($request);
+        $canManageKeys = TeamService::hasPermission($session, 'manage_api_keys');
+        $canUseAi = TeamService::hasAnyPermission($session, ['upload_images', 'edit_images']);
+
+        if (!$canManageKeys && !$canUseAi) {
+            return response()->json(['error' => 'Forbidden: Missing permission to view API keys.'], 403);
+        }
+
         try {
             $keys = ApiKey::orderBy('createdAt', 'desc')->get();
+            if (!$canManageKeys) {
+                // Return non-secret metadata only so upload/edit AI detection works without exposing raw keys
+                return response()->json($keys->map(fn($k) => [
+                    'id' => $k->id,
+                    'name' => $k->name,
+                    'modelVersion' => $k->modelVersion,
+                    'isActive' => (bool) $k->isActive,
+                    'createdAt' => $k->createdAt,
+                ])->values());
+            }
             return response()->json($keys);
         } catch (\Throwable $e) {
             return response()->json(['error' => 'Failed to fetch API keys'], 500);
@@ -179,6 +221,10 @@ class AdminController extends Controller
 
     public function createApiKey(Request $request): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_api_keys')) {
+            return $forbidden;
+        }
+
         try {
             $name = trim((string) $request->input('name', ''));
             $key = trim((string) $request->input('key', ''));
@@ -208,6 +254,10 @@ class AdminController extends Controller
 
     public function updateApiKey(Request $request, string $id): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_api_keys')) {
+            return $forbidden;
+        }
+
         try {
             $apiKey = ApiKey::find($id);
             if (!$apiKey) {
@@ -232,8 +282,12 @@ class AdminController extends Controller
         }
     }
 
-    public function deleteApiKey(string $id): JsonResponse
+    public function deleteApiKey(Request $request, string $id): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_api_keys')) {
+            return $forbidden;
+        }
+
         try {
             ApiKey::where('id', $id)->delete();
             return response()->json(['success' => true]);
@@ -242,13 +296,20 @@ class AdminController extends Controller
         }
     }
 
-    public function getCodeInjection(): JsonResponse
+    public function getCodeInjection(Request $request): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_code_injection')) {
+            return $forbidden;
+        }
         return response()->json(CodeInjectionService::get());
     }
 
     public function saveCodeInjection(Request $request): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_code_injection')) {
+            return $forbidden;
+        }
+
         try {
             $saved = CodeInjectionService::save($request->all());
             return response()->json(['success' => true, 'data' => $saved]);
@@ -264,6 +325,10 @@ class AdminController extends Controller
 
     public function saveWebsiteInfo(Request $request): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+
         try {
             $saved = WebsiteInfoService::save($request->all());
             return response()->json(['success' => true, 'data' => $saved]);
@@ -272,13 +337,20 @@ class AdminController extends Controller
         }
     }
 
-    public function getErrorPages(): JsonResponse
+    public function getErrorPages(Request $request): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
         return response()->json(ErrorPagesService::get());
     }
 
     public function saveErrorPages(Request $request): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+
         try {
             $saved = ErrorPagesService::save($request->all());
             return response()->json(['success' => true, 'data' => $saved]);
@@ -287,8 +359,12 @@ class AdminController extends Controller
         }
     }
 
-    public function getSeoSettings(): JsonResponse
+    public function getSeoSettings(Request $request): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_data_seo')) {
+            return $forbidden;
+        }
+
         try {
             SeoGeneratorService::checkScheduled();
             return response()->json(SeoGeneratorService::getSettings());
@@ -299,6 +375,10 @@ class AdminController extends Controller
 
     public function saveOrGenerateSeo(Request $request): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_data_seo')) {
+            return $forbidden;
+        }
+
         try {
             $body = $request->all();
             if (($body['action'] ?? null) === 'generate') {
@@ -497,6 +577,21 @@ class AdminController extends Controller
                 return response()->json(['success' => true]);
             }
 
+            if ($action === 'test_smtp') {
+                $to = trim((string) $request->input('to', ''));
+                if ($to === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+                    return response()->json(['error' => 'Please enter a valid recipient email address'], 400);
+                }
+                $result = TeamService::sendTestEmail($to);
+                if (empty($result['sent'])) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => $result['error'] ?? 'Failed to send test email',
+                    ], 422);
+                }
+                return response()->json(['success' => true, 'message' => "Test email sent to {$to}"]);
+            }
+
             if ($action === 'resend_invite') {
                 $id = (string) $request->input('id', '');
                 $password = trim((string) $request->input('password', ''));
@@ -571,8 +666,188 @@ class AdminController extends Controller
         }
     }
 
-    public function clearDb(): JsonResponse
+    public function teamWorkspaceData(Request $request): JsonResponse
     {
+        $session = TeamService::getCurrentSession($request);
+        if (!$session['authenticated']) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        try {
+            $timeframe = (string) $request->query('timeframe', '30d');
+            if (!in_array($timeframe, ['7d', '30d', '90d', 'all'], true)) {
+                $timeframe = '30d';
+            }
+            $since = match ($timeframe) {
+                '7d' => now()->subDays(7),
+                '30d' => now()->subDays(30),
+                '90d' => now()->subDays(90),
+                default => null,
+            };
+
+            $searchFilter = mb_strtolower(trim((string) $request->query('q', '')));
+
+            $grouped = SearchLog::query()
+                ->when($since, fn($query) => $query->where('createdAt', '>=', $since))
+                ->whereRaw("TRIM(query) != ''")
+                ->select([
+                    DB::raw('LOWER(TRIM(query)) as normalized_query'),
+                    DB::raw('MAX(query) as display_query'),
+                    DB::raw('COUNT(*) as search_count'),
+                    DB::raw('AVG(resultsCount) as avg_results'),
+                    DB::raw('MIN(resultsCount) as min_results'),
+                    DB::raw('MAX(resultsCount) as max_results'),
+                    DB::raw('MAX(createdAt) as last_searched_at'),
+                ])
+                ->groupBy(DB::raw('LOWER(TRIM(query))'))
+                ->orderByDesc('search_count')
+                ->get();
+
+            $totalSearches = (int) $grouped->sum('search_count');
+            $uniqueQueries = $grouped->count();
+            $zeroRowsAll = $grouped->filter(fn($r) => round((float) $r->avg_results, 2) <= 0.0);
+            $lowRowsAll = $grouped->filter(function ($r) {
+                $avg = (float) $r->avg_results;
+                return $avg > 0.0 && $avg <= 3.0;
+            });
+
+            $zeroSearchesVolume = (int) $zeroRowsAll->sum('search_count');
+            $zeroResultShare = $totalSearches > 0 ? round(($zeroSearchesVolume / $totalSearches) * 100, 1) : 0;
+
+            $filtered = $searchFilter !== ''
+                ? $grouped->filter(fn($r) => str_contains((string) $r->normalized_query, $searchFilter))
+                : $grouped;
+
+            $mapRow = function ($r) {
+                $avg = round((float) $r->avg_results, 1);
+                return [
+                    'query' => (string) ($r->display_query ?: $r->normalized_query),
+                    'normalizedQuery' => (string) $r->normalized_query,
+                    'count' => (int) $r->search_count,
+                    'avgResults' => $avg,
+                    'minResults' => (int) $r->min_results,
+                    'maxResults' => (int) $r->max_results,
+                    'lastSearchedAt' => $r->last_searched_at ? (string) $r->last_searched_at : null,
+                    'status' => $avg <= 0 ? 'gap' : ($avg <= 3 ? 'low' : 'healthy'),
+                ];
+            };
+
+            $zeroResults = $filtered->filter(fn($r) => round((float) $r->avg_results, 2) <= 0.0)->take(100)->map($mapRow)->values();
+            $lowResults = $filtered->filter(function ($r) {
+                $avg = (float) $r->avg_results;
+                return $avg > 0.0 && $avg <= 3.0;
+            })->take(100)->map($mapRow)->values();
+            $topSearches = $filtered->take(100)->map($mapRow)->values();
+
+            // Catalog health & actionable content queue
+            $draftImages = Image::where('status', 'draft')
+                ->orderByDesc('createdAt')
+                ->limit(25)
+                ->get(['id', 'name', 'filename', 'path', 'previewPath', 'tags', 'altText', 'description', 'createdAt']);
+            $draftCount = Image::where('status', 'draft')->count();
+
+            $publishedImages = Image::where('status', 'published')
+                ->withCount('categories')
+                ->orderByDesc('createdAt')
+                ->get(['id', 'name', 'filename', 'path', 'previewPath', 'tags', 'altText', 'description', 'createdAt']);
+
+            $publishedCount = $publishedImages->count();
+            $uncategorizedCount = 0;
+            $lowSeoItems = [];
+            $tagCounts = [];
+
+            foreach ($publishedImages as $img) {
+                $tags = is_array($img->tags) ? $img->tags : [];
+                $tagsCount = count($tags);
+                foreach ($tags as $tag) {
+                    $cleanTag = mb_strtolower(trim((string) $tag));
+                    if ($cleanTag !== '') {
+                        $tagCounts[$cleanTag] = ($tagCounts[$cleanTag] ?? 0) + 1;
+                    }
+                }
+
+                if (($img->categories_count ?? 0) === 0) {
+                    $uncategorizedCount++;
+                }
+
+                $missingAlt = trim((string) ($img->altText ?? '')) === '';
+                $missingDesc = trim((string) ($img->description ?? '')) === '';
+                $lowTags = $tagsCount < 5;
+
+                if ($missingAlt || $missingDesc || $lowTags) {
+                    $score = ($missingAlt ? 3 : 0) + ($missingDesc ? 2 : 0) + ($lowTags ? 1 : 0);
+                    $lowSeoItems[] = [
+                        'id' => $img->id,
+                        'name' => $img->name ?: $img->filename,
+                        'filename' => $img->filename,
+                        'path' => $img->path,
+                        'previewPath' => $img->previewPath,
+                        'missingAlt' => $missingAlt,
+                        'missingDescription' => $missingDesc,
+                        'tagsCount' => $tagsCount,
+                        'categoriesCount' => (int) ($img->categories_count ?? 0),
+                        'createdAt' => $img->createdAt,
+                        '_priority' => $score,
+                    ];
+                }
+            }
+
+            usort($lowSeoItems, fn($a, $b) => $b['_priority'] <=> $a['_priority']);
+            $lowSeoCount = count($lowSeoItems);
+            $needsSeo = array_map(function ($item) {
+                unset($item['_priority']);
+                return $item;
+            }, array_slice($lowSeoItems, 0, 25));
+
+            arsort($tagCounts);
+            $popularTags = [];
+            foreach (array_slice($tagCounts, 0, 20, true) as $tagName => $count) {
+                $popularTags[] = ['tag' => $tagName, 'count' => $count];
+            }
+
+            return response()->json([
+                'timeframe' => $timeframe,
+                'summary' => [
+                    'totalSearches' => $totalSearches,
+                    'uniqueQueries' => $uniqueQueries,
+                    'zeroResultQueries' => $zeroRowsAll->count(),
+                    'zeroResultShare' => $zeroResultShare,
+                    'lowResultQueries' => $lowRowsAll->count(),
+                    'publishedImages' => $publishedCount,
+                    'draftImages' => $draftCount,
+                    'lowSeoImages' => $lowSeoCount,
+                    'uncategorizedImages' => $uncategorizedCount,
+                ],
+                'searchIntelligence' => [
+                    'zeroResults' => $zeroResults,
+                    'lowResults' => $lowResults,
+                    'topSearches' => $topSearches,
+                ],
+                'catalogQueue' => [
+                    'drafts' => $draftImages->map(fn($d) => [
+                        'id' => $d->id,
+                        'name' => $d->name ?: $d->filename,
+                        'filename' => $d->filename,
+                        'path' => $d->path,
+                        'previewPath' => $d->previewPath,
+                        'tagsCount' => is_array($d->tags) ? count($d->tags) : 0,
+                        'createdAt' => $d->createdAt,
+                    ])->values(),
+                    'needsSeo' => $needsSeo,
+                    'popularTags' => $popularTags,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Failed to load workspace intelligence'], 500);
+        }
+    }
+
+    public function clearDb(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, 'manage_data_seo')) {
+            return $forbidden;
+        }
+
         try {
             Image::query()->delete();
             return response()->json(['success' => true, 'message' => 'Database images cleared successfully.']);
@@ -581,8 +856,12 @@ class AdminController extends Controller
         }
     }
 
-    public function clearUploads(): JsonResponse
+    public function clearUploads(Request $request): JsonResponse
     {
+        if ($forbidden = $this->authorizeApi($request, 'manage_data_seo')) {
+            return $forbidden;
+        }
+
         try {
             $uploadDir = public_path('uploads');
             if (File::exists($uploadDir)) {

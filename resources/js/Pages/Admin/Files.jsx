@@ -9,7 +9,12 @@ import { toast } from 'sonner';
 
 export default function AdminFiles() {
     const [images, setImages] = useState([]);
-    const [search, setSearch] = useState('');
+    const [search, setSearch] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return new URLSearchParams(window.location.search).get('search') || '';
+        }
+        return '';
+    });
     const [selectedIds, setSelectedIds] = useState([]);
 
     const [currentPage, setCurrentPage] = useState(1);

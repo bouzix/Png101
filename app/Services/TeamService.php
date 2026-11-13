@@ -165,6 +165,16 @@ class TeamService
         TeamMember::where('id', $id)->delete();
     }
 
+    public static function hasAnyPermission(?array $session, array $permissions): bool
+    {
+        foreach ($permissions as $permission) {
+            if (self::hasPermission($session, (string) $permission)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static function getSmtpConfig(): array
     {
         $defaults = [
@@ -208,42 +218,111 @@ class TeamService
         );
     }
 
-    public static function sendTeamInviteEmail(array $params): array
+    public static function sendDynamicMail(string $to, string $subject, string $html): array
     {
         $smtp = self::getSmtpConfig();
-        if (empty($smtp['host']) || empty($smtp['user']) || empty($smtp['pass'])) {
+        $host = trim((string) ($smtp['host'] ?? ''));
+        $user = trim((string) ($smtp['user'] ?? ''));
+        $pass = (string) ($smtp['pass'] ?? '');
+
+        if ($host === '') {
             return [
                 'sent' => false,
                 'mode' => 'manual_only',
-                'error' => 'SMTP not configured',
+                'error' => 'SMTP host is not configured',
+            ];
+        }
+
+        $hasAuth = $user !== '';
+        if ($hasAuth && $pass === '') {
+            return [
+                'sent' => false,
+                'mode' => 'manual_only',
+                'error' => 'SMTP password is required when a username is specified',
             ];
         }
 
         try {
-            config([
-                'mail.mailers.dynamic_smtp' => [
-                    'transport' => 'smtp',
-                    'host' => $smtp['host'],
-                    'port' => $smtp['port'] ?: 587,
-                    'encryption' => !empty($smtp['secure']) ? 'ssl' : 'tls',
-                    'username' => $smtp['user'],
-                    'password' => $smtp['pass'],
-                ],
-            ]);
+            $port = (int) ($smtp['port'] ?? 587) ?: 587;
+            $isSsl = !empty($smtp['secure']) || $port === 465;
+            $scheme = $isSsl ? 'smtps' : 'smtp';
+            $isLocalPlain = !$isSsl && ($port === 1025 || in_array(strtolower($host), ['127.0.0.1', 'localhost', '::1', 'mailpit'], true));
 
-            $name = htmlspecialchars($params['name'] ?: $params['email'], ENT_QUOTES, 'UTF-8');
-            $email = htmlspecialchars($params['email'], ENT_QUOTES, 'UTF-8');
-            $pass = htmlspecialchars($params['passwordPlain'], ENT_QUOTES, 'UTF-8');
-            $loginUrl = htmlspecialchars($params['loginUrl'], ENT_QUOTES, 'UTF-8');
-
-            $permMap = collect(self::PERMISSIONS)->pluck('label', 'key')->all();
-            $permListHtml = '';
-            foreach ($params['permissions'] as $key) {
-                $label = htmlspecialchars($permMap[$key] ?? $key, ENT_QUOTES, 'UTF-8');
-                $permListHtml .= "<li style=\"margin-bottom: 4px;\">{$label}</li>";
+            $mailerConfig = [
+                'transport' => 'smtp',
+                'scheme' => $scheme,
+                'host' => $host,
+                'port' => $port,
+                'username' => $hasAuth ? $user : null,
+                'password' => $hasAuth ? $pass : null,
+            ];
+            if ($isLocalPlain) {
+                $mailerConfig['auto_tls'] = false;
             }
 
-            $html = <<<HTML
+            Mail::purge('dynamic_smtp');
+            config(['mail.mailers.dynamic_smtp' => $mailerConfig]);
+
+            $fromEmail = trim((string) ($smtp['fromEmail'] ?? ''));
+            if ($fromEmail === '') {
+                $fromEmail = $hasAuth ? $user : 'noreply@png101.local';
+            }
+            $fromName = trim((string) ($smtp['fromName'] ?? '')) ?: 'Png101 Admin';
+
+            Mail::mailer('dynamic_smtp')->html($html, function ($message) use ($fromEmail, $fromName, $to, $subject) {
+                $message->from($fromEmail, $fromName)
+                    ->to($to)
+                    ->subject($subject);
+            });
+
+            return ['sent' => true, 'mode' => 'smtp'];
+        } catch (\Throwable $e) {
+            return [
+                'sent' => false,
+                'mode' => 'manual_only',
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    public static function sendTestEmail(string $toEmail): array
+    {
+        $smtp = self::getSmtpConfig();
+        $host = htmlspecialchars((string) ($smtp['host'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $port = (int) ($smtp['port'] ?? 587);
+        $sentAt = htmlspecialchars(now()->toDateTimeString(), ENT_QUOTES, 'UTF-8');
+
+        $html = <<<HTML
+<div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0f172a; color: #f8fafc; border-radius: 16px; padding: 32px; border: 1px solid #1e293b;">
+    <h2 style="margin-top: 0; color: #10b981; font-size: 20px;">Png101 SMTP Test Successful</h2>
+    <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">
+        Your SMTP configuration is working properly and can deliver team invitations and notifications.
+    </p>
+    <div style="background: #1e293b; border-radius: 12px; padding: 16px; margin: 16px 0; border: 1px solid #334155; font-size: 13px; color: #cbd5e1;">
+        <div><strong>Host:</strong> {$host}:{$port}</div>
+        <div style="margin-top: 6px;"><strong>Timestamp:</strong> {$sentAt}</div>
+    </div>
+</div>
+HTML;
+
+        return self::sendDynamicMail($toEmail, 'Png101 SMTP Configuration Test', $html);
+    }
+
+    public static function sendTeamInviteEmail(array $params): array
+    {
+        $name = htmlspecialchars($params['name'] ?: $params['email'], ENT_QUOTES, 'UTF-8');
+        $email = htmlspecialchars($params['email'], ENT_QUOTES, 'UTF-8');
+        $pass = htmlspecialchars($params['passwordPlain'], ENT_QUOTES, 'UTF-8');
+        $loginUrl = htmlspecialchars($params['loginUrl'], ENT_QUOTES, 'UTF-8');
+
+        $permMap = collect(self::PERMISSIONS)->pluck('label', 'key')->all();
+        $permListHtml = '';
+        foreach ($params['permissions'] as $key) {
+            $label = htmlspecialchars($permMap[$key] ?? $key, ENT_QUOTES, 'UTF-8');
+            $permListHtml .= "<li style=\"margin-bottom: 4px;\">{$label}</li>";
+        }
+
+        $html = <<<HTML
 <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #0f172a; color: #f8fafc; border-radius: 16px; padding: 32px; border: 1px solid #1e293b;">
     <h2 style="margin-top: 0; color: #3b82f6; font-size: 22px;">You've Been Invited to the Png101 Team</h2>
     <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">
@@ -274,22 +353,7 @@ class TeamService
 </div>
 HTML;
 
-            Mail::mailer('dynamic_smtp')->html($html, function ($message) use ($smtp, $params) {
-                $fromEmail = $smtp['fromEmail'] ?: $smtp['user'];
-                $fromName = $smtp['fromName'] ?: 'Png101 Admin';
-                $message->from($fromEmail, $fromName)
-                    ->to($params['email'])
-                    ->subject('Your Png101 Team Account Credentials');
-            });
-
-            return ['sent' => true, 'mode' => 'smtp'];
-        } catch (\Throwable $e) {
-            return [
-                'sent' => false,
-                'mode' => 'manual_only',
-                'error' => $e->getMessage(),
-            ];
-        }
+        return self::sendDynamicMail($params['email'], 'Your Png101 Team Account Credentials', $html);
     }
 }
 

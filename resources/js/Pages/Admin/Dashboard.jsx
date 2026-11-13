@@ -6,10 +6,16 @@ import AssetCard from '@/components/admin/AssetCard';
 import BulkEditSidebar from '@/components/admin/BulkEditSidebar';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import { toast } from 'sonner';
-import { CheckSquare, Square, Trash2, Loader2, CheckCircle2 } from 'lucide-react';
+import { CheckSquare, Square, Trash2, Loader2, CheckCircle2, Copy, X, Sparkles } from 'lucide-react';
 
 export default function Dashboard() {
     const [stagedFiles, setStagedFiles] = useState([]);
+    const [targetKeyword, setTargetKeyword] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return new URLSearchParams(window.location.search).get('keyword') || '';
+        }
+        return '';
+    });
     const [uploading, setUploading] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
@@ -320,6 +326,43 @@ export default function Dashboard() {
             <Head title="Upload Image - Admin" />
             <div className="max-w-6xl mx-auto pb-24">
                 <h2 className="text-2xl font-bold text-foreground mb-6">Upload Image</h2>
+
+                {targetKeyword && (
+                    <div className="mb-6 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <Sparkles className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                            <div>
+                                <div className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                                    Filling Search Demand Gap
+                                </div>
+                                <p className="text-sm text-foreground">
+                                    Target keyword from Team Hub: <span className="font-bold text-amber-300">"{targetKeyword}"</span>
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(targetKeyword);
+                                    toast.success(`Copied "${targetKeyword}"`);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-xs font-bold text-amber-300 cursor-pointer"
+                            >
+                                <Copy className="w-3.5 h-3.5" />
+                                Copy Keyword
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setTargetKeyword('')}
+                                className="p-1.5 rounded-lg text-foreground/50 hover:text-foreground cursor-pointer"
+                                title="Dismiss"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 <div className="mb-8">
                     <DropZone onFilesDropped={handleFilesDropped} />

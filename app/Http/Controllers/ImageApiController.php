@@ -226,6 +226,11 @@ class ImageApiController extends Controller
 
     public function upload(Request $request)
     {
+        $session = TeamService::getCurrentSession($request);
+        if (!TeamService::hasPermission($session, 'upload_images')) {
+            return response()->json(['error' => 'Forbidden: Missing permission to upload images.'], 403);
+        }
+
         if (!$request->hasFile('file')) {
             return response()->json(['error' => 'No file uploaded'], 400);
         }
@@ -387,6 +392,11 @@ class ImageApiController extends Controller
 
     public function generateMeta(Request $request)
     {
+        $session = TeamService::getCurrentSession($request);
+        if (!TeamService::hasAnyPermission($session, ['upload_images', 'edit_images'])) {
+            return response()->json(['error' => 'Forbidden: Missing permission to generate AI metadata.'], 403);
+        }
+
         try {
             $imageBase64 = (string) $request->input('imageBase64', '');
             $modelName = $request->input('modelName');

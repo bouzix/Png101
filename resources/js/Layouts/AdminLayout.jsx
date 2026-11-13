@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, usePage, router } from '@inertiajs/react';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert, Lock } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 
 export default function AdminLayout({ children }) {
@@ -59,9 +59,21 @@ export default function AdminLayout({ children }) {
     const navItems = useMemo(() => {
         const items = [
             {
+                name: 'Team Hub',
+                href: '/admin/dashboard/workspace',
+                permitted: true,
+                reason: null,
+                icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z" />
+                    </svg>
+                ),
+            },
+            {
                 name: 'Upload',
                 href: '/admin/dashboard',
-                visible: hasPerm('upload_images'),
+                permitted: hasPerm('upload_images'),
+                reason: 'Requires Upload Images permission',
                 icon: (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
@@ -71,7 +83,8 @@ export default function AdminLayout({ children }) {
             {
                 name: 'Files',
                 href: '/admin/dashboard/files',
-                visible: hasPerm('upload_images') || hasPerm('edit_images') || hasPerm('delete_images'),
+                permitted: hasPerm('upload_images') || hasPerm('edit_images') || hasPerm('delete_images'),
+                reason: 'Requires Upload, Edit, or Delete Images permission',
                 icon: (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
@@ -81,7 +94,8 @@ export default function AdminLayout({ children }) {
             {
                 name: 'Collections',
                 href: '/admin/dashboard/collections',
-                visible: hasPerm('manage_collections'),
+                permitted: hasPerm('manage_collections'),
+                reason: 'Requires Collections & Categories permission',
                 icon: (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
@@ -91,7 +105,8 @@ export default function AdminLayout({ children }) {
             {
                 name: 'Team',
                 href: '/admin/dashboard/team',
-                visible: isSuperAdmin,
+                permitted: isSuperAdmin,
+                reason: 'Super Admin only',
                 icon: (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
@@ -101,7 +116,8 @@ export default function AdminLayout({ children }) {
             {
                 name: 'Analytics',
                 href: '/admin/dashboard/analytics',
-                visible: hasPerm('view_analytics'),
+                permitted: hasPerm('view_analytics'),
+                reason: 'Requires View Analytics permission',
                 icon: (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
@@ -111,7 +127,7 @@ export default function AdminLayout({ children }) {
             {
                 name: 'Settings',
                 href: '#',
-                visible: true,
+                permitted: true,
                 icon: (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 0 1 0 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 0 1 0-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281Z" />
@@ -119,43 +135,46 @@ export default function AdminLayout({ children }) {
                     </svg>
                 ),
                 children: [
-                    { name: 'General', href: '/admin/dashboard/settings', visible: hasPerm('manage_general_settings') },
-                    { name: 'API Keys', href: '/admin/dashboard/settings/api-keys', visible: hasPerm('manage_api_keys') },
-                    { name: 'Code Injection', href: '/admin/dashboard/settings/code-injection', visible: hasPerm('manage_code_injection') },
-                    { name: 'Data Management', href: '/admin/dashboard/settings/data-management', visible: hasPerm('manage_data_seo') },
-                    { name: 'Error Pages', href: '/admin/dashboard/settings/error-pages', visible: hasPerm('manage_general_settings') },
+                    { name: 'General', href: '/admin/dashboard/settings', permitted: hasPerm('manage_general_settings'), reason: 'Requires General & Website Settings permission' },
+                    { name: 'API Keys', href: '/admin/dashboard/settings/api-keys', permitted: hasPerm('manage_api_keys'), reason: 'Requires Gemini API Keys permission' },
+                    { name: 'Code Injection', href: '/admin/dashboard/settings/code-injection', permitted: hasPerm('manage_code_injection'), reason: 'Requires Code Injection permission' },
+                    { name: 'Data Management', href: '/admin/dashboard/settings/data-management', permitted: hasPerm('manage_data_seo'), reason: 'Requires Data, Backup & SEO permission' },
+                    { name: 'Error Pages', href: '/admin/dashboard/settings/error-pages', permitted: hasPerm('manage_general_settings'), reason: 'Requires General & Website Settings permission' },
                 ],
             },
         ];
 
-        return items
-            .map((item) => {
-                if (item.children) {
-                    const visibleChildren = item.children.filter((c) => c.visible);
-                    return {
-                        ...item,
-                        children: visibleChildren,
-                        visible: visibleChildren.length > 0,
-                    };
-                }
-                return item;
-            })
-            .filter((item) => item.visible);
+        return items.map((item) => {
+            if (item.children) {
+                const anyChildPermitted = item.children.some((c) => c.permitted);
+                return {
+                    ...item,
+                    permitted: anyChildPermitted,
+                    reason: anyChildPermitted ? null : 'No Settings permissions granted',
+                };
+            }
+            return item;
+        });
     }, [session]);
 
     const isCurrentRoutePermitted = useMemo(() => {
         if (!session || session.role === 'super_admin') return true;
+        if (pathname.startsWith('/admin/dashboard/workspace')) return true;
         if (pathname === '/admin/dashboard') return hasPerm('upload_images');
         if (pathname.startsWith('/admin/dashboard/files')) {
             return hasPerm('upload_images') || hasPerm('edit_images') || hasPerm('delete_images');
         }
-        if (pathname.startsWith('/admin/dashboard/collections')) return hasPerm('manage_collections');
+        if (pathname.startsWith('/admin/dashboard/collections') || pathname.startsWith('/admin/dashboard/categories')) {
+            return hasPerm('manage_collections');
+        }
         if (pathname.startsWith('/admin/dashboard/analytics')) return hasPerm('view_analytics');
         if (pathname === '/admin/dashboard/settings') return hasPerm('manage_general_settings');
         if (pathname.startsWith('/admin/dashboard/settings/api-keys')) return hasPerm('manage_api_keys');
         if (pathname.startsWith('/admin/dashboard/settings/code-injection')) return hasPerm('manage_code_injection');
         if (pathname.startsWith('/admin/dashboard/settings/data-management')) return hasPerm('manage_data_seo');
-        if (pathname.startsWith('/admin/dashboard/settings/error-pages')) return hasPerm('manage_general_settings');
+        if (pathname.startsWith('/admin/dashboard/settings/error-pages') || pathname.startsWith('/admin/dashboard/settings/website-info')) {
+            return hasPerm('manage_general_settings');
+        }
         if (pathname.startsWith('/admin/dashboard/team') || pathname.startsWith('/admin/dashboard/settings/team')) return false;
         return true;
     }, [session, pathname]);
@@ -204,19 +223,27 @@ export default function AdminLayout({ children }) {
                             : pathname === item.href;
                         const hasChildren = item.children && item.children.length > 0;
                         const isOpen = openMenus[item.name];
+                        const isLocked = !item.permitted && !hasChildren;
+                        const isMutedParent = !item.permitted && hasChildren;
 
                         return (
                             <div key={item.name} className="group relative">
                                 <div
-                                    className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} px-4 py-3 rounded-xl transition-all cursor-pointer ${
-                                        isParentActive
-                                            ? 'bg-blue-600 text-white font-medium shadow-md shadow-blue-600/25'
-                                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white'
+                                    title={!item.permitted && item.reason ? item.reason : undefined}
+                                    aria-disabled={isLocked ? 'true' : undefined}
+                                    className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} px-4 py-3 rounded-xl transition-all ${
+                                        isLocked
+                                            ? 'opacity-45 cursor-not-allowed text-slate-400 dark:text-slate-500 bg-slate-100/40 dark:bg-slate-900/30 select-none'
+                                            : isParentActive
+                                            ? 'bg-blue-600 text-white font-medium shadow-md shadow-blue-600/25 cursor-pointer'
+                                            : isMutedParent
+                                            ? 'opacity-60 text-slate-500 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/40 cursor-pointer'
+                                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer'
                                     }`}
                                     onClick={() => {
                                         if (hasChildren) {
                                             toggleMenu(item.name);
-                                        } else {
+                                        } else if (item.permitted) {
                                             router.visit(item.href);
                                         }
                                     }}
@@ -227,41 +254,65 @@ export default function AdminLayout({ children }) {
                                             {item.name}
                                         </span>
                                     </div>
+                                    {!isCollapsed && !item.permitted && !hasChildren && (
+                                        <Lock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
+                                    )}
                                     {hasChildren && !isCollapsed && (
-                                        <svg
-                                            xmlns="http://www.w3.org/2000/svg"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            strokeWidth={1.5}
-                                            stroke="currentColor"
-                                            className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-90' : 'rotate-0'}`}
-                                        >
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                                        </svg>
+                                        <div className="flex items-center gap-1.5">
+                                            {!item.permitted && (
+                                                <Lock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                                            )}
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                strokeWidth={1.5}
+                                                stroke="currentColor"
+                                                className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-90' : 'rotate-0'}`}
+                                            >
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                            </svg>
+                                        </div>
                                     )}
                                 </div>
 
                                 {isCollapsed && (
                                     <div className="absolute left-full top-0 pl-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
                                         <div className="bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl py-1 px-1 min-w-max">
-                                            <div className="px-3 py-2 font-bold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800/80 mb-1 whitespace-nowrap text-xs">
-                                                {item.name}
+                                            <div className="px-3 py-2 font-bold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800/80 mb-1 whitespace-nowrap text-xs flex items-center gap-2">
+                                                <span>{item.name}</span>
+                                                {!item.permitted && (
+                                                    <span className="inline-flex items-center gap-1 text-[10px] font-normal text-amber-500">
+                                                        <Lock className="w-3 h-3" /> Restricted
+                                                    </span>
+                                                )}
                                             </div>
                                             {hasChildren && (
                                                 <div className="space-y-0.5">
-                                                    {item.children.map((child) => (
-                                                        <Link
-                                                            key={child.name}
-                                                            href={child.href}
-                                                            className={`block px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
-                                                                pathname === child.href
-                                                                    ? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-300 font-semibold'
-                                                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
-                                                            }`}
-                                                        >
-                                                            {child.name}
-                                                        </Link>
-                                                    ))}
+                                                    {item.children.map((child) =>
+                                                        child.permitted ? (
+                                                            <Link
+                                                                key={child.name}
+                                                                href={child.href}
+                                                                className={`block px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
+                                                                    pathname === child.href
+                                                                        ? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-300 font-semibold'
+                                                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+                                                                }`}
+                                                            >
+                                                                {child.name}
+                                                            </Link>
+                                                        ) : (
+                                                            <div
+                                                                key={child.name}
+                                                                title={child.reason}
+                                                                className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs rounded-lg text-slate-400 dark:text-slate-500 opacity-55 cursor-not-allowed whitespace-nowrap"
+                                                            >
+                                                                <span>{child.name}</span>
+                                                                <Lock className="w-3 h-3" />
+                                                            </div>
+                                                        )
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -272,6 +323,19 @@ export default function AdminLayout({ children }) {
                                     <div className="ml-10 mt-1 space-y-1 animate-in slide-in-from-top-2 duration-200">
                                         {item.children.map((child) => {
                                             const isChildActive = pathname === child.href;
+                                            if (!child.permitted) {
+                                                return (
+                                                    <div
+                                                        key={child.name}
+                                                        title={child.reason}
+                                                        aria-disabled="true"
+                                                        className="flex items-center justify-between py-1.5 px-3 text-xs rounded-lg text-slate-400 dark:text-slate-500 opacity-50 cursor-not-allowed select-none"
+                                                    >
+                                                        <span>{child.name}</span>
+                                                        <Lock className="w-3 h-3 flex-shrink-0" />
+                                                    </div>
+                                                );
+                                            }
                                             return (
                                                 <Link
                                                     key={child.name}

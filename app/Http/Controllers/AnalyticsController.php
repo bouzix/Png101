@@ -53,6 +53,11 @@ class AnalyticsController extends Controller
 
     public function stats(Request $request)
     {
+        $session = \App\Services\TeamService::getCurrentSession($request);
+        if (!\App\Services\TeamService::hasPermission($session, 'view_analytics')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
         try {
             $range = $request->query('range', '7d');
             $deviceFilter = $request->query('device');
@@ -394,6 +399,11 @@ class AnalyticsController extends Controller
 
     public function downloads(Request $request)
     {
+        $session = \App\Services\TeamService::getCurrentSession($request);
+        if (!\App\Services\TeamService::hasPermission($session, 'view_analytics')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
         $range = $request->query('range', '7d');
         $device = $request->query('device');
         $country = $request->query('country');
@@ -455,6 +465,11 @@ class AnalyticsController extends Controller
 
     public function countries(Request $request)
     {
+        $session = \App\Services\TeamService::getCurrentSession($request);
+        if (!\App\Services\TeamService::hasPermission($session, 'view_analytics')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
         $range = $request->query('range', '7d');
         $startDate = AnalyticsService::getRangeStartDate($range);
 

@@ -73,6 +73,8 @@ export default function TeamPage() {
         fromName: 'Png101 Admin',
     });
     const [savingSmtp, setSavingSmtp] = useState(false);
+    const [testEmailTo, setTestEmailTo] = useState('');
+    const [sendingTestEmail, setSendingTestEmail] = useState(false);
 
     // Confirm Delete State
     const [deleteTarget, setDeleteTarget] = useState(null);
@@ -313,6 +315,66 @@ export default function TeamPage() {
         }
     };
 
+    const applyMailpitPreset = () => {
+        setSmtp((prev) => ({
+            ...prev,
+            host: '127.0.0.1',
+            port: 1025,
+            secure: false,
+            user: '',
+            pass: '',
+            fromEmail: prev.fromEmail || 'noreply@png101.local',
+            fromName: prev.fromName || 'Png101 Local',
+        }));
+        if (!testEmailTo) {
+            setTestEmailTo('team-test@png101.local');
+        }
+        toast.info('Mailpit preset loaded (127.0.0.1:1025). Click Save or Send Test Email.');
+    };
+
+    const handleSendTestEmail = async () => {
+        const target = testEmailTo.trim();
+        if (!target) {
+            toast.error('Enter a recipient email address first');
+            return;
+        }
+        setSendingTestEmail(true);
+        try {
+            // Persist current form fields first so unsaved changes (e.g. Mailpit preset) are tested
+            const saveRes = await fetch('/api/admin/team', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'save_smtp',
+                    ...smtp,
+                }),
+            });
+            if (!saveRes.ok) {
+                toast.error('Failed to save SMTP settings before testing');
+                return;
+            }
+
+            const res = await fetch('/api/admin/team', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'test_smtp',
+                    to: target,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                toast.success(data.message || `Test email sent to ${target}`);
+            } else {
+                toast.error(data.error || 'Failed to send test email');
+            }
+        } catch {
+            toast.error('Failed to send test email');
+        } finally {
+            setSendingTestEmail(false);
+        }
+    };
+
     const copyInviteToClipboard = (summary) => {
         const text = `Png101 Team Login Invite\nLogin URL: ${summary.loginUrl}\nEmail: ${summary.email}\nPassword: ${summary.passwordPlain}`;
         navigator.clipboard.writeText(text);
@@ -331,7 +393,7 @@ export default function TeamPage() {
 
     const activeMembersCount = members.filter((m) => m.isActive).length;
     const inactiveMembersCount = members.length - activeMembersCount;
-    const isSmtpConfigured = Boolean(smtp.host && smtp.user);
+    const isSmtpConfigured = Boolean(smtp.host);
 
     return (
         <AdminLayout>
@@ -394,8 +456,12 @@ export default function TeamPage() {
                     />
                     <StatCard
                         title="Email Delivery Engine"
-                        value={isSmtpConfigured ? 'Configured' : 'Test Mode'}
-                        subtitle={isSmtpConfigured ? (smtp.host || 'Production SMTP') : 'Ethereal test mailbox active'}
+                        value={isSmtpConfigured ? 'Configured' : 'Not Configured'}
+                        subtitle={
+                            isSmtpConfigured
+                                ? `${smtp.host}:${smtp.port || 587}${smtp.user ? '' : ' (No Auth / Mailpit)'}`
+                                : 'Manual copy mode until SMTP is saved'
+                        }
                         icon={<Server className="w-6 h-6" />}
                     />
                 </div>
@@ -403,7 +469,7 @@ export default function TeamPage() {
                 {/* Collapsible SMTP Email Configuration Card */}
                 {showSmtp && (
                     <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl animate-in fade-in duration-200">
-                        <div className="p-6 border-b border-card-border flex items-center justify-between">
+                        <div className="p-6 border-b border-card-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div className="flex items-center gap-3">
                                 <div className="p-2.5 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
                                     <Server className="w-5 h-5" />
@@ -411,10 +477,18 @@ export default function TeamPage() {
                                 <div>
                                     <h2 className="text-lg font-bold text-foreground">SMTP Email Server Settings</h2>
                                     <p className="text-xs text-foreground/60">
-                                        Configure your SMTP server to send team invite emails directly to their inbox.
+                                        Configure production SMTP (port 465 SSL / 587 TLS) or local Laragon Mailpit (127.0.0.1:1025, leave user/pass blank).
                                     </p>
                                 </div>
                             </div>
+                            <button
+                                type="button"
+                                onClick={applyMailpitPreset}
+                                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-xs font-bold text-purple-300 cursor-pointer transition-all self-start sm:self-auto"
+                            >
+                                <Sparkles className="w-3.5 h-3.5" />
+                                Use Local Mailpit (127.0.0.1:1025)
+                            </button>
                         </div>
 
                         <form onSubmit={handleSaveSmtp} className="p-6 space-y-4">
@@ -510,21 +584,42 @@ export default function TeamPage() {
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowSmtp(false)}
-                                    className="px-4 py-2.5 rounded-xl border border-card-border text-sm text-foreground/70 hover:text-foreground cursor-pointer transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={savingSmtp}
-                                    className="px-5 py-2.5 rounded-xl bg-primary-glow hover:bg-primary-glow/90 text-white text-sm font-bold shadow-lg shadow-primary-glow/20 cursor-pointer disabled:opacity-50 transition-all"
-                                >
-                                    {savingSmtp ? 'Saving...' : 'Save SMTP Settings'}
-                                </button>
+                            <div className="pt-2 border-t border-card-border/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div className="flex flex-1 items-center gap-2 max-w-md">
+                                    <input
+                                        type="email"
+                                        value={testEmailTo}
+                                        onChange={(e) => setTestEmailTo(e.target.value)}
+                                        placeholder="test@png101.local (Send Test Email)"
+                                        className="flex-1 bg-background border border-card-border rounded-xl px-3.5 py-2 text-xs text-foreground focus:outline-none focus:border-primary-glow"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleSendTestEmail}
+                                        disabled={sendingTestEmail || !smtp.host}
+                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-bold text-emerald-300 cursor-pointer disabled:opacity-50 transition-all whitespace-nowrap"
+                                    >
+                                        <Send className="w-3.5 h-3.5" />
+                                        {sendingTestEmail ? 'Sending...' : 'Send Test'}
+                                    </button>
+                                </div>
+
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowSmtp(false)}
+                                        className="px-4 py-2.5 rounded-xl border border-card-border text-sm text-foreground/70 hover:text-foreground cursor-pointer transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={savingSmtp}
+                                        className="px-5 py-2.5 rounded-xl bg-primary-glow hover:bg-primary-glow/90 text-white text-sm font-bold shadow-lg shadow-primary-glow/20 cursor-pointer disabled:opacity-50 transition-all"
+                                    >
+                                        {savingSmtp ? 'Saving...' : 'Save SMTP Settings'}
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>

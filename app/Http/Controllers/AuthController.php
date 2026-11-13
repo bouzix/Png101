@@ -68,24 +68,7 @@ class AuthController extends Controller
         $member->save();
 
         $perms = is_array($member->permissions) ? $member->permissions : [];
-        $redirectTo = '/admin/dashboard';
-        if (in_array('upload_images', $perms, true)) {
-            $redirectTo = '/admin/dashboard';
-        } elseif (in_array('edit_images', $perms, true) || in_array('delete_images', $perms, true)) {
-            $redirectTo = '/admin/dashboard/files';
-        } elseif (in_array('manage_collections', $perms, true)) {
-            $redirectTo = '/admin/dashboard/collections';
-        } elseif (in_array('view_analytics', $perms, true)) {
-            $redirectTo = '/admin/dashboard/analytics';
-        } elseif (in_array('manage_general_settings', $perms, true)) {
-            $redirectTo = '/admin/dashboard/settings';
-        } elseif (in_array('manage_api_keys', $perms, true)) {
-            $redirectTo = '/admin/dashboard/settings/api-keys';
-        } elseif (in_array('manage_code_injection', $perms, true)) {
-            $redirectTo = '/admin/dashboard/settings/code-injection';
-        } elseif (in_array('manage_data_seo', $perms, true)) {
-            $redirectTo = '/admin/dashboard/settings/data-management';
-        }
+        $redirectTo = '/admin/dashboard/workspace';
 
         return response()->json([
             'success' => true,
