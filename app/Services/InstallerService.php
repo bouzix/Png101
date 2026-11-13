@@ -358,6 +358,7 @@ class InstallerService
 
         // 6. Run database migrations
         try {
+            Schema::defaultStringLength(191);
             Artisan::call('migrate', ['--force' => true]);
             $migrationOutput = trim(Artisan::output());
             $steps[] = [
