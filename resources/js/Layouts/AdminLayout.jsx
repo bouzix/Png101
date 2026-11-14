@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Link, usePage, router } from '@inertiajs/react';
 import { ShieldAlert, Lock } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
+import GlobalUpdateNotifier from '@/components/admin/GlobalUpdateNotifier';
 
 export default function AdminLayout({ children }) {
     const { url } = usePage();
@@ -404,6 +405,7 @@ export default function AdminLayout({ children }) {
             <main className="flex-1 p-8 overflow-y-auto">
                 {isCurrentRoutePermitted ? (
                     <div className="w-full p-6 md:p-8 max-w-[1600px] mx-auto">
+                        <GlobalUpdateNotifier session={session} pathname={pathname} />
                         {children}
                     </div>
                 ) : (

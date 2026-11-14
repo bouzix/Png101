@@ -488,6 +488,17 @@ class InstallerService
 
         $versionChanged = !empty($state['version']) && version_compare($appVersion, (string) $state['version'], '>');
 
+        $versionMeta = [];
+        $versionFile = base_path('version.json');
+        if (is_file($versionFile)) {
+            $decodedMeta = json_decode((string) @file_get_contents($versionFile), true);
+            if (is_array($decodedMeta)) {
+                $versionMeta = $decodedMeta;
+            }
+        }
+
+        $recentCommits = self::getPendingUpdateChanges($state['git_commit'] ?? null, $git['commit'] ?? null);
+
         $dbConnected = false;
         try {
             DB::connection()->getPdo();
@@ -498,6 +509,12 @@ class InstallerService
 
         return [
             'app_version' => $appVersion,
+            'released_at' => $versionMeta['released_at'] ?? null,
+            'release_changes' => array_values(array_filter(
+                is_array($versionMeta['changes'] ?? null) ? $versionMeta['changes'] : [],
+                fn ($line) => is_string($line) && trim($line) !== ''
+            )),
+            'recent_commits' => $recentCommits,
             'installed_version' => $state['version'] ?? $appVersion,
             'installed_at' => $state['installed_at'] ?? null,
             'updated_at' => $state['updated_at'] ?? null,
@@ -516,6 +533,70 @@ class InstallerService
                 : null,
             'vendor_ok' => $reqs['vendor_ok'],
         ];
+    }
+
+    private static function getPendingUpdateChanges(?string $recordedCommit, ?string $headCommit): array
+    {
+        $commits = [];
+
+        if (HostingEnvironment::canRunShell() && is_dir(base_path('.git')) && !empty($headCommit)) {
+            $args = ['log', '-n', '15', '--pretty=format:%h%x09%s%x09%cr'];
+            if (!empty($recordedCommit) && $recordedCommit !== $headCommit && preg_match('/^[0-9a-f]{7,40}$/i', $recordedCommit)) {
+                $args[] = "{$recordedCommit}..HEAD";
+                $res = self::runGitCommand($args);
+                if ($res['exit_code'] !== 0 || trim($res['stdout']) === '') {
+                    $res = self::runGitCommand(['log', '-n', '8', '--pretty=format:%h%x09%s%x09%cr', 'HEAD']);
+                }
+            } else {
+                $res = self::runGitCommand(['log', '-n', '5', '--pretty=format:%h%x09%s%x09%cr', 'HEAD']);
+            }
+
+            if (($res['exit_code'] ?? 1) === 0 && trim((string) ($res['stdout'] ?? '')) !== '') {
+                foreach (explode("\n", trim($res['stdout'])) as $line) {
+                    $parts = explode("\t", $line, 3);
+                    if (!empty($parts[1])) {
+                        $commits[] = [
+                            'hash' => trim($parts[0]),
+                            'message' => trim($parts[1]),
+                            'date' => trim($parts[2] ?? ''),
+                        ];
+                    }
+                }
+                return $commits;
+            }
+        }
+
+        // Pure PHP fallback reading .git/logs/HEAD when shell git is disabled (e.g. cPanel)
+        $reflogPath = base_path('.git/logs/HEAD');
+        if (is_file($reflogPath)) {
+            $lines = @file($reflogPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+            $tail = array_reverse(array_slice($lines, -15));
+            foreach ($tail as $line) {
+                $tabPos = strpos($line, "\t");
+                if ($tabPos === false) {
+                    continue;
+                }
+                $meta = explode(' ', substr($line, 0, $tabPos));
+                $newHash = $meta[1] ?? '';
+                if (!empty($recordedCommit) && $newHash === $recordedCommit) {
+                    break;
+                }
+                $action = trim(substr($line, $tabPos + 1));
+                $message = preg_replace('/^(commit|pull[^:]*|merge[^:]*):\s*/i', '', $action);
+                if ($message !== '' && !str_starts_with(strtolower($action), 'checkout:')) {
+                    $commits[] = [
+                        'hash' => $newHash ? substr($newHash, 0, 7) : '',
+                        'message' => $message,
+                        'date' => '',
+                    ];
+                }
+                if (count($commits) >= 8) {
+                    break;
+                }
+            }
+        }
+
+        return $commits;
     }
 
     public static function getPendingMigrations(): array

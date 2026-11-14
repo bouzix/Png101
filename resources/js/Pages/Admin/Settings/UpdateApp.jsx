@@ -104,6 +104,7 @@ export default function UpdateAppPage() {
             }
             if (res.ok && data.ok) {
                 toast.success(data.message || 'Application updated successfully!');
+                window.dispatchEvent(new Event('png101:update-applied'));
             } else {
                 toast.error(data.message || 'Update failed');
             }

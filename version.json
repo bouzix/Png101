@@ -1,6 +1,12 @@
 {
   "name": "Png101",
   "version": "1.1.0",
-  "released_at": "2026-11-14"
+  "released_at": "2026-11-14",
+  "changes": [
+    "Added mobile-only floating pill bottom navbar with integrated theme toggle",
+    "Added global Scroll-to-Top button across public pages",
+    "Improved image detail responsive layout, collapsible mobile cards, and touch-safe color pickers",
+    "Updated homepage search keywords to top 7-day single words scaled responsively (5/7/8/10)",
+    "Added global Super Admin update notification pill and one-click updater modal"
+  ]
 }
-
