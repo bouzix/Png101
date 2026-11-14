@@ -22,6 +22,7 @@ class PublicController extends Controller
                 'title' => $info['websiteName'],
                 'description' => $info['tagline'],
             ],
+            'popularKeywords' => AnalyticsService::getHomepageTopKeywords(10, 7),
         ]);
     }
 

@@ -5,10 +5,12 @@ namespace App\Services;
 use App\Models\Download;
 use App\Models\ImageView;
 use App\Models\SearchLog;
+use App\Models\Setting;
 use App\Support\HostingEnvironment;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class AnalyticsService
 {
@@ -316,6 +318,102 @@ class AnalyticsService
             ]);
         } catch (\Throwable $e) {
             // Ignore
+        }
+    }
+
+    /**
+     * Get top searched single-word keywords over the last N days, refreshed once per 24h.
+     */
+    public static function getHomepageTopKeywords(int $limit = 10, int $days = 7): array
+    {
+        $limit = max(1, min($limit, 20));
+        $defaults = ['science', 'book', 'stamp', 'chart', 'macbook', 'fist', 'circuit', 'food', 'badge', 'paper'];
+        $cacheKey = 'homepage_top_keywords_7d_v2';
+        $cacheTtlSeconds = 24 * 60 * 60;
+
+        try {
+            $cached = Setting::find($cacheKey);
+            if ($cached) {
+                $parsed = json_decode((string) $cached->value, true);
+                if (
+                    is_array($parsed)
+                    && !empty($parsed['updatedAt'])
+                    && isset($parsed['keywords'])
+                    && is_array($parsed['keywords'])
+                ) {
+                    $ageSeconds = time() - (int) floor(((int) $parsed['updatedAt']) / 1000);
+                    if ($ageSeconds >= 0 && $ageSeconds < $cacheTtlSeconds) {
+                        $cachedKeywords = array_values(array_filter($parsed['keywords'], fn ($item) => is_string($item) && $item !== ''));
+                        if (!empty($cachedKeywords)) {
+                            return array_slice($cachedKeywords, 0, $limit);
+                        }
+                    }
+                }
+            }
+
+            $rows = SearchLog::query()
+                ->where('createdAt', '>=', Carbon::now()->subDays($days))
+                ->select(
+                    'query',
+                    DB::raw('MAX(resultsCount) as maxResults'),
+                    DB::raw('COUNT(*) as searchCount')
+                )
+                ->groupBy('query')
+                ->orderByDesc('searchCount')
+                ->limit(250)
+                ->get();
+
+            $withResults = [];
+            $withoutResults = [];
+            $seen = [];
+
+            foreach ($rows as $row) {
+                $word = mb_strtolower(trim((string) ($row->query ?? '')), 'UTF-8');
+                if ($word === '' || isset($seen[$word])) {
+                    continue;
+                }
+                if (!preg_match('/^[\p{L}\p{N}-]{2,40}$/u', $word)) {
+                    continue;
+                }
+                $seen[$word] = true;
+                if ((int) ($row->maxResults ?? 0) > 0) {
+                    $withResults[] = $word;
+                } else {
+                    $withoutResults[] = $word;
+                }
+            }
+
+            $keywords = array_slice($withResults, 0, $limit);
+            foreach ($withoutResults as $word) {
+                if (count($keywords) >= $limit) {
+                    break;
+                }
+                $keywords[] = $word;
+            }
+            foreach ($defaults as $word) {
+                if (count($keywords) >= $limit) {
+                    break;
+                }
+                if (!in_array($word, $keywords, true)) {
+                    $keywords[] = $word;
+                }
+            }
+
+            $keywords = array_slice($keywords, 0, $limit);
+
+            Setting::updateOrCreate(
+                ['key' => $cacheKey],
+                [
+                    'value' => json_encode([
+                        'updatedAt' => (int) round(microtime(true) * 1000),
+                        'keywords' => $keywords,
+                    ]),
+                ]
+            );
+
+            return $keywords;
+        } catch (\Throwable $e) {
+            return array_slice($defaults, 0, $limit);
         }
     }
 }

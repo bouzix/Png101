@@ -71,7 +71,7 @@ export default function ImageDetail({
     const handleStartDrag = (e, type) => {
         const target = e.target;
         if (target.closest('input, button, select, .react-colorful, [data-no-drag]')) return;
-        e.preventDefault();
+        if (e.cancelable) e.preventDefault();
         const currentOffset = type === 'custom' ? customPickerOffset : gradientPickerOffset;
         dragInfoRef.current = {
             active: type,
@@ -86,6 +86,7 @@ export default function ImageDetail({
         const handlePointerMove = (e) => {
             const { active, startX, startY, initialOffsetX, initialOffsetY } = dragInfoRef.current;
             if (!active) return;
+            if (e.cancelable) e.preventDefault();
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
             if (active === 'custom') {
@@ -94,16 +95,81 @@ export default function ImageDetail({
                 setGradientPickerOffset({ x: initialOffsetX + dx, y: initialOffsetY + dy });
             }
         };
-        const handlePointerUp = () => {
+        const handlePointerEnd = () => {
             dragInfoRef.current.active = null;
         };
-        window.addEventListener('pointermove', handlePointerMove);
-        window.addEventListener('pointerup', handlePointerUp);
+        window.addEventListener('pointermove', handlePointerMove, { passive: false });
+        window.addEventListener('pointerup', handlePointerEnd);
+        window.addEventListener('pointercancel', handlePointerEnd);
         return () => {
             window.removeEventListener('pointermove', handlePointerMove);
-            window.removeEventListener('pointerup', handlePointerUp);
+            window.removeEventListener('pointerup', handlePointerEnd);
+            window.removeEventListener('pointercancel', handlePointerEnd);
         };
     }, []);
+
+    // Lock horizontal & vertical page scrolling on touch screens while a color picker is open
+    useEffect(() => {
+        if (!showColorPicker && !showGradientPicker) return undefined;
+
+        const isTouchDevice =
+            window.matchMedia('(pointer: coarse)').matches ||
+            'ontouchstart' in window ||
+            navigator.maxTouchPoints > 0;
+        if (!isTouchDevice) return undefined;
+
+        const html = document.documentElement;
+        const body = document.body;
+        const prevStyles = {
+            htmlOverflow: html.style.overflow,
+            htmlOverflowX: html.style.overflowX,
+            htmlOverflowY: html.style.overflowY,
+            htmlTouchAction: html.style.touchAction,
+            htmlOverscrollBehavior: html.style.overscrollBehavior,
+            bodyOverflow: body.style.overflow,
+            bodyOverflowX: body.style.overflowX,
+            bodyOverflowY: body.style.overflowY,
+            bodyTouchAction: body.style.touchAction,
+            bodyOverscrollBehavior: body.style.overscrollBehavior,
+        };
+
+        html.style.overflow = 'hidden';
+        html.style.overflowX = 'hidden';
+        html.style.overflowY = 'hidden';
+        html.style.touchAction = 'none';
+        html.style.overscrollBehavior = 'none';
+
+        body.style.overflow = 'hidden';
+        body.style.overflowX = 'hidden';
+        body.style.overflowY = 'hidden';
+        body.style.touchAction = 'none';
+        body.style.overscrollBehavior = 'none';
+
+        const preventTouchScroll = (e) => {
+            if (e.target instanceof Element && e.target.closest('input[type="range"]')) {
+                return;
+            }
+            if (e.cancelable) {
+                e.preventDefault();
+            }
+        };
+
+        document.addEventListener('touchmove', preventTouchScroll, { passive: false });
+
+        return () => {
+            document.removeEventListener('touchmove', preventTouchScroll);
+            html.style.overflow = prevStyles.htmlOverflow;
+            html.style.overflowX = prevStyles.htmlOverflowX;
+            html.style.overflowY = prevStyles.htmlOverflowY;
+            html.style.touchAction = prevStyles.htmlTouchAction;
+            html.style.overscrollBehavior = prevStyles.htmlOverscrollBehavior;
+            body.style.overflow = prevStyles.bodyOverflow;
+            body.style.overflowX = prevStyles.bodyOverflowX;
+            body.style.overflowY = prevStyles.bodyOverflowY;
+            body.style.touchAction = prevStyles.bodyTouchAction;
+            body.style.overscrollBehavior = prevStyles.bodyOverscrollBehavior;
+        };
+    }, [showColorPicker, showGradientPicker]);
 
     useEffect(() => {
         const handleClickOutside = (e) => {
@@ -114,8 +180,8 @@ export default function ImageDetail({
                 setShowGradientPicker(false);
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener('pointerdown', handleClickOutside);
+        return () => document.removeEventListener('pointerdown', handleClickOutside);
     }, []);
 
     const [isClient, setIsClient] = useState(false);
@@ -582,6 +648,7 @@ export default function ImageDetail({
                                         type="button"
                                         onClick={() => {
                                             setBgMode('custom');
+                                            setShowGradientPicker(false);
                                             setShowColorPicker((prev) => !prev);
                                         }}
                                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -601,28 +668,42 @@ export default function ImageDetail({
                                         <div
                                             onPointerDown={(e) => handleStartDrag(e, 'custom')}
                                             style={{ transform: `translate(${customPickerOffset.x}px, ${customPickerOffset.y}px)` }}
-                                            className="absolute right-0 bottom-full mb-3 z-50 p-3.5 bg-card-bg border border-card-border rounded-2xl shadow-2xl flex flex-col items-center gap-3 cursor-move select-none"
+                                            className="absolute right-0 bottom-full mb-3 z-50 p-3.5 bg-card-bg border border-card-border rounded-2xl shadow-2xl flex flex-col items-center gap-3 cursor-move select-none touch-none max-w-[calc(100vw-2rem)]"
                                         >
                                             <div className="flex items-center justify-between w-full pb-1 border-b border-card-border/50 text-[11px] font-bold text-foreground/50">
                                                 <div className="flex items-center gap-1.5 pointer-events-none">
                                                     <GripHorizontal className="w-3.5 h-3.5 text-foreground/40" />
                                                     <span>Custom Color</span>
                                                 </div>
-                                                {(customPickerOffset.x !== 0 || customPickerOffset.y !== 0) && (
+                                                <div className="flex items-center gap-2">
+                                                    {(customPickerOffset.x !== 0 || customPickerOffset.y !== 0) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setCustomPickerOffset({ x: 0, y: 0 });
+                                                            }}
+                                                            className="text-[10px] text-foreground/40 hover:text-foreground hover:underline cursor-pointer"
+                                                        >
+                                                            Reset
+                                                        </button>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            setCustomPickerOffset({ x: 0, y: 0 });
+                                                            setShowColorPicker(false);
                                                         }}
-                                                        className="text-[10px] text-foreground/40 hover:text-foreground hover:underline cursor-pointer"
+                                                        className="p-0.5 rounded-md text-foreground/50 hover:text-foreground hover:bg-card-header-bg transition-colors cursor-pointer"
+                                                        aria-label="Close color picker"
+                                                        title="Close"
                                                     >
-                                                        Reset
+                                                        <X className="w-3.5 h-3.5" />
                                                     </button>
-                                                )}
+                                                </div>
                                             </div>
 
-                                            <div className="cursor-default" data-no-drag>
+                                            <div className="cursor-default touch-none [&_.react-colorful]:touch-none" data-no-drag>
                                                 <HexColorPicker
                                                     color={customBgColor}
                                                     onChange={(newColor) => {
@@ -660,6 +741,7 @@ export default function ImageDetail({
                                         type="button"
                                         onClick={() => {
                                             setBgMode('gradient');
+                                            setShowColorPicker(false);
                                             setShowGradientPicker((prev) => !prev);
                                         }}
                                         className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
@@ -679,25 +761,39 @@ export default function ImageDetail({
                                         <div
                                             onPointerDown={(e) => handleStartDrag(e, 'gradient')}
                                             style={{ transform: `translate(${gradientPickerOffset.x}px, ${gradientPickerOffset.y}px)` }}
-                                            className="absolute right-0 bottom-full mb-3 z-50 p-4 bg-card-bg border border-card-border rounded-2xl shadow-2xl flex flex-col gap-3 w-72 sm:w-80 cursor-move select-none"
+                                            className="absolute right-0 bottom-full mb-3 z-50 p-4 bg-card-bg border border-card-border rounded-2xl shadow-2xl flex flex-col gap-3 w-72 sm:w-80 max-w-[calc(100vw-2rem)] cursor-move select-none touch-none"
                                         >
                                             <div className="flex items-center justify-between w-full pb-1 border-b border-card-border/50 text-[11px] font-bold text-foreground/50">
                                                 <div className="flex items-center gap-1.5 pointer-events-none">
                                                     <GripHorizontal className="w-3.5 h-3.5 text-foreground/40" />
                                                     <span>Gradient Builder</span>
                                                 </div>
-                                                {(gradientPickerOffset.x !== 0 || gradientPickerOffset.y !== 0) && (
+                                                <div className="flex items-center gap-2">
+                                                    {(gradientPickerOffset.x !== 0 || gradientPickerOffset.y !== 0) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setGradientPickerOffset({ x: 0, y: 0 });
+                                                            }}
+                                                            className="text-[10px] text-foreground/40 hover:text-foreground hover:underline cursor-pointer"
+                                                        >
+                                                            Reset
+                                                        </button>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            setGradientPickerOffset({ x: 0, y: 0 });
+                                                            setShowGradientPicker(false);
                                                         }}
-                                                        className="text-[10px] text-foreground/40 hover:text-foreground hover:underline cursor-pointer"
+                                                        className="p-0.5 rounded-md text-foreground/50 hover:text-foreground hover:bg-card-header-bg transition-colors cursor-pointer"
+                                                        aria-label="Close gradient builder"
+                                                        title="Close"
                                                     >
-                                                        Reset
+                                                        <X className="w-3.5 h-3.5" />
                                                     </button>
-                                                )}
+                                                </div>
                                             </div>
 
                                             <div
@@ -732,7 +828,7 @@ export default function ImageDetail({
                                                 </button>
                                             </div>
 
-                                            <div className="flex justify-center" data-no-drag>
+                                            <div className="flex justify-center touch-none [&_.react-colorful]:touch-none" data-no-drag>
                                                 <HexColorPicker
                                                     color={activeGradientStop === 'from' ? gradientFrom : gradientTo}
                                                     onChange={(newColor) => {
@@ -785,7 +881,7 @@ export default function ImageDetail({
                                                             setGradientAngle(Number(e.target.value));
                                                             setBgMode('gradient');
                                                         }}
-                                                        className="flex-1 accent-blue-500 cursor-pointer"
+                                                        className="flex-1 accent-blue-500 cursor-pointer touch-none"
                                                     />
                                                     <span className="font-mono text-foreground/60 w-8 text-right">{gradientAngle}&deg;</span>
                                                 </div>
