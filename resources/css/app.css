@@ -76,6 +76,11 @@ input[type="number"] {
   --font-mono: var(--font-geist-mono);
 }
 
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -499,4 +504,148 @@ button:disabled {
 
 .animate-captcha-ring {
   animation: captcha-ring-burst 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Mobile Floating Pill Navigation */
+.mobile-pill-nav {
+  width: min(350px, calc(100vw - 24px));
+  height: 70px;
+  border-radius: 40px;
+  background: rgba(18, 28, 50, 0.94);
+  border: 1px solid rgba(96, 165, 250, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.65), 0 0 16px rgba(59, 130, 246, 0.14);
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.light .mobile-pill-nav {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(226, 232, 240, 0.95);
+  box-shadow: 0 15px 30px rgba(15, 23, 42, 0.14), 0 2px 8px rgba(37, 99, 235, 0.08);
+}
+
+.mobile-pill-nav ul {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.mobile-pill-nav ul li {
+  position: relative;
+  list-style: none;
+  flex: 1 1 0%;
+  height: 70px;
+  z-index: 1;
+}
+
+.mobile-pill-nav ul li > a,
+.mobile-pill-nav ul li > button {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  color: rgba(226, 232, 240, 0.72);
+  font-weight: 500;
+  background: transparent;
+  border: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.light .mobile-pill-nav ul li > a,
+.light .mobile-pill-nav ul li > button {
+  color: #475569;
+}
+
+.mobile-pill-nav ul li > a .icon,
+.mobile-pill-nav ul li > button .icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.35s ease, transform 0.35s ease;
+}
+
+.mobile-pill-nav ul li.active > a .icon,
+.mobile-pill-nav ul li.active > button .icon {
+  color: #ffffff;
+  transform: scale(1.08);
+}
+
+.mobile-pill-nav ul li .title {
+  position: absolute;
+  top: -46px;
+  left: 50%;
+  transform: translate(-50%, 10px);
+  white-space: nowrap;
+  background: #0f172a;
+  color: #f8fafc;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
+  opacity: 0;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.light .mobile-pill-nav ul li .title {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: rgba(226, 232, 240, 0.9);
+  box-shadow: 0 5px 15px rgba(15, 23, 42, 0.12);
+}
+
+.mobile-pill-nav ul li:hover .title,
+.mobile-pill-nav ul li:focus-visible .title {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+.mobile-pill-nav ul li .title::before {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border-right: inherit;
+  border-bottom: inherit;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  border-radius: 2px;
+}
+
+.mobile-pill-nav ul .indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20%;
+  height: 70px;
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.mobile-pill-nav ul .indicator::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45);
+  transition: background 0.35s ease, box-shadow 0.35s ease;
 }

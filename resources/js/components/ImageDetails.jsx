@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
+import { ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
@@ -10,6 +11,13 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
     const [height, setHeight] = useState(originalHeight);
     const [isLocked, setIsLocked] = useState(true);
     const [aspectRatio, setAspectRatio] = useState(originalWidth / originalHeight);
+    const [infoOpen, setInfoOpen] = useState(false);
+    const [keywordsOpen, setKeywordsOpen] = useState(false);
+
+    const toggleMobileOnly = (setter) => {
+        if (typeof window !== 'undefined' && window.innerWidth >= 640) return;
+        setter((prev) => !prev);
+    };
 
     useEffect(() => {
         if (image.width && image.height) {
@@ -70,16 +78,30 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
     };
 
     return (
-        <div className="flex flex-col gap-6 w-full max-w-sm">
-            {/* PNG Info Card */}
-            <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-lg">
-                <div className="bg-slate-100 dark:bg-card-header-bg px-4 py-3 border-b border-card-border flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600 dark:text-blue-400">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
-                    </svg>
-                    <span className="font-semibold text-foreground text-sm">PNG info</span>
-                </div>
-                <div className="p-4 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-6 w-full max-w-sm sm:max-w-none lg:max-w-sm">
+            {/* PNG Info Card (Collapsed by default on < sm portrait phones) */}
+            <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-lg flex flex-col self-start sm:self-stretch">
+                <button
+                    type="button"
+                    onClick={() => toggleMobileOnly(setInfoOpen)}
+                    aria-expanded={infoOpen}
+                    className={`w-full bg-slate-100 dark:bg-card-header-bg px-4 py-3 ${
+                        infoOpen ? 'border-b border-card-border' : 'border-b-0 sm:border-b sm:border-card-border'
+                    } flex items-center justify-between gap-2 text-left cursor-pointer sm:cursor-default`}
+                >
+                    <span className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600 dark:text-blue-400">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                        </svg>
+                        <span className="font-semibold text-foreground text-sm">PNG info</span>
+                    </span>
+                    <ChevronDown
+                        className={`w-4 h-4 text-foreground/60 transition-transform duration-200 sm:hidden ${
+                            infoOpen ? 'rotate-180' : ''
+                        }`}
+                    />
+                </button>
+                <div className={`${infoOpen ? 'block' : 'hidden'} sm:block p-4 space-y-4`}>
                     <div className="flex justify-between items-center text-sm">
                         <div className="flex items-center gap-2 text-slate-400">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 ">
@@ -115,17 +137,18 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
             </div>
 
             {/* Resize PNG Card */}
-            <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-lg">
+            <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-lg flex flex-col">
                 <div className="bg-slate-100 dark:bg-card-header-bg px-4 py-3 border-b border-card-border flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600 dark:text-blue-400">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15" />
                     </svg>
                     <span className="font-semibold text-foreground text-sm">Resize PNG</span>
                 </div>
-                <div className="p-4 space-y-4">
-                    <div className="flex items-center gap-2">
+                <div className="p-4 flex-1 flex flex-col justify-between gap-4">
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2">
                         {/* Width Input Box with Branded Steppers */}
-                        <div className="relative flex-1 flex items-center bg-input-bg border border-input-border rounded-lg overflow-hidden focus-within:border-blue-500 transition-colors">
+                        <div className="relative flex-1 min-w-0 flex items-center bg-input-bg border border-input-border rounded-lg overflow-hidden focus-within:border-blue-500 transition-colors">
                             <input
                                 type="number"
                                 value={width}
@@ -179,7 +202,7 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
                         </button>
 
                         {/* Height Input Box with Branded Steppers */}
-                        <div className="relative flex-1 flex items-center bg-input-bg border border-input-border rounded-lg overflow-hidden focus-within:border-blue-500 transition-colors">
+                        <div className="relative flex-1 min-w-0 flex items-center bg-input-bg border border-input-border rounded-lg overflow-hidden focus-within:border-blue-500 transition-colors">
                             <input
                                 type="number"
                                 value={height}
@@ -224,6 +247,7 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
                             <span>Warning: Resizing larger than original ({originalWidth}x{originalHeight}) may reduce image quality.</span>
                         </div>
                     )}
+                    </div>
 
                     <button
                         type="button"
@@ -237,7 +261,7 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
 
             {/* Included in Collections Card */}
             {collections && collections.length > 0 && (
-                <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-lg">
+                <div className="sm:col-span-2 lg:col-span-1 bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-lg">
                     <div className="bg-slate-100 dark:bg-card-header-bg px-4 py-3 border-b border-card-border flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600 dark:text-blue-400">
@@ -277,15 +301,29 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
                 </div>
             )}
 
-            {/* PNG Keywords Card */}
-            <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-lg">
-                <div className="bg-slate-100 dark:bg-card-header-bg px-4 py-3 border-b border-card-border flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600 dark:text-blue-400">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                    </svg>
-                    <span className="font-semibold text-foreground text-sm">PNG keywords</span>
-                </div>
-                <div className="p-4">
+            {/* PNG Keywords Card (Collapsed by default on < sm portrait phones) */}
+            <div className="sm:col-span-2 lg:col-span-1 bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-lg">
+                <button
+                    type="button"
+                    onClick={() => toggleMobileOnly(setKeywordsOpen)}
+                    aria-expanded={keywordsOpen}
+                    className={`w-full bg-slate-100 dark:bg-card-header-bg px-4 py-3 ${
+                        keywordsOpen ? 'border-b border-card-border' : 'border-b-0 sm:border-b sm:border-card-border'
+                    } flex items-center justify-between gap-2 text-left cursor-pointer sm:cursor-default`}
+                >
+                    <span className="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600 dark:text-blue-400">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                        </svg>
+                        <span className="font-semibold text-foreground text-sm">PNG keywords</span>
+                    </span>
+                    <ChevronDown
+                        className={`w-4 h-4 text-foreground/60 transition-transform duration-200 sm:hidden ${
+                            keywordsOpen ? 'rotate-180' : ''
+                        }`}
+                    />
+                </button>
+                <div className={`${keywordsOpen ? 'block' : 'hidden'} sm:block p-4`}>
                     <div className="flex flex-wrap gap-2">
                         {image.tags && image.tags.length > 0 ? (
                             image.tags.map((tag, index) => (

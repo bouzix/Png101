@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createInertiaApp } from '@inertiajs/react';
+import { createInertiaApp, router } from '@inertiajs/react';
 import { Toaster } from 'sonner';
 import Footer from './components/Footer';
+import MobileBottomNav from './components/MobileBottomNav';
+import ScrollToTopButton from './components/ScrollToTopButton';
 import { UploadManagerProvider, FloatingUploadTracker } from './components/admin/UploadManager';
 
 createInertiaApp({
@@ -19,11 +21,21 @@ createInertiaApp({
                 companyName: 'Png101',
             };
             const initialUploadLimits = propsObj.initialPage?.props?.uploadLimits || null;
-            const url = propsObj.initialPage?.url || '';
-            const hideFooter =
-                url.startsWith('/admin') ||
-                url.startsWith('/team') ||
-                url === '/maintenance';
+            const [currentUrl, setCurrentUrl] = useState(
+                () => propsObj.initialPage?.url || (typeof window !== 'undefined' ? window.location.pathname : '/')
+            );
+
+            useEffect(() => {
+                return router.on('navigate', (event) => {
+                    const nextUrl = event?.detail?.page?.url || window.location.pathname;
+                    setCurrentUrl(nextUrl);
+                });
+            }, []);
+
+            const isPublicFrontend =
+                !currentUrl.startsWith('/admin') &&
+                !currentUrl.startsWith('/team') &&
+                currentUrl !== '/maintenance';
 
             return (
                 <UploadManagerProvider initialUploadLimits={initialUploadLimits}>
@@ -31,7 +43,9 @@ createInertiaApp({
                         <div className="flex-1 flex flex-col">
                             <App {...propsObj} />
                         </div>
-                        {!hideFooter && <Footer info={websiteInfo} currentUrl={url} />}
+                        {isPublicFrontend && <Footer info={websiteInfo} currentUrl={currentUrl} />}
+                        {isPublicFrontend && <ScrollToTopButton currentPath={currentUrl} />}
+                        {isPublicFrontend && <MobileBottomNav currentPath={currentUrl} />}
                         <FloatingUploadTracker />
                         <Toaster position="top-right" richColors />
                     </div>

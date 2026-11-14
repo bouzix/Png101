@@ -43,7 +43,7 @@ const Header = ({
 
     return (
         <header
-            className={`site-header ${containerClasses} backdrop-blur-xl transition-colors duration-200`}
+            className={`site-header hidden md:block ${containerClasses} backdrop-blur-xl transition-colors duration-200`}
         >
             <div className="w-full px-6 sm:px-10 md:px-16 py-2.5 sm:py-3 flex items-center justify-between gap-3 sm:gap-6">
                 {/* Brand / Logo */}

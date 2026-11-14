@@ -25,7 +25,7 @@ export default function Footer({ info = {}, currentUrl = '' }) {
     const siteName = info.websiteName || 'Png101';
 
     return (
-        <footer className="mt-auto border-t border-card-border bg-card-bg/80 backdrop-blur-md text-foreground">
+        <footer className="mt-auto border-t border-card-border bg-card-bg/80 backdrop-blur-md text-foreground pb-24 md:pb-0">
             <div className="w-full px-6 sm:px-10 md:px-16 py-12">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b border-card-border">
                     {/* Brand Column */}

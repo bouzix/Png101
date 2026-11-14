@@ -10,8 +10,8 @@ const Hero = ({ siteName }) => {
 
     return (
         <div id="home-hero" className="relative flex flex-col items-center justify-center py-20 px-6 sm:px-10 md:px-16 bg-background">
-            {/* Theme Toggle in Top Right of Hero */}
-            <div className="absolute top-5 right-6 sm:top-6 sm:right-10 md:right-16 z-20">
+            {/* Theme Toggle in Top Right of Hero (Desktop/Tablet; Mobile uses bottom pill menu) */}
+            <div className="hidden md:block absolute top-5 right-6 sm:top-6 sm:right-10 md:right-16 z-20">
                 <ThemeToggle />
             </div>
 

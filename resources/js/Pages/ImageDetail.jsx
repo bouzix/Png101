@@ -500,7 +500,7 @@ export default function ImageDetail({
                 <div className="flex flex-col lg:flex-row gap-8 justify-between items-start">
                     {/* Left Column */}
                     <div className="flex-1 w-full flex flex-col gap-6">
-                        <div className="bg-card-bg border border-slate-300/40 rounded-2xl p-6 sm:p-10 flex items-center justify-center relative overflow-hidden shadow-2xl min-h-[500px]">
+                        <div className="bg-card-bg border border-slate-300/40 rounded-2xl p-6 sm:p-10 flex items-center justify-center relative overflow-hidden shadow-2xl sm:min-h-[500px]">
                             {bgMode === 'checker' && (
                                 <div className="absolute inset-0 bg-white z-0 pointer-events-none" />
                             )}
@@ -537,10 +537,10 @@ export default function ImageDetail({
                                     alt={image.altText || imageTitle}
                                     draggable={false}
                                     onContextMenu={(e) => e.preventDefault()}
-                                    className="relative z-10 max-w-full max-h-[600px] object-contain select-none"
+                                    className="relative z-10 max-w-full max-h-[360px] sm:max-h-[600px] object-contain select-none"
                                 />
                             ) : (
-                                <div className="relative z-10 w-full h-[400px] flex items-center justify-center">
+                                <div className="relative z-10 w-full h-[220px] sm:h-[400px] flex items-center justify-center">
                                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
                                 </div>
                             )}
@@ -886,7 +886,7 @@ export default function ImageDetail({
                     </div>
 
                     {/* Right Column: Sidebar */}
-                    <div className="w-full lg:w-auto flex justify-center lg:block">
+                    <div className="w-full lg:w-auto flex justify-center lg:block lg:shrink-0">
                         <ImageDetails
                             image={image}
                             onResizeApply={handleResizeApply}
