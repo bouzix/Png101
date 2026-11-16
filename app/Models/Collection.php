@@ -17,6 +17,9 @@ class Collection extends Model
 
     protected $fillable = [
         'id', 'name', 'slug', 'description', 'coverImageId', 'coverImagePath',
+        'heroImagePath', 'heroBgColor', 'heroTextColor',
+        'cardBgImagePath', 'cardBgColor', 'cardTextColor',
+        'trendingCardImagePath',
         'type', 'tagRules', 'ruleMatchMode', 'isFeatured', 'status',
         'order', 'viewsCount', 'downloadsCount',
     ];

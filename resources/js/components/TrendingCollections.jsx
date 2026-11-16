@@ -1,23 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import { Layers, ArrowRight, FolderHeart } from 'lucide-react';
+import CollectionCarouselSlider, {
+    DEFAULT_TRENDING_SLIDER_CONFIG,
+} from '@/components/collections/CollectionCarouselSlider';
 
 export default function TrendingCollections() {
-    const [collections, setCollections] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const { props } = usePage();
+    const sliderConfig = {
+        ...DEFAULT_TRENDING_SLIDER_CONFIG,
+        ...(props?.trendingSliderConfig || {}),
+    };
+
+    const maxItems = Math.max(2, Number(sliderConfig.maxTotalItems) || 12);
+    const hasInitialCollections = Array.isArray(props?.trendingCollections);
+
+    const [collections, setCollections] = useState(() =>
+        hasInitialCollections ? props.trendingCollections.slice(0, maxItems) : []
+    );
+    const [loading, setLoading] = useState(!hasInitialCollections);
 
     useEffect(() => {
-        fetch('/api/collections?sort=trending&days=7&limit=3')
+        if (hasInitialCollections) {
+            setCollections(props.trendingCollections.slice(0, maxItems));
+            setLoading(false);
+            return;
+        }
+
+        fetch(`/api/collections?sort=trending&days=7&limit=${maxItems}`)
             .then((res) => res.json())
             .then((data) => {
                 if (Array.isArray(data) && data.length > 0) {
-                    setCollections(data.slice(0, 3));
+                    setCollections(data.slice(0, maxItems));
                 } else {
-                    fetch('/api/collections?limit=3')
+                    fetch(`/api/collections?limit=${maxItems}`)
                         .then((r) => r.json())
                         .then((d) => {
                             if (Array.isArray(d)) {
-                                setCollections(d.slice(0, 3));
+                                setCollections(d.slice(0, maxItems));
                             }
                         })
                         .catch(() => {});
@@ -25,7 +45,25 @@ export default function TrendingCollections() {
             })
             .catch(() => {})
             .finally(() => setLoading(false));
-    }, []);
+    }, [hasInitialCollections, maxItems, props?.trendingCollections]);
+
+    if (sliderConfig.enabled === false) {
+        return null;
+    }
+
+    if (!loading && collections.length > 0) {
+        return (
+            <section>
+                <CollectionCarouselSlider
+                    collections={collections}
+                    sliderConfig={sliderConfig}
+                    variant="trending"
+                />
+            </section>
+        );
+    }
+
+    const skelCount = Math.max(1, Math.min(6, Number(sliderConfig.cardsDesktop) || 4));
 
     return (
         <section className="space-y-6">
@@ -53,98 +91,26 @@ export default function TrendingCollections() {
             </div>
 
             {loading ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {[1, 2, 3].map((i) => (
+                <div className="flex flex-nowrap gap-6 overflow-hidden">
+                    {Array.from({ length: skelCount }).map((_, i) => (
                         <div
                             key={i}
-                            className="rounded-2xl border border-card-border bg-card-bg overflow-hidden animate-pulse"
+                            style={{
+                                width: `calc((100% - ${(skelCount - 1) * 24}px) / ${skelCount})`,
+                            }}
+                            className="shrink-0 flex flex-col animate-pulse"
                         >
-                            <div className="h-44 bg-foreground/5 border-b border-card-border p-3 grid grid-cols-2 gap-2">
+                            <div className="aspect-square w-full rounded-2xl border border-card-border bg-card-bg p-3 grid grid-cols-2 grid-rows-2 gap-2">
                                 <div className="rounded-xl bg-foreground/10" />
                                 <div className="rounded-xl bg-foreground/10" />
                                 <div className="rounded-xl bg-foreground/10" />
                                 <div className="rounded-xl bg-foreground/10" />
                             </div>
-                            <div className="p-4 space-y-3">
-                                <div className="h-4 w-3/4 bg-foreground/10 rounded" />
-                                <div className="h-3 w-full bg-foreground/5 rounded" />
-                                <div className="h-3 w-1/2 bg-foreground/5 rounded" />
+                            <div className="mt-2.5 px-1 flex items-center justify-between gap-2">
+                                <div className="h-4 w-2/3 bg-foreground/10 rounded" />
+                                <div className="h-4 w-4 bg-foreground/10 rounded" />
                             </div>
                         </div>
-                    ))}
-                </div>
-            ) : collections.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {collections.map((col) => (
-                        <Link
-                            key={col.id}
-                            href={`/collections/${col.slug}`}
-                            className="group rounded-2xl border border-card-border bg-card-bg overflow-hidden shadow-sm hover:shadow-xl hover:border-blue-500/40 transition-all duration-300 flex flex-col hover:-translate-y-1"
-                        >
-                            <div
-                                className="relative h-44 w-full bg-foreground/[0.02] border-b border-card-border overflow-hidden p-3"
-                                style={{
-                                    backgroundImage:
-                                        'linear-gradient(45deg, #80808012 25%, transparent 25%), linear-gradient(-45deg, #80808012 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #80808012 75%), linear-gradient(-45deg, transparent 75%, #80808012 75%)',
-                                    backgroundSize: '12px 12px',
-                                    backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0px',
-                                }}
-                            >
-                                {col.previewImages && col.previewImages.length > 0 ? (
-                                    <div className="h-full w-full grid grid-cols-2 gap-2">
-                                        {col.previewImages.slice(0, 4).map((img, idx) => (
-                                            <div
-                                                key={img.id || idx}
-                                                className="relative h-full w-full rounded-xl bg-card-bg/70 backdrop-blur-sm border border-card-border/60 p-2 flex items-center justify-center overflow-hidden"
-                                            >
-                                                <img
-                                                    src={img.path}
-                                                    alt=""
-                                                    className="max-h-full max-w-full object-contain pointer-events-none group-hover:scale-105 transition-transform"
-                                                />
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : col.coverImagePath ? (
-                                    <div className="h-full w-full flex items-center justify-center p-3">
-                                        <img
-                                            src={col.coverImagePath}
-                                            alt={col.name}
-                                            className="max-h-full max-w-full object-contain pointer-events-none group-hover:scale-105 transition-transform"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="h-full w-full flex flex-col items-center justify-center text-foreground/30">
-                                        <Layers className="w-8 h-8 mb-1" />
-                                        <span className="text-[11px]">Collection</span>
-                                    </div>
-                                )}
-
-                                <div className="absolute bottom-3 right-3">
-                                    <span className="px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-white text-[10px] font-bold shadow-md">
-                                        {col.imageCount} PNG{col.imageCount === 1 ? '' : 's'}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div className="p-4 flex-1 flex flex-col justify-between space-y-2">
-                                <div>
-                                    <h3 className="text-sm font-bold text-foreground group-hover:text-blue-500 transition-colors line-clamp-1">
-                                        {col.name}
-                                    </h3>
-                                    {col.description && (
-                                        <p className="text-xs text-foreground/60 mt-1 line-clamp-2 leading-relaxed">
-                                            {col.description}
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="pt-2 flex items-center justify-between text-xs font-semibold text-blue-500">
-                                    <span>Explore Pack</span>
-                                    <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-1 transition-transform" />
-                                </div>
-                            </div>
-                        </Link>
                     ))}
                 </div>
             ) : (

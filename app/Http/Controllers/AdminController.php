@@ -8,9 +8,11 @@ use App\Models\SearchLog;
 use App\Models\Setting;
 use App\Services\CaptchaService;
 use App\Services\CodeInjectionService;
+use App\Services\ConverterToolsService;
 use App\Services\ErrorPagesService;
 use App\Services\InstallerService;
 use App\Services\SeoGeneratorService;
+use App\Services\SliderSettingsService;
 use App\Services\SystemHealthService;
 use App\Services\TeamService;
 use App\Services\TrashService;
@@ -20,6 +22,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -169,12 +173,57 @@ class AdminController extends Controller
         return Inertia::render('Admin/Settings/UpdateApp');
     }
 
+    public function tools(Request $request): Response
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (($session['role'] ?? '') !== 'super_admin') {
+            return Inertia::render('Errors/Forbidden');
+        }
+        return Inertia::render('Admin/Tools');
+    }
+
     public function captchaSettings(Request $request): Response
     {
         if ($forbidden = $this->checkPermission($request, 'manage_general_settings')) {
             return $forbidden;
         }
         return Inertia::render('Admin/Settings/Captcha');
+    }
+
+    public function sliderSettings(Request $request): Response
+    {
+        if ($forbidden = $this->checkPermission($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+        return Inertia::render('Admin/Settings/Sliders', [
+            'initialSliders' => SliderSettingsService::getAll(),
+        ]);
+    }
+
+    public function getSliderSettings(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+        return response()->json([
+            'sliders' => SliderSettingsService::getAll(),
+        ]);
+    }
+
+    public function saveSliderSettings(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+        $sliders = $request->input('sliders', []);
+        if (!is_array($sliders)) {
+            return response()->json(['error' => 'Invalid sliders payload'], 400);
+        }
+        $saved = SliderSettingsService::save($sliders);
+        return response()->json([
+            'success' => true,
+            'sliders' => $saved,
+        ]);
     }
 
     // --- Admin API Endpoints ---
@@ -1003,6 +1052,153 @@ class AdminController extends Controller
             'retentionDays' => $saved,
             'purgedNow' => $purgedNow,
         ]);
+    }
+
+    public function getToolsSettings(Request $request): JsonResponse
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!$session['authenticated'] || ($session['role'] ?? '') !== 'super_admin') {
+            return response()->json(['error' => 'Forbidden: Super Admin only.'], 403);
+        }
+
+        return response()->json(ConverterToolsService::getAdminPayload());
+    }
+
+    public function saveToolsSettings(Request $request): JsonResponse
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!$session['authenticated'] || ($session['role'] ?? '') !== 'super_admin') {
+            return response()->json(['error' => 'Forbidden: Super Admin only.'], 403);
+        }
+
+        ConverterToolsService::saveSettings($request->only([
+            'globalEnabled',
+            'includeInSitemap',
+            'showInPublicNav',
+            'enableCatalogHandoff',
+            'pairStates',
+            'bgRemover',
+        ]));
+
+        SeoGeneratorService::refreshAuto('tools-updated');
+
+        return response()->json(array_merge(
+            ['success' => true],
+            ConverterToolsService::getAdminPayload()
+        ));
+    }
+
+    public function testBgRemoverServer(Request $request): JsonResponse
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!$session['authenticated'] || ($session['role'] ?? '') !== 'super_admin') {
+            return response()->json(['error' => 'Forbidden: Super Admin only.'], 403);
+        }
+
+        $saved = ConverterToolsService::getSettings()['bgRemover'] ?? ConverterToolsService::bgRemoverDefaults();
+        $cfg = ConverterToolsService::normalizeBgRemoverSettings(
+            is_array($request->input('bgRemover')) ? $request->input('bgRemover') : $request->all(),
+            $saved
+        );
+
+        if ($cfg['serverAiMode'] === 'http') {
+            $serviceUrl = rtrim($cfg['serverAiServiceUrl'], '/');
+            $healthUrl = str_ends_with($serviceUrl, '/remove-background')
+                ? substr($serviceUrl, 0, -strlen('/remove-background')) . '/health'
+                : $serviceUrl;
+            $verifySsl = (bool) ($cfg['serverAiVerifySsl'] ?? true);
+
+            try {
+                $res = Http::timeout(15)
+                    ->withHeaders(ConverterToolsService::buildBgRemoverServiceHeaders($cfg))
+                    ->withOptions(['verify' => $verifySsl])
+                    ->get($healthUrl);
+
+                if (in_array($res->status(), [401, 403], true)) {
+                    return response()->json([
+                        'ok' => false,
+                        'mode' => 'http',
+                        'target' => $healthUrl,
+                        'error' => "Python VPS rejected the API key (HTTP {$res->status()}). Ensure Server AI API Key matches REMBG_API_KEY on the VPS.",
+                    ], 502);
+                }
+
+                if (!$res->successful()) {
+                    return response()->json([
+                        'ok' => false,
+                        'mode' => 'http',
+                        'target' => $healthUrl,
+                        'error' => "Python HTTP service responded with HTTP {$res->status()}.",
+                    ], 502);
+                }
+
+                return response()->json([
+                    'ok' => true,
+                    'mode' => 'http',
+                    'target' => $healthUrl,
+                    'details' => $res->json() ?? ['status' => 'reachable'],
+                ]);
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'ok' => false,
+                    'mode' => 'http',
+                    'target' => $healthUrl,
+                    'error' => 'Could not connect to Python HTTP service: ' . $e->getMessage(),
+                ], 502);
+            }
+        }
+
+        $pythonExe = ConverterToolsService::resolvePythonExecutable($cfg['serverAiPythonPath'] ?? '');
+        $scriptPath = base_path('python-ai' . DIRECTORY_SEPARATOR . 'remove_bg.py');
+        $modelsDir = storage_path('app' . DIRECTORY_SEPARATOR . 'rembg-models');
+
+        if (!is_file($scriptPath)) {
+            return response()->json([
+                'ok' => false,
+                'mode' => 'cli',
+                'error' => "Script missing at {$scriptPath}",
+            ], 500);
+        }
+
+        try {
+            $result = Process::env(ConverterToolsService::pythonProcessEnv())
+                ->timeout(30)
+                ->run([
+                    $pythonExe,
+                    $scriptPath,
+                    '--check',
+                    '--models-dir',
+                    $modelsDir,
+                ]);
+
+            $stdout = trim($result->output());
+            $stderr = trim($result->errorOutput());
+            $decoded = json_decode($stdout, true);
+
+            if (!$result->successful() || !is_array($decoded) || empty($decoded['ok'])) {
+                return response()->json([
+                    'ok' => false,
+                    'mode' => 'cli',
+                    'python' => $pythonExe,
+                    'error' => $decoded['error'] ?? ($stderr !== '' ? $stderr : 'Python AI check failed.'),
+                    'details' => $decoded,
+                ], 422);
+            }
+
+            return response()->json([
+                'ok' => true,
+                'mode' => 'cli',
+                'python' => $pythonExe,
+                'details' => $decoded,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'mode' => 'cli',
+                'python' => $pythonExe,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function clearUploads(Request $request): JsonResponse

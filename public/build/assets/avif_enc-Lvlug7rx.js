@@ -1,0 +1,1 @@
+var e=`/build/assets/avif_enc-Co4TcJko.wasm`;export{e as default};

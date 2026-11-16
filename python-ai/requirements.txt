@@ -1,0 +1,6 @@
+rembg>=2.0.60
+onnxruntime>=1.19.0
+pillow>=10.0.0
+flask>=3.0.0
+flask-cors>=4.0.0
+gunicorn>=22.0.0; sys_platform != 'win32'

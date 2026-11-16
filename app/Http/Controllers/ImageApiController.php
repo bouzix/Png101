@@ -564,9 +564,14 @@ class ImageApiController extends Controller
         try {
             $imageBase64 = (string) $request->input('imageBase64', '');
             $modelName = $request->input('modelName');
+            $hints = $request->input('hints', []);
+            if (!is_array($hints)) {
+                $hints = [];
+            }
             $result = GeminiService::generateImageMetadata(
                 $imageBase64,
-                is_string($modelName) ? $modelName : null
+                is_string($modelName) ? $modelName : null,
+                $hints
             );
             return response()->json($result);
         } catch (\Throwable $e) {

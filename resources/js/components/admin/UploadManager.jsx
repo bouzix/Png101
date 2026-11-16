@@ -6,6 +6,7 @@ import {
     AlertTriangle,
     Minimize2,
     X,
+    Square,
     Image as ImageIcon,
 } from 'lucide-react';
 
@@ -182,9 +183,12 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
     const [isMinimized, setIsMinimized] = useState(false);
     const [failedUploads, setFailedUploads] = useState([]);
     const [uploadLimits, setUploadLimits] = useState(initialUploadLimits);
+    const [stopConfirmOpen, setStopConfirmOpen] = useState(false);
 
     const queueRef = useRef([]);
     const processingRef = useRef(false);
+    const cancelledRef = useRef(false);
+    const abortControllerRef = useRef(null);
     const modeRef = useRef('staging');
     const listenersRef = useRef(new Set());
     const failedUploadsRef = useRef([]);
@@ -243,6 +247,12 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
 
     const performSingleAttempt = useCallback(
         async (item) => {
+            if (cancelledRef.current) {
+                return { ok: false, aborted: true, status: 0, isNetworkError: false, reason: 'Upload stopped.' };
+            }
+
+            const signal = abortControllerRef.current?.signal;
+
             if (item.kind === 'staging') {
                 const formData = new FormData();
                 formData.append('file', item.file);
@@ -251,6 +261,7 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
                     const res = await fetch('/api/upload', {
                         method: 'POST',
                         body: formData,
+                        signal,
                     });
 
                     if (res.ok) {
@@ -282,6 +293,9 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
                         reason: extractHttpError(res.status, errBody, 'Upload rejected by server'),
                     };
                 } catch (err) {
+                    if (err?.name === 'AbortError' || cancelledRef.current) {
+                        return { ok: false, aborted: true, status: 0, isNetworkError: false, reason: 'Upload stopped.' };
+                    }
                     return {
                         ok: false,
                         status: 0,
@@ -299,6 +313,7 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ id: item.id, status: 'published' }),
+                        signal,
                     });
 
                     if (res.ok) {
@@ -314,6 +329,9 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
                         reason: extractHttpError(res.status, errBody, 'Failed to publish image'),
                     };
                 } catch (err) {
+                    if (err?.name === 'AbortError' || cancelledRef.current) {
+                        return { ok: false, aborted: true, status: 0, isNetworkError: false, reason: 'Upload stopped.' };
+                    }
                     return {
                         ok: false,
                         status: 0,
@@ -347,7 +365,16 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
             let lastResult = null;
 
             while (attempt <= AUTO_RETRY_DELAYS_MS.length) {
+                if (cancelledRef.current) {
+                    if (liveObjectUrl) revokePreviewUrl(liveObjectUrl);
+                    return { ok: false, aborted: true };
+                }
+
                 lastResult = await performSingleAttempt(item);
+                if (lastResult.aborted || cancelledRef.current) {
+                    if (liveObjectUrl) revokePreviewUrl(liveObjectUrl);
+                    return { ok: false, aborted: true };
+                }
                 if (lastResult.ok) {
                     if (liveObjectUrl) revokePreviewUrl(liveObjectUrl);
                     return {
@@ -425,6 +452,10 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
         const launchWorker = (item) => {
             const p = runItemWithAutoRetry(item)
                 .then((outcome) => {
+                    if (outcome.aborted || cancelledRef.current) {
+                        return;
+                    }
+
                     if (outcome.ok) {
                         batchSucceeded += 1;
                         if (outcome.autoRetriesUsed > 0) {
@@ -459,8 +490,8 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
             inFlight.add(p);
         };
 
-        while (queueRef.current.length > 0 || inFlight.size > 0) {
-            while (queueRef.current.length > 0 && inFlight.size < concurrencyRef.current) {
+        while ((!cancelledRef.current && queueRef.current.length > 0) || inFlight.size > 0) {
+            while (!cancelledRef.current && queueRef.current.length > 0 && inFlight.size < concurrencyRef.current) {
                 const now = Date.now();
                 if (throttleUntilRef.current > now) {
                     if (inFlight.size === 0) {
@@ -469,6 +500,7 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
                         break;
                     }
                 }
+                if (cancelledRef.current) break;
                 const nextItem = queueRef.current.shift();
                 if (nextItem) {
                     launchWorker(nextItem);
@@ -481,6 +513,17 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
         }
 
         processingRef.current = false;
+        abortControllerRef.current = null;
+
+        if (cancelledRef.current) {
+            cancelledRef.current = false;
+            queueRef.current = [];
+            setStopConfirmOpen(false);
+            setJob(INITIAL_JOB);
+            setIsMinimized(false);
+            toast.info('Upload stopped.');
+            return;
+        }
 
         setJob((prev) => ({
             ...prev,
@@ -508,8 +551,9 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
     }, [recordFailedItem, runItemWithAutoRetry]);
 
     const startStagingUpload = useCallback(
-        async (files, attemptMap = null) => {
+        async (files, attemptMap = null, options = {}) => {
             if (!files || files.length === 0) return;
+            const startMinimized = Boolean(options?.startMinimized);
 
             const limits = uploadLimitsRef.current;
             const inspections = await Promise.all(
@@ -577,6 +621,8 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
                 return;
             }
 
+            cancelledRef.current = false;
+            abortControllerRef.current = new AbortController();
             modeRef.current = 'staging';
             queueRef.current = validItems;
 
@@ -591,7 +637,7 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
                 currentFileName: validItems[0].name,
                 currentPreview: null,
             });
-            setIsMinimized(false);
+            setIsMinimized(startMinimized);
 
             processQueue();
         },
@@ -621,6 +667,8 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
                 return;
             }
 
+            cancelledRef.current = false;
+            abortControllerRef.current = new AbortController();
             modeRef.current = 'publishing';
             queueRef.current = queuedItems;
 
@@ -743,6 +791,27 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
         setIsMinimized(false);
     }, []);
 
+    const stopUpload = useCallback(() => {
+        setStopConfirmOpen(false);
+        if (!processingRef.current) {
+            setJob(INITIAL_JOB);
+            setIsMinimized(false);
+            return;
+        }
+        cancelledRef.current = true;
+        queueRef.current = [];
+        try {
+            abortControllerRef.current?.abort();
+        } catch {
+            // Ignore abort errors
+        }
+    }, []);
+
+    const requestStopUpload = useCallback(() => {
+        if (!processingRef.current) return;
+        setStopConfirmOpen(true);
+    }, []);
+
     return (
         <UploadManagerContext.Provider
             value={{
@@ -760,6 +829,10 @@ export function UploadManagerProvider({ children, initialUploadLimits = null }) 
                 removeFailedUpload,
                 clearFailedUploads,
                 dismissJob,
+                requestStopUpload,
+                stopUpload,
+                stopConfirmOpen,
+                setStopConfirmOpen,
                 subscribe,
             }}
         >
@@ -777,9 +850,58 @@ export function useUploadManager() {
 }
 
 export function FloatingUploadTracker() {
-    const { job, isMinimized, setIsMinimized, dismissJob } = useUploadManager();
+    const {
+        job,
+        isMinimized,
+        setIsMinimized,
+        dismissJob,
+        requestStopUpload,
+        stopUpload,
+        stopConfirmOpen,
+        setStopConfirmOpen,
+    } = useUploadManager();
 
-    if (!job.active) return null;
+    const confirmModal = stopConfirmOpen ? (
+        <div
+            className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+            onClick={() => setStopConfirmOpen(false)}
+        >
+            <div
+                className="w-full max-w-sm rounded-2xl bg-card-bg border border-card-border shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-150"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex items-start gap-3">
+                    <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 shrink-0">
+                        <AlertTriangle className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-bold text-foreground">Stop Uploading?</h3>
+                        <p className="text-xs text-foreground/65 mt-1 leading-relaxed">
+                            Are you sure you want to stop the current upload? Any remaining files in the queue will be cancelled.
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                        type="button"
+                        onClick={() => setStopConfirmOpen(false)}
+                        className="h-8 px-3.5 rounded-lg bg-card-header-bg border border-card-border text-xs font-bold text-foreground/80 hover:text-foreground cursor-pointer transition-colors"
+                    >
+                        Keep Uploading
+                    </button>
+                    <button
+                        type="button"
+                        onClick={stopUpload}
+                        className="h-8 px-3.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold shadow-sm cursor-pointer transition-colors"
+                    >
+                        Yes, Stop Upload
+                    </button>
+                </div>
+            </div>
+        </div>
+    ) : null;
+
+    if (!job.active) return confirmModal;
 
     const percent = job.total > 0 ? Math.min(100, Math.round((job.completed / job.total) * 100)) : 0;
     const isRunning = job.status === 'running';
@@ -809,6 +931,8 @@ export function FloatingUploadTracker() {
         : `${job.succeeded} uploaded${job.failed > 0 ? ` · ${job.failed} failed` : ''}`;
 
     return (
+        <>
+        {confirmModal}
         <div
             className="fixed bottom-5 right-5 z-[60] select-none"
             style={{
@@ -820,6 +944,20 @@ export function FloatingUploadTracker() {
                     'width 340ms cubic-bezier(0.22, 1, 0.36, 1), height 340ms cubic-bezier(0.22, 1, 0.36, 1), border-radius 340ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 300ms ease',
             }}
         >
+            {isMinimized && isRunning && (
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        requestStopUpload();
+                    }}
+                    title="Stop upload"
+                    aria-label="Stop upload"
+                    className="absolute -top-1.5 -right-1.5 z-20 w-5 h-5 rounded-full bg-rose-600 hover:bg-rose-500 text-white border border-white/25 shadow-md flex items-center justify-center cursor-pointer transition-transform hover:scale-110 active:scale-95"
+                >
+                    <Square className="w-2.5 h-2.5 fill-current" />
+                </button>
+            )}
             <div
                 className={`relative w-full h-full overflow-hidden border backdrop-blur-xl shadow-2xl ${
                     isMinimized
@@ -910,6 +1048,17 @@ export function FloatingUploadTracker() {
                             </span>
 
                             <div className="flex items-center gap-0.5 flex-shrink-0">
+                                {isRunning && (
+                                    <button
+                                        type="button"
+                                        onClick={requestStopUpload}
+                                        className="p-1 rounded-md text-rose-500/80 hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer transition-colors"
+                                        title="Stop upload"
+                                        aria-label="Stop upload"
+                                    >
+                                        <Square className="w-3 h-3 fill-current" />
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     onClick={() => setIsMinimized(true)}
@@ -954,5 +1103,6 @@ export function FloatingUploadTracker() {
                 </div>
             </div>
         </div>
+        </>
     );
 }

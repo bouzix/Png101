@@ -1,6 +1,102 @@
 {
+  "node_modules/@imgly/background-removal/dist/index.mjs": {
+    "file": "assets/dist-BuDjkrzM.js",
+    "name": "dist",
+    "src": "node_modules/@imgly/background-removal/dist/index.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.jsx"
+    ],
+    "dynamicImports": [
+      "node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs",
+      "node_modules/onnxruntime-web/dist/ort.bundle.min.mjs"
+    ]
+  },
+  "node_modules/@jsquash/avif/codec/dec/avif_dec.js": {
+    "file": "assets/avif_dec-CZ28ELC3.js",
+    "name": "avif_dec",
+    "src": "node_modules/@jsquash/avif/codec/dec/avif_dec.js",
+    "isDynamicEntry": true,
+    "assets": [
+      "assets/avif_dec-B7YOdlSS.wasm"
+    ]
+  },
+  "node_modules/@jsquash/avif/codec/dec/avif_dec.wasm": {
+    "file": "assets/avif_dec-B7YOdlSS.wasm",
+    "src": "node_modules/@jsquash/avif/codec/dec/avif_dec.wasm"
+  },
+  "node_modules/@jsquash/avif/codec/dec/avif_dec.wasm?url": {
+    "file": "assets/avif_dec-RKsQQ3qo.js",
+    "name": "avif_dec",
+    "src": "node_modules/@jsquash/avif/codec/dec/avif_dec.wasm?url",
+    "isDynamicEntry": true,
+    "assets": [
+      "assets/avif_dec-B7YOdlSS.wasm"
+    ]
+  },
+  "node_modules/@jsquash/avif/codec/enc/avif_enc.js": {
+    "file": "assets/avif_enc-CNED6w4a.js",
+    "name": "avif_enc",
+    "src": "node_modules/@jsquash/avif/codec/enc/avif_enc.js",
+    "isDynamicEntry": true,
+    "assets": [
+      "assets/avif_enc-Co4TcJko.wasm"
+    ]
+  },
+  "node_modules/@jsquash/avif/codec/enc/avif_enc.wasm": {
+    "file": "assets/avif_enc-Co4TcJko.wasm",
+    "src": "node_modules/@jsquash/avif/codec/enc/avif_enc.wasm"
+  },
+  "node_modules/@jsquash/avif/codec/enc/avif_enc.wasm?url": {
+    "file": "assets/avif_enc-Lvlug7rx.js",
+    "name": "avif_enc",
+    "src": "node_modules/@jsquash/avif/codec/enc/avif_enc.wasm?url",
+    "isDynamicEntry": true,
+    "assets": [
+      "assets/avif_enc-Co4TcJko.wasm"
+    ]
+  },
+  "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm": {
+    "file": "assets/ort-wasm-simd-threaded.jsep-D5Jk56-t.wasm",
+    "src": "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm"
+  },
+  "node_modules/onnxruntime-web/dist/ort.bundle.min.mjs": {
+    "file": "assets/ort.bundle.min-bbi3_Tok.js",
+    "name": "ort.bundle.min",
+    "src": "node_modules/onnxruntime-web/dist/ort.bundle.min.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.jsx"
+    ],
+    "assets": [
+      "assets/ort.bundle.min-OfoG_cy9.mjs",
+      "assets/ort-wasm-simd-threaded.jsep-D5Jk56-t.wasm"
+    ]
+  },
+  "node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs": {
+    "file": "assets/ort.webgpu.bundle.min-D8rxVBoe.js",
+    "name": "ort.webgpu.bundle.min",
+    "src": "node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.jsx"
+    ],
+    "assets": [
+      "assets/ort.webgpu.bundle.min-CEayb2S6.mjs",
+      "assets/ort-wasm-simd-threaded.jsep-D5Jk56-t.wasm"
+    ]
+  },
+  "node_modules/upng-js/UPNG.js": {
+    "file": "assets/UPNG-BQCAY76T.js",
+    "name": "UPNG",
+    "src": "node_modules/upng-js/UPNG.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.jsx"
+    ]
+  },
   "resources/css/app.css": {
-    "file": "assets/app-Bk9w1qny.css",
+    "file": "assets/app-Dx3gv3Ga.css",
     "name": "app",
     "names": [
       "app.css"
@@ -9,9 +105,29 @@
     "isEntry": true
   },
   "resources/js/app.jsx": {
-    "file": "assets/app-dyv5nBJM.js",
+    "file": "assets/app-BqOOq0rE.js",
     "name": "app",
     "src": "resources/js/app.jsx",
-    "isEntry": true
+    "isEntry": true,
+    "dynamicImports": [
+      "resources/js/lib/avifCodec.js",
+      "node_modules/upng-js/UPNG.js",
+      "node_modules/@imgly/background-removal/dist/index.mjs"
+    ]
+  },
+  "resources/js/lib/avifCodec.js": {
+    "file": "assets/avifCodec-ljFlkeyE.js",
+    "name": "avifCodec",
+    "src": "resources/js/lib/avifCodec.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.jsx"
+    ],
+    "dynamicImports": [
+      "node_modules/@jsquash/avif/codec/enc/avif_enc.js",
+      "node_modules/@jsquash/avif/codec/enc/avif_enc.wasm?url",
+      "node_modules/@jsquash/avif/codec/dec/avif_dec.js",
+      "node_modules/@jsquash/avif/codec/dec/avif_dec.wasm?url"
+    ]
   }
 }

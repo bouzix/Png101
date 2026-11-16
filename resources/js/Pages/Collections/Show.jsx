@@ -2,15 +2,13 @@ import React, { useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import Header from '@/components/Header';
 import ImageCard from '@/components/ImageCard';
+import CollectionCarouselSlider from '@/components/collections/CollectionCarouselSlider';
 import { slugify } from '@/lib/utils';
 import {
     Layers,
     Share2,
     Check,
-    Tag,
     ChevronRight,
-    ArrowLeft,
-    Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -19,6 +17,7 @@ export default function CollectionShow({
     initialImages = [],
     total = 0,
     relatedCollections = [],
+    sliderConfig = {},
     websiteInfo = {},
 }) {
     const siteName = websiteInfo?.websiteName || 'Png101';
@@ -57,76 +56,61 @@ export default function CollectionShow({
                     </nav>
 
                     {/* Collection Hero Banner Card */}
-                    <div className="relative rounded-2xl border border-card-border bg-card-bg p-6 sm:p-10 shadow-xl overflow-hidden">
-                        <div className="absolute -top-24 -right-24 w-80 h-80 bg-primary-glow/10 rounded-full blur-3xl pointer-events-none" />
-                        <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+                    <div
+                        style={
+                            collection?.heroBgColor
+                                ? { backgroundColor: collection.heroBgColor }
+                                : undefined
+                        }
+                        className="relative h-[150px] flex items-center rounded-2xl border border-card-border bg-card-bg px-6 sm:px-10 shadow-xl overflow-hidden"
+                    >
+                        {!collection?.heroBgColor && (
+                            <>
+                                <div className="absolute -top-24 -right-24 w-80 h-80 bg-primary-glow/10 rounded-full blur-3xl pointer-events-none" />
+                                <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+                            </>
+                        )}
 
-                        <div className="relative z-10 max-w-3xl space-y-4">
-                            <div className="flex flex-wrap items-center gap-2.5">
-                                <Link
-                                    href="/collections"
-                                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground/70 hover:text-foreground py-1 px-3 rounded-lg border border-card-border hover:bg-white/5 transition-colors"
-                                >
-                                    <ArrowLeft className="w-3.5 h-3.5" />
-                                    <span>All Collections</span>
-                                </Link>
-
-                                <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-primary-glow/10 text-primary-glow border border-primary-glow/20">
-                                    <Layers className="w-3 h-3" />
-                                    <span>Curated Pack</span>
-                                </span>
-
-                                <span className="inline-flex items-center text-[11px] font-bold px-2.5 py-1 rounded-full bg-card-header-bg border border-card-border text-foreground/80">
-                                    {total} Transparent PNG{total === 1 ? '' : 's'}
-                                </span>
+                        {/* Optional Right-Side Hero Cover Photo (always pinned to right at fixed height/size across all screens) */}
+                        {collection?.heroImagePath && (
+                            <div className="absolute inset-y-0 right-0 pointer-events-none select-none flex items-center justify-end">
+                                <img
+                                    src={collection.heroImagePath}
+                                    alt=""
+                                    className="h-full w-auto max-w-none object-contain object-right shrink-0"
+                                />
                             </div>
+                        )}
 
-                            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-foreground tracking-tight">
+                        <div className="relative z-10 w-full flex items-center justify-between gap-4">
+                            <h1
+                                style={
+                                    collection?.heroTextColor
+                                        ? { color: collection.heroTextColor }
+                                        : undefined
+                                }
+                                className="text-3xl sm:text-5xl md:text-6xl font-black uppercase text-foreground tracking-tight truncate"
+                            >
                                 {collection.name}
                             </h1>
 
-                            {collection.description && (
-                                <p className="text-sm sm:text-base text-foreground/70 leading-relaxed max-w-2xl">
-                                    {collection.description}
-                                </p>
-                            )}
-
-                            {Array.isArray(collection.tagRules) && collection.tagRules.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-2 pt-1">
-                                    <span className="text-xs font-semibold text-foreground/50 mr-1 flex items-center gap-1">
-                                        <Tag className="w-3.5 h-3.5 text-primary-glow" /> Themes:
-                                    </span>
-                                    {collection.tagRules.map((t) => (
-                                        <Link
-                                            key={t}
-                                            href={`/search?q=${encodeURIComponent(t)}`}
-                                            className="text-xs font-medium px-2.5 py-1 rounded-md bg-tag-bg hover:bg-tag-bg-hover text-tag-text border border-tag-border transition-colors"
-                                        >
-                                            #{t}
-                                        </Link>
-                                    ))}
-                                </div>
-                            )}
-
-                            <div className="pt-3 flex flex-wrap items-center gap-3">
-                                <button
-                                    type="button"
-                                    onClick={handleShare}
-                                    className="px-4 py-2 rounded-xl bg-card-bg hover:bg-white/5 border border-card-border hover:border-primary-glow/50 text-foreground text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-md"
-                                >
-                                    {copied ? (
-                                        <>
-                                            <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                            <span>Link Copied!</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Share2 className="w-3.5 h-3.5 text-primary-glow" />
-                                            <span>Share Collection</span>
-                                        </>
-                                    )}
-                                </button>
-                            </div>
+                            <button
+                                type="button"
+                                onClick={handleShare}
+                                className="px-4 py-2.5 rounded-xl bg-card-bg/90 backdrop-blur-md hover:bg-card-bg border border-card-border hover:border-primary-glow/50 text-foreground text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer shadow-md shrink-0 w-fit"
+                            >
+                                {copied ? (
+                                    <>
+                                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                        <span>Link Copied!</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Share2 className="w-3.5 h-3.5 text-primary-glow" />
+                                        <span>Share Collection</span>
+                                    </>
+                                )}
+                            </button>
                         </div>
                     </div>
 
@@ -172,68 +156,14 @@ export default function CollectionShow({
                         )}
                     </section>
 
-                    {/* More Collections Recommendation */}
-                    {relatedCollections.length > 0 && (
-                        <section className="space-y-6 pt-10 border-t border-card-border">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                                        <Sparkles className="w-4 h-4 text-purple-400" />
-                                        <span>More Collections You May Like</span>
-                                    </h3>
-                                    <p className="text-xs text-foreground/50 mt-0.5">
-                                        Browse more cohesive transparent graphic kits
-                                    </p>
-                                </div>
-
-                                <Link
-                                    href="/collections"
-                                    className="text-xs font-bold text-primary-glow hover:underline flex items-center gap-1"
-                                >
-                                    <span>Browse All</span>
-                                    <ChevronRight className="w-3.5 h-3.5" />
-                                </Link>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {relatedCollections.map((rel) => (
-                                    <Link
-                                        key={rel.id}
-                                        href={`/collections/${rel.slug}`}
-                                        className="group rounded-xl border border-card-border bg-card-bg p-4 hover:border-primary-glow/50 hover:shadow-xl transition-all flex items-center gap-4"
-                                    >
-                                        <div
-                                            className="w-16 h-16 rounded-lg bg-foreground/[0.03] border border-card-border p-2 flex items-center justify-center shrink-0 overflow-hidden"
-                                            style={{
-                                                backgroundImage:
-                                                    'linear-gradient(45deg, #80808012 25%, transparent 25%), linear-gradient(-45deg, #80808012 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #80808012 75%), linear-gradient(-45deg, transparent 75%, #80808012 75%)',
-                                                backgroundSize: '10px 10px',
-                                                backgroundPosition: '0 0, 0 5px, 5px -5px, -5px 0px',
-                                            }}
-                                        >
-                                            {rel.coverImagePath ? (
-                                                <img
-                                                    src={rel.coverImagePath}
-                                                    alt={rel.name}
-                                                    className="max-h-full max-w-full object-contain pointer-events-none group-hover:scale-105 transition-transform"
-                                                />
-                                            ) : (
-                                                <Layers className="w-6 h-6 text-foreground/30" />
-                                            )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="text-sm font-bold text-foreground group-hover:text-primary-glow transition-colors truncate">
-                                                {rel.name}
-                                            </h4>
-                                            <span className="text-xs text-foreground/50 mt-0.5 block">
-                                                {rel.imageCount} PNG{rel.imageCount === 1 ? '' : 's'}
-                                            </span>
-                                        </div>
-                                        <ChevronRight className="w-4 h-4 text-foreground/40 group-hover:text-primary-glow group-hover:translate-x-1 transition-all" />
-                                    </Link>
-                                ))}
-                            </div>
-                        </section>
+                    {/* More Collections Recommendation (Single-Row Smooth Draggable & Auto-Scrolling Slider) */}
+                    {sliderConfig?.enabled !== false && relatedCollections.length > 0 && (
+                        <div className="pt-10 border-t border-card-border">
+                            <CollectionCarouselSlider
+                                collections={relatedCollections}
+                                sliderConfig={sliderConfig}
+                            />
+                        </div>
                     )}
                 </div>
             </main>

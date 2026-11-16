@@ -3,7 +3,7 @@ import { Head, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import DropZone from '@/components/admin/DropZone';
 import AssetCard from '@/components/admin/AssetCard';
-import BulkEditSidebar from '@/components/admin/BulkEditSidebar';
+import { useBulkEdit } from '@/components/admin/BulkEditSidebar';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import { toast } from 'sonner';
 import {
@@ -18,6 +18,7 @@ import {
     AlertTriangle,
     RotateCcw,
     Upload,
+    Pencil,
     Image as ImageIcon,
 } from 'lucide-react';
 import { useUploadManager } from '@/components/admin/UploadManager';
@@ -43,8 +44,36 @@ export default function Dashboard() {
     });
     const [deleting, setDeleting] = useState(false);
     const [failedFilter, setFailedFilter] = useState('all');
+    const [isBarSticky, setIsBarSticky] = useState(false);
+    const stickyBarRef = useRef(null);
     const replaceInputRef = useRef(null);
     const replacingFailedIdRef = useRef(null);
+    const lastSelectedIdRef = useRef(null);
+    const lastSelectedActionRef = useRef(null);
+
+    useEffect(() => {
+        const barEl = stickyBarRef.current;
+        if (!barEl) {
+            setIsBarSticky(false);
+            return;
+        }
+        const scrollRoot = barEl.closest('main') || window;
+        const checkSticky = () => {
+            if (!stickyBarRef.current || !stickyBarRef.current.parentElement) return;
+            const barRect = stickyBarRef.current.getBoundingClientRect();
+            const parentRect = stickyBarRef.current.parentElement.getBoundingClientRect();
+            setIsBarSticky(barRect.top - parentRect.top > 1);
+        };
+        checkSticky();
+        scrollRoot.addEventListener('scroll', checkSticky, { passive: true });
+        window.addEventListener('scroll', checkSticky, { passive: true });
+        window.addEventListener('resize', checkSticky, { passive: true });
+        return () => {
+            scrollRoot.removeEventListener('scroll', checkSticky);
+            window.removeEventListener('scroll', checkSticky);
+            window.removeEventListener('resize', checkSticky);
+        };
+    }, [stagedFiles.length > 0]);
 
     const {
         job: progress,
@@ -58,6 +87,7 @@ export default function Dashboard() {
         retryAllFailedUploads,
         removeFailedUpload,
         clearFailedUploads,
+        requestStopUpload,
         subscribe,
     } = useUploadManager();
 
@@ -69,8 +99,18 @@ export default function Dashboard() {
 
     const uploading = progress.status === 'running' && progress.mode === 'publishing';
 
-    const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
-    const [editingFileId, setEditingFileId] = useState(null);
+    const {
+        isOpen: isBulkEditOpen,
+        isMinimized: isBulkEditMinimized,
+        formsData: bulkEditItems,
+        openBulkEdit,
+        removeBulkEditItems,
+        startDraggingItems,
+        endDraggingItems,
+        subscribe: subscribeBulkEdit,
+    } = useBulkEdit();
+
+    const bulkEditIdSet = new Set((bulkEditItems || []).map((item) => item.id));
 
     const [confirmDialog, setConfirmDialog] = useState({
         isOpen: false,
@@ -103,7 +143,7 @@ export default function Dashboard() {
                 }
             });
 
-        return subscribe({
+        const unsubUpload = subscribe({
             onStaged: (newFile) => {
                 setStagedFiles((prev) =>
                     prev.some((f) => f.id === newFile.id) ? prev : [newFile, ...prev]
@@ -111,80 +151,136 @@ export default function Dashboard() {
             },
             onPublished: (publishedId) => {
                 setStagedFiles((prev) => prev.filter((f) => f.id !== publishedId));
+                removeBulkEditItems([publishedId]);
             },
         });
-    }, [subscribe]);
+
+        const unsubBulkEdit = subscribeBulkEdit((updates) => {
+            const updateMap = new Map(updates.map((u) => [u.id, u]));
+            setStagedFiles((prev) =>
+                prev.map((f) => {
+                    const update = updateMap.get(f.id);
+                    if (update) {
+                        return {
+                            ...f,
+                            ...update,
+                            hasMetadata: !!(update.name && update.tags && update.tags.length > 0),
+                        };
+                    }
+                    return f;
+                })
+            );
+        });
+
+        return () => {
+            unsubUpload();
+            unsubBulkEdit();
+        };
+    }, [subscribe, subscribeBulkEdit, removeBulkEditItems]);
 
     const handleFilesDropped = (files) => {
         if (files.length === 0) return;
         startStagingUpload(files);
     };
 
+    const toBulkItemPayload = (f) => ({
+        ...f,
+        path: f.preview,
+        filename: f.name,
+        luminance: f.luminance,
+        contrastBgDark: f.contrastBgDark,
+        contrastBgLight: f.contrastBgLight,
+    });
+
     const handleEdit = (id) => {
-        setEditingFileId(id);
-        setIsBulkEditOpen(true);
+        const file = stagedFiles.find((f) => f.id === id);
+        if (!file) return;
+        if (!file.isSelected) {
+            lastSelectedIdRef.current = file.id;
+            lastSelectedActionRef.current = 'select';
+            setStagedFiles((prev) =>
+                prev.map((f) => (f.id === file.id ? { ...f, isSelected: true } : f))
+            );
+        }
+        openBulkEdit([toBulkItemPayload(file)]);
     };
 
     const handleBulkEdit = () => {
-        setEditingFileId(null);
-        setIsBulkEditOpen(true);
+        const selected = stagedFiles.filter((f) => f.isSelected);
+        if (selected.length === 0) return;
+        openBulkEdit(selected.map(toBulkItemPayload));
     };
 
-    const handleBulkSave = async (updates) => {
-        let successCount = 0;
-        let failCount = 0;
-
-        for (const update of updates) {
+    const handleCardDragStart = (e, file) => {
+        if (!file.isSelected) {
+            lastSelectedIdRef.current = file.id;
+            lastSelectedActionRef.current = 'select';
+            setStagedFiles((prev) =>
+                prev.map((f) => (f.id === file.id ? { ...f, isSelected: true } : f))
+            );
+        }
+        const selected = stagedFiles.filter((f) => f.isSelected);
+        const itemsToDrag =
+            selected.length > 0
+                ? selected.some((s) => s.id === file.id)
+                    ? selected
+                    : [...selected, file]
+                : [file];
+        const payload = itemsToDrag.map(toBulkItemPayload);
+        startDraggingItems(payload, e);
+        if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'copy';
             try {
-                const res = await fetch('/api/images/update', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(update),
-                });
-
-                if (res.ok) {
-                    successCount++;
-                    setStagedFiles(prev => prev.map(f => {
-                        if (f.id === update.id) {
-                            return {
-                                ...f,
-                                ...update,
-                                hasMetadata: !!(update.name && update.tags && update.tags.length > 0),
-                            };
-                        }
-                        return f;
-                    }));
-                } else {
-                    failCount++;
-                }
+                e.dataTransfer.setData('application/x-png101-bulk-items', JSON.stringify(payload));
             } catch {
-                failCount++;
+                // Ignore dataTransfer quota limits
             }
-        }
-
-        setIsBulkEditOpen(false);
-        setEditingFileId(null);
-
-        if (failCount === 0) {
-            toast.success(`Successfully updated ${successCount} images`);
-        } else {
-            toast.warning(`Updated ${successCount} images. ${failCount} failed.`);
         }
     };
 
-    const handleToggleSelect = (id) => {
-        setStagedFiles(prev => prev.map(f => {
-            if (f.id === id) {
-                return { ...f, isSelected: !f.isSelected };
+    const handleToggleSelect = (id, event) => {
+        const isShift = Boolean(event?.shiftKey || event?.nativeEvent?.shiftKey);
+
+        setStagedFiles((prev) => {
+            const targetIdx = prev.findIndex((f) => f.id === id);
+            if (targetIdx === -1) return prev;
+
+            if (isShift && lastSelectedIdRef.current !== null) {
+                const startIdx = prev.findIndex((f) => f.id === lastSelectedIdRef.current);
+                if (startIdx !== -1) {
+                    const [from, to] = startIdx < targetIdx ? [startIdx, targetIdx] : [targetIdx, startIdx];
+                    const rangeSlice = prev.slice(from, to + 1);
+                    const allRangeSelected = rangeSlice.every((f) => f.isSelected);
+                    const shouldSelect =
+                        lastSelectedActionRef.current === 'unselect'
+                            ? false
+                            : allRangeSelected
+                            ? false
+                            : true;
+
+                    const rangeIds = new Set(rangeSlice.map((f) => f.id));
+                    lastSelectedIdRef.current = id;
+                    lastSelectedActionRef.current = shouldSelect ? 'select' : 'unselect';
+
+                    return prev.map((f) =>
+                        rangeIds.has(f.id) ? { ...f, isSelected: shouldSelect } : f
+                    );
+                }
             }
-            return f;
-        }));
+
+            const nextSelected = !prev[targetIdx].isSelected;
+            lastSelectedIdRef.current = id;
+            lastSelectedActionRef.current = nextSelected ? 'select' : 'unselect';
+
+            return prev.map((f) => (f.id === id ? { ...f, isSelected: nextSelected } : f));
+        });
     };
 
     const allSelected = stagedFiles.length > 0 && stagedFiles.every(f => f.isSelected);
 
     const handleToggleSelectAll = () => {
         const nextState = !allSelected;
+        lastSelectedActionRef.current = nextState ? 'select' : 'unselect';
         setStagedFiles(prev => prev.map(f => ({ ...f, isSelected: nextState })));
     };
 
@@ -208,6 +304,7 @@ export default function Dashboard() {
 
                     if (res.ok) {
                         setStagedFiles(prev => prev.filter(f => !idsToDelete.includes(f.id)));
+                        removeBulkEditItems(idsToDelete);
                         toast.success(
                             `Deleted ${idsToDelete.length} ${idsToDelete.length === 1 ? 'image' : 'images'} successfully`
                         );
@@ -248,7 +345,6 @@ export default function Dashboard() {
         }
     };
 
-    const editingFile = stagedFiles.find(f => f.id === editingFileId);
     const selectedFiles = stagedFiles.filter(f => f.isSelected);
     const readyToUploadCount = stagedFiles.filter(f => f.isSelected && f.hasMetadata).length;
     const progressPercent = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
@@ -266,10 +362,6 @@ export default function Dashboard() {
             : activeFailedFilter === 'fix_required'
             ? failedUploads.filter((f) => !f.canRetry)
             : failedUploads;
-
-    const imagesToEdit = editingFile
-        ? [editingFile]
-        : selectedFiles;
 
     return (
         <AdminLayout>
@@ -294,7 +386,7 @@ export default function Dashboard() {
                                     Filling Search Demand Gap
                                 </div>
                                 <p className="text-sm text-foreground">
-                                    Target keyword from Team Hub: <span className="font-bold text-amber-300">"{targetKeyword}"</span>
+                                    Target keyword from Dashboard: <span className="font-bold text-amber-300">"{targetKeyword}"</span>
                                 </p>
                             </div>
                         </div>
@@ -362,11 +454,24 @@ export default function Dashboard() {
                                 </div>
                             </div>
 
-                            <div className="text-right flex-shrink-0">
-                                <span className="text-sm font-bold text-foreground">
-                                    {progress.completed} / {progress.total}
-                                </span>
-                                <p className="text-xs text-foreground/50">files</p>
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                                <div className="text-right">
+                                    <span className="text-sm font-bold text-foreground">
+                                        {progress.completed} / {progress.total}
+                                    </span>
+                                    <p className="text-xs text-foreground/50">files</p>
+                                </div>
+                                {progress.completed < progress.total && (
+                                    <button
+                                        type="button"
+                                        onClick={requestStopUpload}
+                                        title="Stop upload"
+                                        aria-label="Stop upload"
+                                        className="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-500 cursor-pointer transition-colors"
+                                    >
+                                        <Square className="w-4 h-4 fill-current" />
+                                    </button>
+                                )}
                             </div>
                         </div>
 
@@ -471,7 +576,13 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-4">
+                        <div
+                            className={`grid transition-all duration-300 ${
+                                isBulkEditOpen && !isBulkEditMinimized
+                                    ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5'
+                                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-4'
+                            }`}
+                        >
                             {filteredFailedUploads.map((item) => {
                                 const sizeKb = item.size > 0 ? `${Math.max(1, Math.round(item.size / 1024))} KB` : '';
                                 const badgeText = CATEGORY_BADGE[item.failureCategory] || 'Failed';
@@ -591,69 +702,187 @@ export default function Dashboard() {
                     </div>
                 )}
 
+                {/* Floating Circular Icon-Only Action Buttons when Bulk Edit Sidebar is Open */}
+                {isBulkEditOpen && !isBulkEditMinimized && stagedFiles.length > 0 && (
+                    <div className="fixed top-4 right-[516px] z-[52] flex items-center gap-2.5 bg-card-bg/95 backdrop-blur-xl border border-card-border rounded-full px-3 py-2 shadow-2xl animate-in fade-in slide-in-from-right-4 duration-250">
+                        <span className="text-xs font-semibold text-foreground/75 px-2 whitespace-nowrap hidden sm:inline">
+                            <strong className="text-foreground">{selectedFiles.length}</strong>/{stagedFiles.length} selected
+                            <span className="mx-1.5 text-foreground/30">&bull;</span>
+                            <strong className="text-emerald-400">{readyToUploadCount}</strong> ready
+                        </span>
+
+                        {/* Circular Edit / Add to Bulk Edit Button */}
+                        <button
+                            type="button"
+                            onClick={
+                                selectedFiles.length === 1
+                                    ? () => handleEdit(selectedFiles[0].id)
+                                    : handleBulkEdit
+                            }
+                            disabled={selectedFiles.length === 0}
+                            title={
+                                selectedFiles.length > 0
+                                    ? `Edit / Add ${selectedFiles.length} selected item(s) to Bulk Editor`
+                                    : 'Select items to add to Bulk Editor'
+                            }
+                            aria-label="Edit selected items"
+                            className="relative w-10 h-10 rounded-full flex items-center justify-center bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer"
+                        >
+                            <Pencil className="w-4 h-4" />
+                            {selectedFiles.length > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-white text-blue-600 text-[10px] font-extrabold flex items-center justify-center shadow">
+                                    {selectedFiles.length}
+                                </span>
+                            )}
+                        </button>
+
+                        {/* Circular Delete Selected Button */}
+                        <button
+                            type="button"
+                            onClick={handleDeleteSelected}
+                            disabled={selectedFiles.length === 0 || deleting || uploading}
+                            title={
+                                selectedFiles.length > 0
+                                    ? `Delete ${selectedFiles.length} selected item(s)`
+                                    : 'Select items to delete'
+                            }
+                            aria-label="Delete selected items"
+                            className="relative w-10 h-10 rounded-full flex items-center justify-center bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer"
+                        >
+                            {deleting ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Trash2 className="w-4 h-4" />
+                            )}
+                            {selectedFiles.length > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-white text-rose-600 text-[10px] font-extrabold flex items-center justify-center shadow">
+                                    {selectedFiles.length}
+                                </span>
+                            )}
+                        </button>
+
+                        {/* Circular Upload Selected Button */}
+                        <button
+                            type="button"
+                            onClick={handleUploadSelected}
+                            disabled={readyToUploadCount === 0 || uploading}
+                            title={
+                                readyToUploadCount > 0
+                                    ? `Upload ${readyToUploadCount} ready item(s)`
+                                    : 'Select items with metadata ready to upload'
+                            }
+                            aria-label="Upload selected ready items"
+                            className="relative w-10 h-10 rounded-full flex items-center justify-center bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:scale-100 cursor-pointer"
+                        >
+                            {uploading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Upload className="w-4 h-4" />
+                            )}
+                            {readyToUploadCount > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-white text-emerald-600 text-[10px] font-extrabold flex items-center justify-center shadow">
+                                    {readyToUploadCount}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+                )}
+
                 {stagedFiles.length > 0 && (
                     <div className="space-y-4">
-                        <div className="flex flex-wrap items-center justify-between gap-4 bg-card-bg border border-card-border rounded-xl p-4 shadow-md">
-                            <div className="flex flex-wrap items-center gap-4">
-                                <button
-                                    type="button"
-                                    onClick={handleToggleSelectAll}
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-background border border-card-border hover:border-primary-glow/50 text-foreground transition-all cursor-pointer"
-                                >
-                                    {allSelected ? (
-                                        <CheckSquare className="w-4 h-4 text-primary-glow" />
-                                    ) : (
-                                        <Square className="w-4 h-4 text-foreground/60" />
-                                    )}
-                                    {allSelected ? 'Deselect All' : `Select All (${stagedFiles.length})`}
-                                </button>
+                        <div
+                            ref={stickyBarRef}
+                            className={`sticky top-4 z-30 flex flex-wrap items-center justify-between gap-3 bg-card-bg/95 backdrop-blur-md border border-card-border rounded-xl px-3.5 py-2.5 transition-shadow duration-200 ${
+                                isBarSticky ? 'shadow-xl shadow-black/25' : 'shadow-none'
+                            }`}
+                        >
+                            <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                    <button
+                                        type="button"
+                                        onClick={handleToggleSelectAll}
+                                        title={allSelected ? 'Deselect All' : `Select All (${stagedFiles.length})`}
+                                        aria-label={allSelected ? 'Deselect All' : `Select All (${stagedFiles.length})`}
+                                        className="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-card-bg hover:text-primary-glow text-foreground shadow-sm transition-all cursor-pointer shrink-0"
+                                    >
+                                        {allSelected ? (
+                                            <CheckSquare className="w-3.5 h-3.5 text-primary-glow" />
+                                        ) : (
+                                            <Square className="w-3.5 h-3.5 text-foreground/60" />
+                                        )}
+                                    </button>
 
-                                <span className="text-sm text-foreground/60">
-                                    <strong className="text-foreground">{selectedFiles.length}</strong> of{' '}
-                                    <strong className="text-foreground">{stagedFiles.length}</strong> selected
-                                    <span className="mx-2 text-foreground/30">&bull;</span>
-                                    <strong className="text-foreground">{readyToUploadCount}</strong>/{stagedFiles.length} ready to upload
-                                </span>
+                                    <div className="h-7 px-2.5 rounded-lg bg-card-bg text-xs font-bold text-foreground/70 shadow-sm inline-flex items-center gap-1.5">
+                                        <span>
+                                            <strong className="text-foreground">{selectedFiles.length}</strong> of{' '}
+                                            <strong className="text-foreground">{stagedFiles.length}</strong> selected
+                                        </span>
+                                        <span className="text-foreground/30">&bull;</span>
+                                        <span>
+                                            <strong className="text-primary-glow">{readyToUploadCount}</strong>/{stagedFiles.length} ready to upload
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
 
-                            {selectedFiles.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-3">
+                            {selectedFiles.length > 0 && (!isBulkEditOpen || isBulkEditMinimized) && (
+                                <div className="flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl animate-in fade-in duration-200">
                                     <button
                                         type="button"
                                         onClick={handleDeleteSelected}
                                         disabled={deleting || uploading}
-                                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+                                        title={deleting ? 'Deleting...' : `Delete (${selectedFiles.length})`}
+                                        aria-label={`Delete ${selectedFiles.length} selected`}
+                                        className="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-card-bg hover:bg-red-500/20 text-red-400 shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
                                     >
-                                        <Trash2 className="w-4 h-4" />
-                                        {deleting ? 'DELETING...' : `DELETE (${selectedFiles.length})`}
+                                        {deleting ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        )}
                                     </button>
 
                                     <button
                                         type="button"
                                         onClick={selectedFiles.length === 1 ? () => handleEdit(selectedFiles[0].id) : handleBulkEdit}
-                                        className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg text-xs font-bold bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-colors cursor-pointer"
+                                        title={`Edit (${selectedFiles.length})`}
+                                        aria-label={`Edit ${selectedFiles.length} selected`}
+                                        className="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-card-bg hover:bg-blue-500/20 text-primary-glow shadow-sm transition-colors cursor-pointer"
                                     >
-                                        EDIT {selectedFiles.length > 1 ? `(${selectedFiles.length})` : ''}
+                                        <Pencil className="w-3.5 h-3.5" />
                                     </button>
 
                                     <button
                                         type="button"
                                         onClick={handleUploadSelected}
                                         disabled={readyToUploadCount === 0 || uploading}
-                                        className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-bold bg-primary-glow hover:bg-primary-glow/90 disabled:bg-slate-700 disabled:text-slate-500 text-white transition-colors cursor-pointer"
+                                        title={
+                                            uploading
+                                                ? 'Publishing...'
+                                                : readyToUploadCount > 0
+                                                ? `Upload Selected (${readyToUploadCount} ready)`
+                                                : 'Add metadata before uploading'
+                                        }
+                                        aria-label="Upload selected"
+                                        className="w-7 h-7 inline-flex items-center justify-center rounded-lg bg-primary-glow hover:bg-primary-glow/90 disabled:bg-card-bg disabled:text-foreground/30 text-white shadow-sm transition-colors cursor-pointer"
                                     >
-                                        {uploading ? 'PUBLISHING...' : 'UPLOAD SELECTED'}
-                                        {!uploading && (
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-                                            </svg>
+                                        {uploading ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <Upload className="w-3.5 h-3.5" />
                                         )}
                                     </button>
                                 </div>
                             )}
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-6">
+                        <div
+                            className={`grid transition-all duration-300 ${
+                                isBulkEditOpen && !isBulkEditMinimized
+                                    ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4'
+                                    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-6'
+                            }`}
+                        >
                             {stagedFiles.map(file => (
                                 <AssetCard
                                     key={file.id}
@@ -661,8 +890,11 @@ export default function Dashboard() {
                                     previewUrl={file.preview}
                                     hasMetadata={file.hasMetadata}
                                     isSelected={file.isSelected}
+                                    isInBulkEdit={bulkEditIdSet.has(file.id)}
+                                    onDragStart={(e) => handleCardDragStart(e, file)}
+                                    onDragEnd={endDraggingItems}
                                     onEdit={() => handleEdit(file.id)}
-                                    onToggleSelect={() => handleToggleSelect(file.id)}
+                                    onToggleSelect={(e) => handleToggleSelect(file.id, e)}
                                     luminance={file.luminance}
                                     contrastBgDark={file.contrastBgDark}
                                     contrastBgLight={file.contrastBgLight}
@@ -671,23 +903,6 @@ export default function Dashboard() {
                         </div>
                     </div>
                 )}
-
-                <BulkEditSidebar
-                    isOpen={isBulkEditOpen}
-                    onClose={() => {
-                        setIsBulkEditOpen(false);
-                        setEditingFileId(null);
-                    }}
-                    selectedImages={imagesToEdit.map(f => ({
-                        ...f,
-                        path: f.preview,
-                        filename: f.name,
-                        luminance: f.luminance,
-                        contrastBgDark: f.contrastBgDark,
-                        contrastBgLight: f.contrastBgLight,
-                    }))}
-                    onSave={handleBulkSave}
-                />
 
                 <ConfirmDialog
                     isOpen={confirmDialog.isOpen}

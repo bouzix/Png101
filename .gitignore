@@ -29,6 +29,9 @@
 /storage/framework/*_csrf.json
 /storage/framework/update_auth.json
 /vendor
+/python-ai/.venv
+/python-ai/__pycache__
+/python-ai/.models
 /*.zip
 _ide_helper.php
 Homestead.json

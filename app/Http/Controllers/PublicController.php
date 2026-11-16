@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Collection;
 use App\Models\Image;
+use App\Models\Setting;
 use App\Services\AnalyticsService;
 use App\Services\CollectionService;
 use App\Services\ErrorPagesService;
@@ -17,12 +18,22 @@ class PublicController extends Controller
     public function home()
     {
         $info = WebsiteInfoService::get();
+        $trendingSliderConfig = \App\Services\SliderSettingsService::get('trending_collections');
+        $maxItems = max(2, (int) ($trendingSliderConfig['maxTotalItems'] ?? 12));
+        $trendingCollections = CollectionService::listCollections([
+            'sortBy' => 'trending',
+            'status' => 'published',
+            'limit' => $maxItems,
+        ]);
+
         return Inertia::render('Home', [
             'seo' => [
                 'title' => $info['websiteName'],
                 'description' => $info['tagline'],
             ],
             'popularKeywords' => AnalyticsService::getHomepageTopKeywords(10, 7),
+            'trendingSliderConfig' => $trendingSliderConfig,
+            'trendingCollections' => $trendingCollections,
         ]);
     }
 
@@ -112,8 +123,28 @@ class PublicController extends Controller
         $info = WebsiteInfoService::get();
         $collections = CollectionService::listCollections(['status' => 'published', 'includeDrafts' => false]);
 
+        $gridDefaults = [
+            'mobile' => 1,
+            'smallTablet' => 2,
+            'tablet' => 3,
+            'desktop' => 6,
+        ];
+        $gridSetting = Setting::find('collections_grid_columns');
+        $decodedGrid = $gridSetting && is_string($gridSetting->value)
+            ? json_decode($gridSetting->value, true)
+            : null;
+        $gridColumns = is_array($decodedGrid)
+            ? [
+                'mobile' => max(1, min(4, (int) ($decodedGrid['mobile'] ?? $gridDefaults['mobile']))),
+                'smallTablet' => max(1, min(6, (int) ($decodedGrid['smallTablet'] ?? $gridDefaults['smallTablet']))),
+                'tablet' => max(1, min(6, (int) ($decodedGrid['tablet'] ?? $gridDefaults['tablet']))),
+                'desktop' => max(1, min(8, (int) ($decodedGrid['desktop'] ?? $gridDefaults['desktop']))),
+            ]
+            : $gridDefaults;
+
         return Inertia::render('Collections/Index', [
             'collections' => $collections,
+            'gridColumns' => $gridColumns,
             'seo' => [
                 'title' => "Curated PNG Collections & Clipart Packs - {$info['websiteName']}",
                 'description' => "Explore curated collections of transparent PNG images, seasonal clipart, themed design packs, and brand graphics on {$info['websiteName']}.",
@@ -136,17 +167,20 @@ class PublicController extends Controller
             // Ignore
         }
 
-        $allPublished = CollectionService::listCollections(['status' => 'published', 'limit' => 6]);
+        $sliderConfig = \App\Services\SliderSettingsService::get('related_collections');
+        $maxItems = max(2, (int) ($sliderConfig['maxTotalItems'] ?? 24));
+        $allPublished = CollectionService::listCollections(['status' => 'published', 'limit' => $maxItems + 4]);
         $relatedCollections = array_values(array_slice(array_filter(
             $allPublished,
             fn($c) => $c['id'] !== $data['collection']['id']
-        ), 0, 3));
+        ), 0, $maxItems));
 
         return Inertia::render('Collections/Show', [
             'collection' => $data['collection'],
             'initialImages' => $data['images'],
             'total' => $data['total'],
             'relatedCollections' => $relatedCollections,
+            'sliderConfig' => $sliderConfig,
             'seo' => [
                 'title' => "{$data['collection']['name']} PNG Collection - {$info['websiteName']}",
                 'description' => $data['collection']['description'] ?: "Download free transparent PNG graphics from the {$data['collection']['name']} collection.",
@@ -348,7 +382,37 @@ class PublicController extends Controller
         }
         if ($isExplicitDownload) {
             $headers['Cache-Control'] = 'private, no-cache, must-revalidate';
-            return response()->download($realPath, $filename, $headers);
+            $downloadName = $filename;
+            $requestedName = trim((string) $request->query('name', ''));
+            if ($requestedName !== '') {
+                $cleanBase = preg_replace('/[^A-Za-z0-9._-]+/', '-', basename(str_replace('\\', '/', $requestedName)));
+                $cleanBase = trim((string) $cleanBase, '.-');
+                if ($cleanBase !== '') {
+                    $stem = trim((string) pathinfo($cleanBase, PATHINFO_FILENAME), '.-');
+                    if ($stem !== '') {
+                        $downloadName = $stem . '.' . $ext;
+                    }
+                }
+            } else {
+                $host = strtolower((string) preg_replace('/^www\./', '', (string) $request->getHost()));
+                $isLocal = $host === ''
+                    || $host === 'localhost'
+                    || $host === '127.0.0.1'
+                    || $host === '::1'
+                    || filter_var($host, FILTER_VALIDATE_IP) !== false
+                    || !str_contains($host, '.');
+                if ($isLocal) {
+                    $info = WebsiteInfoService::get();
+                    $parsedHost = strtolower((string) preg_replace('/^www\./', '', (string) parse_url((string) ($info['websiteUrl'] ?? ''), PHP_URL_HOST)));
+                    $host = $parsedHost ?: (CollectionService::slugify($info['websiteName'] ?? 'png101') . '.com');
+                }
+                $siteTag = trim((string) preg_replace('/[^a-z0-9.-]/', '', $host), '.');
+                $stem = pathinfo($filename, PATHINFO_FILENAME);
+                if ($siteTag !== '' && $stem !== '' && !str_ends_with(strtolower($stem), '-' . $siteTag)) {
+                    $downloadName = $stem . '-' . $siteTag . '.' . $ext;
+                }
+            }
+            return response()->download($realPath, $downloadName, $headers);
         }
 
         $mtime = @filemtime($realPath) ?: time();

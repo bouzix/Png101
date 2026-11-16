@@ -144,23 +144,23 @@ export default function UpdateAppPage() {
                         </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="inline-flex flex-wrap items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
                         <button
                             type="button"
                             onClick={loadStatus}
                             disabled={loading}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card-bg hover:bg-white/5 border border-card-border text-xs font-bold text-foreground/85 cursor-pointer disabled:opacity-50 transition-all shadow-lg"
+                            className="h-8 inline-flex items-center gap-2 px-3 rounded-lg bg-card-bg hover:bg-foreground/5 text-xs font-bold text-foreground/85 cursor-pointer disabled:opacity-50 transition-all shadow-sm"
                         >
-                            <RefreshCw className={`w-4 h-4 text-primary-glow ${loading ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`w-3.5 h-3.5 text-primary-glow ${loading ? 'animate-spin' : ''}`} />
                             Refresh Status
                         </button>
                         <button
                             type="button"
                             onClick={handleCheckRemote}
                             disabled={checkingRemote || loading}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold cursor-pointer disabled:opacity-50 transition-all shadow-lg shadow-purple-600/20"
+                            className="h-8 inline-flex items-center gap-2 px-3.5 rounded-lg bg-primary-glow hover:bg-blue-600 text-white text-xs font-bold cursor-pointer disabled:opacity-50 transition-all shadow-sm"
                         >
-                            <GitBranch className={`w-4 h-4 ${checkingRemote ? 'animate-spin' : ''}`} />
+                            <GitBranch className={`w-3.5 h-3.5 ${checkingRemote ? 'animate-spin' : ''}`} />
                             {checkingRemote ? 'Checking Remote...' : 'Check GitHub Remote'}
                         </button>
                     </div>
@@ -295,7 +295,7 @@ export default function UpdateAppPage() {
                 )}
 
                 {/* Apply Updates Controls */}
-                <div className="bg-card-bg border border-card-border rounded-2xl overflow-hidden shadow-xl">
+                <div className="bg-card-bg border border-card-border rounded-2xl overflow-hidden">
                     <div className="p-6 border-b border-card-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 rounded-xl bg-primary-glow/10 text-primary-glow border border-primary-glow/20">

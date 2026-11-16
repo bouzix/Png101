@@ -70,7 +70,7 @@ class GeminiService
         return $decoded;
     }
 
-    public static function generateImageMetadata(string $imageBase64, ?string $modelName = null): array
+    public static function generateImageMetadata(string $imageBase64, ?string $modelName = null, array $hints = []): array
     {
         $activeKey = self::getActiveApiKey();
         if (!$activeKey || !$activeKey->key) {
@@ -89,10 +89,23 @@ class GeminiService
             $base64Data = $matches[2];
         }
 
+        $cleanHints = array_values(array_filter(array_map(
+            fn ($h) => is_string($h) ? trim($h) : '',
+            $hints
+        ), fn ($h) => $h !== ''));
+
+        $hintsSection = '';
+        if (!empty($cleanHints)) {
+            $hintsList = implode(', ', array_map(fn ($h) => '"' . addslashes($h) . '"', $cleanHints));
+            $hintsSection = "\n\nIMPORTANT USER HINTS / CONTEXT:\n"
+                . "The user has provided the following factual hints identifying this specific image: [{$hintsList}].\n"
+                . "You MUST use these hints as the primary context to accurately identify the subject, brand, character, logo, or object in the image, and reflect this identity in the title, altText, description, and tags.";
+        }
+
         $prompt = <<<PROMPT
 You are an SEO expert for a premium PNG images website.
 Analyze the provided image and generate the following metadata to maximize search visibility and user engagement.
-The content is for a PNG image site, so focus on visual elements, transparency, and usage context.
+The content is for a PNG image site, so focus on visual elements, transparency, and usage context.{$hintsSection}
 
 Required Output Format (JSON):
 {

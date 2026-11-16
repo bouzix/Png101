@@ -7,6 +7,7 @@ import Header from '@/components/Header';
 import ImageDetails from '@/components/ImageDetails';
 import RelatedImages from '@/components/RelatedImages';
 import CaptchaWidget from '@/components/CaptchaWidget';
+import { getSiteDomainTag } from '@/lib/utils';
 
 const GRADIENT_PRESETS = [
     { name: 'Sunset', from: '#ff7e5f', to: '#feb47b', angle: 135 },
@@ -307,11 +308,13 @@ export default function ImageDetail({
         }
 
         const safeName = imageTitle ? imageTitle.trim().replace(/\s+/g, '-') : 'image';
-        const filename = `${safeName}-${downloadWidth}x${downloadHeight}-png101-com.${ext}`;
+        const siteTag = getSiteDomainTag(websiteInfo);
+        const filename = `${safeName}-${downloadWidth}x${downloadHeight}-${siteTag}.${ext}`;
 
         if (downloadFormat === 'png' && downloadWidth === originalWidth && downloadHeight === originalHeight) {
             const a = document.createElement('a');
-            a.href = `${imageSrc}?download=1`;
+            const separator = imageSrc.includes('?') ? '&' : '?';
+            a.href = `${imageSrc}${separator}download=1&name=${encodeURIComponent(filename)}`;
             a.download = filename;
             document.body.appendChild(a);
             a.click();
@@ -978,6 +981,23 @@ export default function ImageDetail({
                                     Download {downloadFormat.toUpperCase()} ({downloadWidth}x{downloadHeight})
                                 </span>
                             </button>
+
+                            {props?.bonusToolsNav?.enableCatalogHandoff && (
+                                <Link
+                                    href={`/tools/image-resizer?asset=${encodeURIComponent(imageSrc)}&name=${encodeURIComponent(imageTitle)}`}
+                                    className="w-full py-2.5 px-4 rounded-xl bg-card-bg border border-card-border hover:border-blue-500/45 text-xs font-bold text-foreground/80 hover:text-blue-500 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <span>Open in Resize Image &rarr;</span>
+                                </Link>
+                            )}
+                            {props?.editorNav?.showEditInStudioButton && (
+                                <Link
+                                    href={`/image-editor?asset=${encodeURIComponent(image.id)}`}
+                                    className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600/15 to-blue-600/15 border border-indigo-500/35 hover:border-indigo-500/65 text-xs font-bold text-indigo-600 dark:text-indigo-300 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <span>Edit in Canva Studio &rarr;</span>
+                                </Link>
+                            )}
                         </div>
                     </div>
 

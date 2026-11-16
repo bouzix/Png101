@@ -6,8 +6,11 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CaptchaController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CollectionApiController;
+use App\Http\Controllers\EditorAdminController;
+use App\Http\Controllers\EditorController;
 use App\Http\Controllers\ImageApiController;
 use App\Http\Controllers\PublicController;
+use App\Http\Controllers\ToolsController;
 use Illuminate\Support\Facades\Route;
 
 // Public pages
@@ -18,6 +21,23 @@ Route::get('/images/{id}', [PublicController::class, 'image'])->name('images.sho
 Route::get('/collections', [PublicController::class, 'collections'])->name('collections.index');
 Route::get('/collections/{slug}', [PublicController::class, 'collectionDetail'])->name('collections.show');
 Route::get('/tags', [PublicController::class, 'tags'])->name('tags');
+
+// Bonus Standalone Image Tools & Converters
+Route::get('/tools', [ToolsController::class, 'index'])->name('tools.index');
+Route::get('/tools/convert', [ToolsController::class, 'convertIndex'])->name('tools.convert.index');
+Route::get('/tools/convert/{slug}', [ToolsController::class, 'showConvertTool'])->where('slug', '[a-z0-9-]+')->name('tools.convert.show');
+Route::get('/tools/utilities', [ToolsController::class, 'utilitiesIndex'])->name('tools.utilities.index');
+Route::get('/tools/devtools', [ToolsController::class, 'devtoolsIndex'])->name('tools.devtools.index');
+Route::get('/tools/{slug}', [ToolsController::class, 'showTool'])->where('slug', '[a-z0-9-]+')->name('tools.show');
+
+// Legacy /convert SEO 301 Redirects
+Route::get('/convert', [ToolsController::class, 'redirectLegacyConvert'])->name('tools.legacy.index');
+Route::get('/convert/{slug}', [ToolsController::class, 'redirectLegacyConvert'])->where('slug', '[a-z0-9-]+')->name('tools.legacy.show');
+
+// Canva-Style Public Image Editor & Fonts
+Route::get('/image-editor', [EditorController::class, 'index'])->name('editor.index');
+Route::get('/editor-fonts.css', [EditorController::class, 'fontCss'])->name('editor.fonts.css');
+Route::get('/editor-fonts/file/{filename}', [EditorController::class, 'serveFontFile'])->name('editor.fonts.file');
 
 // Legal & Info pages
 Route::get('/about-us', [PublicController::class, 'about'])->name('about');
@@ -43,14 +63,26 @@ Route::get('/admin', [AuthController::class, 'adminLoginPage'])->name('admin.log
 Route::get('/team/login', [AuthController::class, 'teamLoginPage'])->name('team.login');
 
 // Admin Dashboard (protected by admin.auth middleware)
+Route::middleware(['admin.auth'])->get('/admin/upload', [AdminController::class, 'dashboard'])->name('admin.upload');
 Route::middleware(['admin.auth'])->prefix('admin/dashboard')->group(function () {
-    Route::get('/', [AdminController::class, 'dashboard'])->name('admin.dashboard');
-    Route::get('/workspace', [AdminController::class, 'teamWorkspace'])->name('admin.workspace');
+    Route::get('/', [AdminController::class, 'teamWorkspace'])->name('admin.dashboard');
+    Route::redirect('/workspace', '/admin/dashboard')->name('admin.workspace');
     Route::get('/files', [AdminController::class, 'files'])->name('admin.files');
     Route::get('/categories', [AdminController::class, 'categories'])->name('admin.categories');
     Route::get('/collections', [AdminController::class, 'collections'])->name('admin.collections');
     Route::get('/analytics', [AdminController::class, 'analytics'])->name('admin.analytics');
     Route::get('/team', [AdminController::class, 'team'])->name('admin.team');
+    Route::get('/tools', [AdminController::class, 'tools'])->name('admin.tools');
+
+    // Collapsible Editor Admin Suite
+    Route::prefix('editor')->group(function () {
+        Route::get('/', [EditorAdminController::class, 'dashboard'])->name('admin.editor.dashboard');
+        Route::get('/templates', [EditorAdminController::class, 'templates'])->name('admin.editor.templates');
+        Route::get('/categories', [EditorAdminController::class, 'categories'])->name('admin.editor.categories');
+        Route::get('/fonts', [EditorAdminController::class, 'fonts'])->name('admin.editor.fonts');
+        Route::get('/analytics', [EditorAdminController::class, 'analytics'])->name('admin.editor.analytics');
+        Route::get('/settings', [EditorAdminController::class, 'settings'])->name('admin.editor.settings');
+    });
 
     Route::get('/settings', [AdminController::class, 'settings'])->name('admin.settings');
     Route::get('/settings/api-keys', [AdminController::class, 'apiKeys'])->name('admin.settings.api-keys');
@@ -58,6 +90,7 @@ Route::middleware(['admin.auth'])->prefix('admin/dashboard')->group(function () 
     Route::get('/settings/data-management', [AdminController::class, 'dataManagement'])->name('admin.settings.data-management');
     Route::get('/settings/error-pages', [AdminController::class, 'errorPages'])->name('admin.settings.error-pages');
     Route::get('/settings/captcha', [AdminController::class, 'captchaSettings'])->name('admin.settings.captcha');
+    Route::get('/settings/sliders', [AdminController::class, 'sliderSettings'])->name('admin.settings.sliders');
     Route::get('/settings/team', [AdminController::class, 'settingsTeam'])->name('admin.settings.team');
     Route::get('/settings/website-info', [AdminController::class, 'websiteInfo'])->name('admin.settings.website-info');
     Route::get('/settings/update-app', [AdminController::class, 'updateApp'])->name('admin.settings.update-app');
@@ -83,8 +116,16 @@ Route::prefix('api')->group(function () {
     Route::get('/collections', [CollectionApiController::class, 'index']);
     Route::get('/collections/{id}', [CollectionApiController::class, 'show']);
 
-    // Analytics APIs
+    // Analytics & Tool APIs
     Route::post('/analytics/track', [AnalyticsController::class, 'track'])->middleware('throttle:60,1');
+    Route::post('/tools/track', [ToolsController::class, 'track'])->middleware('throttle:120,1');
+    Route::post('/tools/remove-background', [ToolsController::class, 'removeBackground'])->middleware('throttle:30,1');
+
+    // Public Image Editor APIs
+    Route::get('/editor/assets', [EditorController::class, 'searchAssets'])->middleware('throttle:120,1');
+    Route::get('/editor/templates', [EditorController::class, 'listTemplates'])->middleware('throttle:120,1');
+    Route::get('/editor/templates/{idOrSlug}', [EditorController::class, 'showTemplate'])->middleware('throttle:120,1');
+    Route::post('/editor/track', [EditorController::class, 'track'])->middleware('throttle:180,1');
 
     // Public Contrast Templates GET (used on image detail page)
     Route::get('/admin/contrast-templates', [AdminController::class, 'getContrastTemplates']);
@@ -113,6 +154,7 @@ Route::prefix('api')->group(function () {
 
         // Collections CRUD
         Route::post('/collections', [CollectionApiController::class, 'store']);
+        Route::post('/collections/upload-hero', [CollectionApiController::class, 'uploadHero']);
         Route::put('/collections/{id}', [CollectionApiController::class, 'update']);
         Route::patch('/collections/{id}', [CollectionApiController::class, 'update']);
         Route::delete('/collections/{id}', [CollectionApiController::class, 'destroy']);
@@ -147,6 +189,9 @@ Route::prefix('api')->group(function () {
         Route::get('/admin/captcha', [AdminController::class, 'getCaptchaSettings']);
         Route::post('/admin/captcha', [AdminController::class, 'saveCaptchaSettings']);
 
+        Route::get('/admin/sliders', [AdminController::class, 'getSliderSettings']);
+        Route::post('/admin/sliders', [AdminController::class, 'saveSliderSettings']);
+
         Route::get('/admin/system-health', [AdminController::class, 'systemHealth']);
         Route::get('/admin/trash-settings', [AdminController::class, 'getTrashSettings']);
         Route::post('/admin/trash-settings', [AdminController::class, 'saveTrashSettings']);
@@ -166,6 +211,38 @@ Route::prefix('api')->group(function () {
         Route::get('/admin/update-app/status', [AdminController::class, 'getUpdateStatus']);
         Route::post('/admin/update-app/check-remote', [AdminController::class, 'checkRemoteUpdate']);
         Route::post('/admin/update-app/run', [AdminController::class, 'runUpdateApp']);
+
+        Route::get('/admin/tools', [AdminController::class, 'getToolsSettings']);
+        Route::post('/admin/tools', [AdminController::class, 'saveToolsSettings']);
+        Route::post('/admin/tools/bg-remover/test-server', [AdminController::class, 'testBgRemoverServer']);
+
+        // Protected Admin Editor Management APIs
+        Route::prefix('admin/editor')->group(function () {
+            Route::get('/templates', [EditorAdminController::class, 'apiTemplates']);
+            Route::post('/templates', [EditorAdminController::class, 'storeTemplate']);
+            Route::put('/templates/{id}', [EditorAdminController::class, 'updateTemplate']);
+            Route::patch('/templates/{id}', [EditorAdminController::class, 'updateTemplate']);
+            Route::post('/templates/{id}/duplicate', [EditorAdminController::class, 'duplicateTemplate']);
+            Route::delete('/templates/{id}', [EditorAdminController::class, 'destroyTemplate']);
+
+            Route::post('/categories', [EditorAdminController::class, 'storeCategory']);
+            Route::put('/categories/{id}', [EditorAdminController::class, 'updateCategory']);
+            Route::delete('/categories/{id}', [EditorAdminController::class, 'destroyCategory']);
+
+            Route::post('/presets', [EditorAdminController::class, 'storePreset']);
+            Route::put('/presets/{id}', [EditorAdminController::class, 'updatePreset']);
+            Route::delete('/presets/{id}', [EditorAdminController::class, 'destroyPreset']);
+
+            Route::post('/fonts', [EditorAdminController::class, 'storeFont']);
+            Route::patch('/fonts/{id}', [EditorAdminController::class, 'updateFont']);
+            Route::delete('/fonts/{id}', [EditorAdminController::class, 'destroyFont']);
+
+            Route::get('/analytics', [EditorAdminController::class, 'apiAnalytics']);
+            Route::get('/analytics/export', [EditorAdminController::class, 'exportAnalyticsCsv']);
+
+            Route::get('/settings', [EditorAdminController::class, 'getSettings']);
+            Route::post('/settings', [EditorAdminController::class, 'saveSettings']);
+        });
 
         Route::get('/admin/me', [AuthController::class, 'me']);
 

@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/react';
 import { toast } from 'sonner';
 import AdminLayout from '../../../Layouts/AdminLayout';
 import ConfirmDialog from '../../../components/admin/ConfirmDialog';
+import StudioSelect from '@/components/ui/StudioSelect';
 import {
     Database,
     FolderX,
@@ -260,15 +261,17 @@ export default function DataManagementPage() {
                         </p>
                     </div>
 
-                    <button
-                        type="button"
-                        onClick={handleGenerateNow}
-                        disabled={generatingSeo || seoLoading}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-glow text-white font-semibold text-sm rounded-xl hover:bg-blue-600 hover:shadow-lg hover:shadow-primary-glow/20 transition-all hover:-translate-y-0.5 disabled:opacity-50 cursor-pointer self-start sm:self-auto flex-shrink-0"
-                    >
-                        <RefreshCw className={`w-4 h-4 ${generatingSeo ? 'animate-spin' : ''}`} />
-                        <span>{generatingSeo ? 'Generating Files...' : 'Regenerate All Sitemaps'}</span>
-                    </button>
+                    <div className="inline-flex items-center p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto flex-shrink-0">
+                        <button
+                            type="button"
+                            onClick={handleGenerateNow}
+                            disabled={generatingSeo || seoLoading}
+                            className="h-8 inline-flex items-center gap-2 px-3.5 bg-primary-glow text-white font-bold text-xs rounded-lg hover:bg-blue-600 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                        >
+                            <RefreshCw className={`w-3.5 h-3.5 ${generatingSeo ? 'animate-spin' : ''}`} />
+                            <span>{generatingSeo ? 'Generating Files...' : 'Regenerate All Sitemaps'}</span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Primary Stat Cards Grid */}
@@ -304,7 +307,7 @@ export default function DataManagementPage() {
                 </div>
 
                 {/* Card 1: Data Purge & Catalog Management */}
-                <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                     <div className="p-6 border-b border-card-border flex items-start gap-3">
                         <div className="p-2.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 mt-0.5">
                             <Database className="w-5 h-5" />
@@ -387,7 +390,7 @@ export default function DataManagementPage() {
                 </div>
 
                 {/* Card 2: SEO & Sitemap Generator */}
-                <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                     <div className="p-6 border-b border-card-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-start gap-3">
                             <div className="p-2.5 rounded-lg bg-primary-glow/10 text-primary-glow border border-primary-glow/20 mt-0.5">
@@ -529,7 +532,8 @@ export default function DataManagementPage() {
                                         <label className="block text-xs font-bold text-foreground/70 uppercase tracking-wider mb-2">
                                             Schedule Frequency
                                         </label>
-                                        <select
+                                        <StudioSelect
+                                            aria-label="Schedule Frequency"
                                             value={seoSettings.scheduleFrequency}
                                             onChange={(e) =>
                                                 setSeoSettings({
@@ -538,13 +542,13 @@ export default function DataManagementPage() {
                                                 })
                                             }
                                             disabled={!seoSettings.autoRegenerate}
-                                            className="w-full px-4 py-2.5 bg-card-bg border border-card-border rounded-xl text-foreground text-sm focus:outline-none focus:border-primary-glow disabled:opacity-50"
+                                            className="w-full"
                                         >
                                             <option value="hourly">Every Hour</option>
                                             <option value="daily">Every Day (Daily)</option>
                                             <option value="weekly">Every Week (Weekly)</option>
                                             <option value="monthly">Every Month (Monthly)</option>
-                                        </select>
+                                        </StudioSelect>
                                     </div>
 
                                     {seoSettings.scheduleFrequency === 'weekly' && (
@@ -552,7 +556,8 @@ export default function DataManagementPage() {
                                             <label className="block text-xs font-bold text-foreground/70 uppercase tracking-wider mb-2">
                                                 Day of the Week
                                             </label>
-                                            <select
+                                            <StudioSelect
+                                                aria-label="Day of the Week"
                                                 value={seoSettings.scheduleDayOfWeek}
                                                 onChange={(e) =>
                                                     setSeoSettings({
@@ -561,14 +566,14 @@ export default function DataManagementPage() {
                                                     })
                                                 }
                                                 disabled={!seoSettings.autoRegenerate}
-                                                className="w-full px-4 py-2.5 bg-card-bg border border-card-border rounded-xl text-foreground text-sm focus:outline-none focus:border-primary-glow disabled:opacity-50"
+                                                className="w-full"
                                             >
                                                 {DAYS_OF_WEEK.map((d) => (
                                                     <option key={d.value} value={d.value}>
                                                         {d.label}
                                                     </option>
                                                 ))}
-                                            </select>
+                                            </StudioSelect>
                                         </div>
                                     )}
 
@@ -577,7 +582,8 @@ export default function DataManagementPage() {
                                             <label className="block text-xs font-bold text-foreground/70 uppercase tracking-wider mb-2">
                                                 Day of the Month
                                             </label>
-                                            <select
+                                            <StudioSelect
+                                                aria-label="Day of the Month"
                                                 value={seoSettings.scheduleDayOfMonth}
                                                 onChange={(e) =>
                                                     setSeoSettings({
@@ -586,14 +592,14 @@ export default function DataManagementPage() {
                                                     })
                                                 }
                                                 disabled={!seoSettings.autoRegenerate}
-                                                className="w-full px-4 py-2.5 bg-card-bg border border-card-border rounded-xl text-foreground text-sm focus:outline-none focus:border-primary-glow disabled:opacity-50"
+                                                className="w-full"
                                             >
                                                 {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
                                                     <option key={day} value={day}>
                                                         Day {day} of the Month
                                                     </option>
                                                 ))}
-                                            </select>
+                                            </StudioSelect>
                                         </div>
                                     )}
 

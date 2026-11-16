@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Head, Link } from '@inertiajs/react';
+import StudioSelect from '@/components/ui/StudioSelect';
 import { toast } from 'sonner';
 import {
     Globe,
@@ -15,9 +16,11 @@ import {
     XCircle,
     Zap,
     Settings,
+    LayoutGrid,
 } from 'lucide-react';
 import AdminLayout from '../../../Layouts/AdminLayout';
 import { StatCard } from '../../../components/ui/StatCard';
+import BgRemoverSettingsCard from '../../../components/admin/BgRemoverSettingsCard';
 
 export default function SettingsPage() {
     const [formData, setFormData] = useState({
@@ -35,6 +38,12 @@ export default function SettingsPage() {
     const [saving, setSaving] = useState(false);
     const [retentionDays, setRetentionDays] = useState(30);
     const [trashedCount, setTrashedCount] = useState(0);
+    const [collectionsGridColumns, setCollectionsGridColumns] = useState({
+        mobile: 1,
+        smallTablet: 2,
+        tablet: 3,
+        desktop: 6,
+    });
     const [health, setHealth] = useState(null);
     const [healthLoading, setHealthLoading] = useState(false);
     const [backfilling, setBackfilling] = useState(false);
@@ -54,8 +63,9 @@ export default function SettingsPage() {
         Promise.all([
             fetch('/api/admin/website-info').then((res) => res.json()).catch(() => ({})),
             fetch('/api/admin/trash-settings').then((res) => res.json()).catch(() => ({ retentionDays: 30, trashedCount: 0 })),
+            fetch('/api/admin/settings').then((res) => res.json()).catch(() => ({})),
         ])
-            .then(([data, trashData]) => {
+            .then(([data, trashData, allSettings]) => {
                 setFormData({
                     websiteName: data.websiteName || '',
                     websiteUrl: data.websiteUrl || '',
@@ -73,6 +83,21 @@ export default function SettingsPage() {
                 if (typeof trashData.trashedCount === 'number') {
                     setTrashedCount(trashData.trashedCount);
                 }
+                if (allSettings?.collections_grid_columns) {
+                    try {
+                        const parsed = JSON.parse(allSettings.collections_grid_columns);
+                        if (parsed && typeof parsed === 'object') {
+                            setCollectionsGridColumns({
+                                mobile: Number(parsed.mobile) || 1,
+                                smallTablet: Number(parsed.smallTablet) || 2,
+                                tablet: Number(parsed.tablet) || 3,
+                                desktop: Number(parsed.desktop) || 6,
+                            });
+                        }
+                    } catch {
+                        // Ignore malformed JSON and keep defaults
+                    }
+                }
                 setLoading(false);
             })
             .catch((err) => {
@@ -89,7 +114,7 @@ export default function SettingsPage() {
         setSaving(true);
 
         try {
-            const [res, trashRes] = await Promise.all([
+            const [res, trashRes, gridRes] = await Promise.all([
                 fetch('/api/admin/website-info', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -100,9 +125,16 @@ export default function SettingsPage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ retentionDays }),
                 }),
+                fetch('/api/admin/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        collections_grid_columns: JSON.stringify(collectionsGridColumns),
+                    }),
+                }),
             ]);
 
-            if (res.ok && trashRes.ok) {
+            if (res.ok && trashRes.ok && gridRes.ok) {
                 const trashJson = await trashRes.json().catch(() => ({}));
                 toast.success(
                     trashJson?.purgedNow > 0
@@ -146,15 +178,17 @@ export default function SettingsPage() {
                         </div>
 
                         {formData.websiteUrl && (
-                            <a
-                                href={formData.websiteUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card-bg hover:bg-white/5 border border-card-border hover:border-primary-glow/50 text-xs font-bold text-foreground/80 hover:text-foreground transition-all shadow-lg self-start sm:self-auto"
-                            >
-                                <ExternalLink className="w-4 h-4 text-primary-glow" />
-                                Visit Live Website
-                            </a>
+                            <div className="inline-flex items-center p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto">
+                                <a
+                                    href={formData.websiteUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="h-8 inline-flex items-center gap-2 px-3.5 rounded-lg bg-card-bg hover:bg-foreground/5 text-xs font-bold text-foreground/85 hover:text-foreground transition-all shadow-sm"
+                                >
+                                    <ExternalLink className="w-3.5 h-3.5 text-primary-glow" />
+                                    Visit Live Website
+                                </a>
+                            </div>
                         )}
                     </div>
 
@@ -196,7 +230,7 @@ export default function SettingsPage() {
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {/* Brand & Identity Card */}
-                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                             <div className="p-6 border-b border-card-border flex items-start gap-3">
                                 <div className="p-2.5 rounded-lg bg-primary-glow/10 text-primary-glow border border-primary-glow/20 mt-0.5">
                                     <Globe className="w-5 h-5" />
@@ -254,7 +288,7 @@ export default function SettingsPage() {
                         </div>
 
                         {/* Contact & Support Emails Card */}
-                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                             <div className="p-6 border-b border-card-border flex items-start gap-3">
                                 <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 mt-0.5">
                                     <Mail className="w-5 h-5" />
@@ -299,7 +333,7 @@ export default function SettingsPage() {
                         </div>
 
                         {/* Organization & Legal Details Card */}
-                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                             <div className="p-6 border-b border-card-border flex items-start gap-3">
                                 <div className="p-2.5 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 mt-0.5">
                                     <Building2 className="w-5 h-5" />
@@ -368,7 +402,7 @@ export default function SettingsPage() {
                         </div>
 
                         {/* Trash Bin Retention Policy Card */}
-                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                             <div className="p-6 border-b border-card-border flex items-start justify-between gap-4 flex-wrap">
                                 <div className="flex items-start gap-3">
                                     <div className="p-2.5 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 mt-0.5">
@@ -395,20 +429,21 @@ export default function SettingsPage() {
                                     <label className="block text-xs font-bold text-foreground/70 uppercase tracking-wider mb-2">
                                         Auto-Delete Trashed Images After
                                     </label>
-                                    <select
+                                    <StudioSelect
+                                        aria-label="Auto-Delete Trashed Images After"
                                         value={retentionDays}
                                         onChange={(e) => setRetentionDays(Number(e.target.value))}
-                                        className="w-full px-4 py-2.5 bg-background border border-card-border rounded-xl text-foreground text-sm focus:outline-none focus:border-primary-glow cursor-pointer"
+                                        className="w-full"
                                     >
-                                        <option value={7} className="bg-card-bg text-foreground">7 Days</option>
-                                        <option value={14} className="bg-card-bg text-foreground">14 Days</option>
-                                        <option value={30} className="bg-card-bg text-foreground">30 Days (Recommended)</option>
-                                        <option value={60} className="bg-card-bg text-foreground">60 Days</option>
-                                        <option value={90} className="bg-card-bg text-foreground">90 Days</option>
-                                        <option value={180} className="bg-card-bg text-foreground">180 Days (6 Months)</option>
-                                        <option value={365} className="bg-card-bg text-foreground">365 Days (1 Year)</option>
-                                        <option value={0} className="bg-card-bg text-foreground">Keep Forever (Manual Empty Only)</option>
-                                    </select>
+                                        <option value={7}>7 Days</option>
+                                        <option value={14}>14 Days</option>
+                                        <option value={30}>30 Days (Recommended)</option>
+                                        <option value={60}>60 Days</option>
+                                        <option value={90}>90 Days</option>
+                                        <option value={180}>180 Days (6 Months)</option>
+                                        <option value={365}>365 Days (1 Year)</option>
+                                        <option value={0}>Keep Forever (Manual Empty Only)</option>
+                                    </StudioSelect>
                                 </div>
                                 <p className="text-xs text-foreground/60 leading-relaxed">
                                     {retentionDays === 0
@@ -418,8 +453,128 @@ export default function SettingsPage() {
                             </div>
                         </div>
 
+                        {/* Collections Page Grid Layout Card */}
+                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
+                            <div className="p-6 border-b border-card-border flex items-start justify-between gap-4 flex-wrap">
+                                <div className="flex items-start gap-3">
+                                    <div className="p-2.5 rounded-lg bg-primary-glow/10 text-primary-glow border border-primary-glow/20 mt-0.5">
+                                        <LayoutGrid className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-bold text-foreground">Collections Page Grid Layout</h2>
+                                        <p className="text-xs text-foreground/60 mt-0.5">
+                                            Choose how many collection cards appear per row on the public <span className="font-mono text-foreground/80">/collections</span> page for each screen size.
+                                        </p>
+                                    </div>
+                                </div>
+                                <a
+                                    href="/collections"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-glow hover:underline"
+                                >
+                                    <span>View /collections</span>
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                            </div>
+
+                            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-foreground/70 uppercase tracking-wider mb-2">
+                                        Mobile (&lt; 640px)
+                                    </label>
+                                    <StudioSelect
+                                        aria-label="Mobile collections per row"
+                                        value={collectionsGridColumns.mobile}
+                                        onChange={(e) =>
+                                            setCollectionsGridColumns((prev) => ({
+                                                ...prev,
+                                                mobile: Number(e.target.value),
+                                            }))
+                                        }
+                                        className="w-full"
+                                    >
+                                        {[1, 2, 3, 4].map((n) => (
+                                            <option key={n} value={n}>
+                                                {n} {n === 1 ? 'column' : 'columns'}
+                                            </option>
+                                        ))}
+                                    </StudioSelect>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-foreground/70 uppercase tracking-wider mb-2">
+                                        Small Tablet (640px+)
+                                    </label>
+                                    <StudioSelect
+                                        aria-label="Small Tablet collections per row"
+                                        value={collectionsGridColumns.smallTablet}
+                                        onChange={(e) =>
+                                            setCollectionsGridColumns((prev) => ({
+                                                ...prev,
+                                                smallTablet: Number(e.target.value),
+                                            }))
+                                        }
+                                        className="w-full"
+                                    >
+                                        {[1, 2, 3, 4, 5, 6].map((n) => (
+                                            <option key={n} value={n}>
+                                                {n} {n === 1 ? 'column' : 'columns'}
+                                            </option>
+                                        ))}
+                                    </StudioSelect>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-foreground/70 uppercase tracking-wider mb-2">
+                                        Tablet (768px+)
+                                    </label>
+                                    <StudioSelect
+                                        aria-label="Tablet collections per row"
+                                        value={collectionsGridColumns.tablet}
+                                        onChange={(e) =>
+                                            setCollectionsGridColumns((prev) => ({
+                                                ...prev,
+                                                tablet: Number(e.target.value),
+                                            }))
+                                        }
+                                        className="w-full"
+                                    >
+                                        {[1, 2, 3, 4, 5, 6].map((n) => (
+                                            <option key={n} value={n}>
+                                                {n} {n === 1 ? 'column' : 'columns'}
+                                            </option>
+                                        ))}
+                                    </StudioSelect>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-foreground/70 uppercase tracking-wider mb-2">
+                                        Desktop (1024px+)
+                                    </label>
+                                    <StudioSelect
+                                        aria-label="Desktop collections per row"
+                                        value={collectionsGridColumns.desktop}
+                                        onChange={(e) =>
+                                            setCollectionsGridColumns((prev) => ({
+                                                ...prev,
+                                                desktop: Number(e.target.value),
+                                            }))
+                                        }
+                                        className="w-full"
+                                    >
+                                        {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                                            <option key={n} value={n}>
+                                                {n} {n === 1 ? 'column' : 'columns'}
+                                            </option>
+                                        ))}
+                                    </StudioSelect>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Save Changes Bar */}
-                        <div className="flex items-center justify-between p-4 rounded-xl bg-card-bg border border-card-border shadow-lg">
+                        <div className="flex items-center justify-between p-4 rounded-xl bg-card-bg border border-card-border">
                             <p className="text-xs text-foreground/50">
                                 Changes update automatically across header, footer, SEO metadata, and legal policies.
                             </p>
@@ -434,8 +589,11 @@ export default function SettingsPage() {
                         </div>
                     </form>
 
+                    {/* Background Remover Engine Settings (Synced with Bonus Tools) */}
+                    <BgRemoverSettingsCard showStandaloneSave />
+
                     {/* System Health Check Diagnostics Panel */}
-                    <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                    <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                         <div className="p-6 border-b border-card-border flex items-start justify-between gap-4 flex-wrap">
                             <div className="flex items-start gap-3">
                                 <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 mt-0.5">

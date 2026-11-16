@@ -126,7 +126,7 @@ export default function CodeInjectionPage() {
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {/* Head Code Card */}
-                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                             <div className="p-6 border-b border-card-border flex items-start justify-between gap-4">
                                 <div className="flex items-start gap-3">
                                     <div className="p-2.5 rounded-lg bg-primary-glow/10 text-primary-glow border border-primary-glow/20 mt-0.5">
@@ -163,7 +163,7 @@ export default function CodeInjectionPage() {
                         </div>
 
                         {/* Body Code Card */}
-                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                             <div className="p-6 border-b border-card-border flex items-start justify-between gap-4">
                                 <div className="flex items-start gap-3">
                                     <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 mt-0.5">
@@ -200,7 +200,7 @@ export default function CodeInjectionPage() {
                         </div>
 
                         {/* Footer Code Card */}
-                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                        <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                             <div className="p-6 border-b border-card-border flex items-start justify-between gap-4">
                                 <div className="flex items-start gap-3">
                                     <div className="p-2.5 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 mt-0.5">
@@ -237,18 +237,20 @@ export default function CodeInjectionPage() {
                         </div>
 
                         {/* Save Bar */}
-                        <div className="flex items-center justify-between p-4 rounded-xl bg-card-bg border border-card-border shadow-lg">
+                        <div className="flex items-center justify-between p-4 rounded-xl bg-card-bg border border-card-border">
                             <p className="text-xs text-foreground/50">
                                 Injected scripts take effect on all public website pages immediately upon saving.
                             </p>
-                            <button
-                                type="submit"
-                                disabled={saving}
-                                className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary-glow hover:bg-blue-600 text-white font-semibold text-sm rounded-xl shadow-lg shadow-primary-glow/20 transition-all hover:-translate-y-0.5 cursor-pointer disabled:opacity-50"
-                            >
-                                <Save className="w-4 h-4" />
-                                <span>{saving ? 'Saving...' : 'Save Script Settings'}</span>
-                            </button>
+                            <div className="inline-flex items-center p-1 bg-card-header-bg border border-card-border rounded-xl shrink-0">
+                                <button
+                                    type="submit"
+                                    disabled={saving}
+                                    className="h-8 inline-flex items-center gap-2 px-4 bg-primary-glow hover:bg-blue-600 text-white font-bold text-xs rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                                >
+                                    <Save className="w-3.5 h-3.5" />
+                                    <span>{saving ? 'Saving...' : 'Save Script Settings'}</span>
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>

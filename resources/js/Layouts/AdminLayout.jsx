@@ -1,32 +1,226 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, {
+    useState,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useCallback,
+    createContext,
+    useContext,
+} from 'react';
 import { Link, usePage, router } from '@inertiajs/react';
-import { ShieldAlert, Lock } from 'lucide-react';
+import { ShieldAlert, Lock, Wrench, UploadCloud } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import GlobalUpdateNotifier from '@/components/admin/GlobalUpdateNotifier';
+import { useBulkEdit } from '@/components/admin/BulkEditSidebar';
+import { useUploadManager } from '@/components/admin/UploadManager';
 
-export default function AdminLayout({ children }) {
-    const { url } = usePage();
-    const pathname = url.split('?')[0];
-    const [openMenus, setOpenMenus] = useState({
-        Settings: true,
+const AdminShellContext = createContext(false);
+
+function SubmenuList({ items, activePath, onSelectChild }) {
+    const listRef = useRef(null);
+    const itemRefs = useRef({});
+    const hasMeasuredRef = useRef(false);
+    const [indicator, setIndicator] = useState({
+        top: 0,
+        height: 0,
+        visible: false,
+        animate: false,
     });
-    const [isCollapsed, setIsCollapsed] = useState(false);
-    const [session, setSession] = useState(null);
+
+    const activeChild = useMemo(
+        () => items.find((c) => c.permitted && activePath === c.href) || null,
+        [items, activePath]
+    );
+
+    const updateIndicator = useCallback(() => {
+        if (!activeChild) {
+            setIndicator((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+            return;
+        }
+        const el = itemRefs.current[activeChild.href];
+        if (!el) return;
+        const top = el.offsetTop;
+        const height = el.offsetHeight;
+        if (height <= 0) return;
+
+        const shouldAnimate = hasMeasuredRef.current;
+        hasMeasuredRef.current = true;
+        setIndicator((prev) => {
+            if (
+                prev.top === top &&
+                prev.height === height &&
+                prev.visible === true &&
+                prev.animate === shouldAnimate
+            ) {
+                return prev;
+            }
+            return {
+                top,
+                height,
+                visible: true,
+                animate: shouldAnimate,
+            };
+        });
+    }, [activeChild]);
+
+    useLayoutEffect(() => {
+        updateIndicator();
+    }, [updateIndicator, items]);
 
     useEffect(() => {
-        const saved = localStorage.getItem('sidebarCollapsed');
-        if (saved) {
-            try {
-                setIsCollapsed(JSON.parse(saved));
-            } catch (e) {}
-        }
+        if (!listRef.current || typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(() => {
+            updateIndicator();
+        });
+        observer.observe(listRef.current);
+        return () => observer.disconnect();
+    }, [updateIndicator]);
 
+    return (
+        <div
+            ref={listRef}
+            className="relative ml-10 mt-1 space-y-1 animate-in slide-in-from-top-2 duration-200"
+        >
+            <div
+                aria-hidden="true"
+                className="absolute left-0 right-0 rounded-lg bg-blue-50 dark:bg-blue-600/25 border border-blue-200/80 dark:border-blue-500/30 shadow-xs pointer-events-none z-0 before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-r before:bg-blue-600 dark:before:bg-blue-400"
+                style={{
+                    top: 0,
+                    height: `${indicator.height}px`,
+                    transform: `translate3d(0, ${indicator.top}px, 0)`,
+                    opacity: indicator.visible ? 1 : 0,
+                    transition: indicator.animate
+                        ? 'transform 380ms cubic-bezier(0.22, 1.08, 0.36, 1), height 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease'
+                        : 'opacity 180ms ease',
+                }}
+            />
+
+            {items.map((child) => {
+                const isChildActive = activePath === child.href;
+                if (!child.permitted) {
+                    return (
+                        <div
+                            key={child.name}
+                            title={child.reason}
+                            aria-disabled="true"
+                            className="relative z-10 flex items-center justify-between py-1.5 px-3 text-xs rounded-lg text-slate-400 dark:text-slate-500 opacity-50 cursor-not-allowed select-none"
+                        >
+                            <span>{child.name}</span>
+                            <Lock className="w-3 h-3 flex-shrink-0" />
+                        </div>
+                    );
+                }
+                return (
+                    <Link
+                        key={child.name}
+                        ref={(el) => {
+                            itemRefs.current[child.href] = el;
+                        }}
+                        href={child.href}
+                        onClick={() => onSelectChild(child.href)}
+                        className={`relative z-10 block py-1.5 px-3 text-xs rounded-lg transition-colors duration-250 ${
+                            isChildActive
+                                ? 'text-blue-600 dark:text-white font-semibold'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/70 dark:hover:bg-slate-800/30'
+                        }`}
+                    >
+                        {child.name}
+                    </Link>
+                );
+            })}
+        </div>
+    );
+}
+
+export function PersistentAdminLayout({ children }) {
+    const { url } = usePage();
+    const { isOpen: isBulkEditOpen, isMinimized: isBulkEditMinimized } = useBulkEdit();
+    const { startStagingUpload } = useUploadManager();
+    const [isGlobalDragging, setIsGlobalDragging] = useState(false);
+    const globalDragCounterRef = useRef(0);
+    const rawPathname = url.split('?')[0];
+    const pathname = rawPathname.length > 1 ? rawPathname.replace(/\/+$/, '') : rawPathname;
+    const isUploadOrFilesPage =
+        pathname === '/admin/upload' || pathname === '/admin/dashboard/files';
+    const shouldSlideOverForBulkEdit = Boolean(
+        isBulkEditOpen && !isBulkEditMinimized && isUploadOrFilesPage
+    );
+
+    const [optimisticPath, setOptimisticPath] = useState(null);
+    const activePath = optimisticPath || pathname;
+
+    const [openMenus, setOpenMenus] = useState(() => {
+        const initPath =
+            typeof window !== 'undefined' ? window.location.pathname : pathname;
+        return {
+            Settings: true,
+            Editor: initPath.startsWith('/admin/dashboard/editor'),
+        };
+    });
+
+    const [isCollapsed, setIsCollapsed] = useState(() => {
+        if (typeof window === 'undefined') return false;
+        try {
+            const saved = localStorage.getItem('sidebarCollapsed');
+            return saved ? Boolean(JSON.parse(saved)) : false;
+        } catch (e) {
+            return false;
+        }
+    });
+
+    const [session, setSession] = useState(null);
+    const mainRef = useRef(null);
+    const navListRef = useRef(null);
+    const itemWrapperRefs = useRef({});
+    const itemRowRefs = useRef({});
+    const hasMeasuredNavRef = useRef(false);
+    const [navIndicator, setNavIndicator] = useState({
+        top: 0,
+        height: 0,
+        visible: false,
+        animate: false,
+    });
+
+    // Fetch session once on mount so the sidebar never refreshes or re-fetches on page transitions
+    useEffect(() => {
+        let isMounted = true;
         fetch('/api/auth/me')
             .then((res) => res.json())
             .then((data) => {
-                setSession(data);
+                if (isMounted) setSession(data);
             })
             .catch(() => {});
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    // Clear optimistic path if an Inertia visit finishes or is cancelled/interrupted
+    useEffect(() => {
+        const removeFinish = router.on('finish', () => {
+            setOptimisticPath(null);
+        });
+        const removeException = router.on('exception', () => {
+            setOptimisticPath(null);
+        });
+        return () => {
+            removeFinish();
+            removeException();
+        };
+    }, []);
+
+    // Sync optimisticPath and auto-expand parent group when pathname changes
+    useEffect(() => {
+        setOptimisticPath(null);
+        if (pathname.startsWith('/admin/dashboard/editor')) {
+            setOpenMenus((prev) => (prev.Editor ? prev : { ...prev, Editor: true }));
+        } else if (pathname.startsWith('/admin/dashboard/settings')) {
+            setOpenMenus((prev) => (prev.Settings ? prev : { ...prev, Settings: true }));
+        }
+        if (mainRef.current) {
+            mainRef.current.scrollTop = 0;
+        }
     }, [pathname]);
 
     const toggleSidebar = () => {
@@ -60,8 +254,8 @@ export default function AdminLayout({ children }) {
     const navItems = useMemo(() => {
         const items = [
             {
-                name: 'Team Hub',
-                href: '/admin/dashboard/workspace',
+                name: 'Dashboard',
+                href: '/admin/dashboard',
                 permitted: true,
                 reason: null,
                 icon: (
@@ -72,7 +266,7 @@ export default function AdminLayout({ children }) {
             },
             {
                 name: 'Upload',
-                href: '/admin/dashboard',
+                href: '/admin/upload',
                 permitted: hasPerm('upload_images'),
                 reason: 'Requires Upload Images permission',
                 icon: (
@@ -126,6 +320,32 @@ export default function AdminLayout({ children }) {
                 ),
             },
             {
+                name: 'Tools',
+                href: '/admin/dashboard/tools',
+                permitted: isSuperAdmin,
+                reason: 'Super Admin only',
+                icon: <Wrench className="w-5 h-5" />,
+            },
+            {
+                name: 'Editor',
+                href: '#',
+                permitted: hasPerm('manage_editor'),
+                reason: 'Requires Manage Image Editor permission',
+                icon: (
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42" />
+                    </svg>
+                ),
+                children: [
+                    { name: 'Dashboard', href: '/admin/dashboard/editor', permitted: hasPerm('manage_editor'), reason: 'Requires Manage Image Editor permission' },
+                    { name: 'Templates', href: '/admin/dashboard/editor/templates', permitted: hasPerm('manage_editor'), reason: 'Requires Manage Image Editor permission' },
+                    { name: 'Categories & Presets', href: '/admin/dashboard/editor/categories', permitted: hasPerm('manage_editor'), reason: 'Requires Manage Image Editor permission' },
+                    { name: 'Fonts & Brand Assets', href: '/admin/dashboard/editor/fonts', permitted: hasPerm('manage_editor'), reason: 'Requires Manage Image Editor permission' },
+                    { name: 'Analytics', href: '/admin/dashboard/editor/analytics', permitted: hasPerm('manage_editor'), reason: 'Requires Manage Image Editor permission' },
+                    { name: 'Settings', href: '/admin/dashboard/editor/settings', permitted: hasPerm('manage_editor'), reason: 'Requires Manage Image Editor permission' },
+                ],
+            },
+            {
                 name: 'Settings',
                 href: '#',
                 permitted: true,
@@ -137,6 +357,7 @@ export default function AdminLayout({ children }) {
                 ),
                 children: [
                     { name: 'General', href: '/admin/dashboard/settings', permitted: hasPerm('manage_general_settings'), reason: 'Requires General & Website Settings permission' },
+                    { name: 'Sliders', href: '/admin/dashboard/settings/sliders', permitted: hasPerm('manage_general_settings'), reason: 'Requires General & Website Settings permission' },
                     { name: 'API Keys', href: '/admin/dashboard/settings/api-keys', permitted: hasPerm('manage_api_keys'), reason: 'Requires Gemini API Keys permission' },
                     { name: 'Code Injection', href: '/admin/dashboard/settings/code-injection', permitted: hasPerm('manage_code_injection'), reason: 'Requires Code Injection permission' },
                     { name: 'Data Management', href: '/admin/dashboard/settings/data-management', permitted: hasPerm('manage_data_seo'), reason: 'Requires Data, Backup & SEO permission' },
@@ -160,10 +381,80 @@ export default function AdminLayout({ children }) {
         });
     }, [session]);
 
+    const isItemActive = useCallback(
+        (item, path) => {
+            if (item.children) {
+                return item.children.some((child) => path === child.href);
+            }
+            if (item.href === '/admin/dashboard') {
+                return path === '/admin/dashboard';
+            }
+            if (item.href === '/admin/dashboard/collections') {
+                return (
+                    path === '/admin/dashboard/collections' ||
+                    path.startsWith('/admin/dashboard/categories')
+                );
+            }
+            return path === item.href || path.startsWith(`${item.href}/`);
+        },
+        []
+    );
+
+    const activeParentName = useMemo(() => {
+        const match = navItems.find((item) => isItemActive(item, activePath));
+        return match ? match.name : null;
+    }, [navItems, activePath, isItemActive]);
+
+    const updateNavIndicator = useCallback(() => {
+        if (!activeParentName) {
+            setNavIndicator((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+            return;
+        }
+        const wrapperEl = itemWrapperRefs.current[activeParentName];
+        const rowEl = itemRowRefs.current[activeParentName];
+        if (!wrapperEl || !rowEl) return;
+
+        const top = wrapperEl.offsetTop + rowEl.offsetTop;
+        const height = rowEl.offsetHeight;
+        if (height <= 0) return;
+
+        const shouldAnimate = hasMeasuredNavRef.current;
+        hasMeasuredNavRef.current = true;
+        setNavIndicator((prev) => {
+            if (
+                prev.top === top &&
+                prev.height === height &&
+                prev.visible === true &&
+                prev.animate === shouldAnimate
+            ) {
+                return prev;
+            }
+            return {
+                top,
+                height,
+                visible: true,
+                animate: shouldAnimate,
+            };
+        });
+    }, [activeParentName]);
+
+    useLayoutEffect(() => {
+        updateNavIndicator();
+    }, [updateNavIndicator, openMenus, isCollapsed, navItems]);
+
+    useEffect(() => {
+        if (!navListRef.current || typeof ResizeObserver === 'undefined') return;
+        const observer = new ResizeObserver(() => {
+            updateNavIndicator();
+        });
+        observer.observe(navListRef.current);
+        return () => observer.disconnect();
+    }, [updateNavIndicator]);
+
     const isCurrentRoutePermitted = useMemo(() => {
         if (!session || session.role === 'super_admin') return true;
-        if (pathname.startsWith('/admin/dashboard/workspace')) return true;
-        if (pathname === '/admin/dashboard') return hasPerm('upload_images');
+        if (pathname === '/admin/dashboard' || pathname.startsWith('/admin/dashboard/workspace')) return true;
+        if (pathname === '/admin/upload') return hasPerm('upload_images');
         if (pathname.startsWith('/admin/dashboard/files')) {
             return hasPerm('upload_images') || hasPerm('edit_images') || hasPerm('delete_images');
         }
@@ -171,6 +462,7 @@ export default function AdminLayout({ children }) {
             return hasPerm('manage_collections');
         }
         if (pathname.startsWith('/admin/dashboard/analytics')) return hasPerm('view_analytics');
+        if (pathname.startsWith('/admin/dashboard/editor')) return hasPerm('manage_editor');
         if (pathname === '/admin/dashboard/settings') return hasPerm('manage_general_settings');
         if (pathname.startsWith('/admin/dashboard/settings/api-keys')) return hasPerm('manage_api_keys');
         if (pathname.startsWith('/admin/dashboard/settings/code-injection')) return hasPerm('manage_code_injection');
@@ -182,244 +474,350 @@ export default function AdminLayout({ children }) {
         ) {
             return hasPerm('manage_general_settings');
         }
-        if (pathname.startsWith('/admin/dashboard/team') || pathname.startsWith('/admin/dashboard/settings/team') || pathname.startsWith('/admin/dashboard/settings/update-app')) return false;
+        if (pathname.startsWith('/admin/dashboard/team') || pathname.startsWith('/admin/dashboard/tools') || pathname.startsWith('/admin/dashboard/settings/team') || pathname.startsWith('/admin/dashboard/settings/update-app')) return false;
         return true;
     }, [session, pathname]);
 
+    const canUploadImages = !session || session.role === 'super_admin' || (Array.isArray(session.permissions) && (session.permissions.includes('*') || session.permissions.includes('upload_images')));
+    const isGlobalDropEnabled = canUploadImages && pathname !== '/admin/upload';
+
+    const isExternalFileDrag = useCallback((e) => {
+        const types = e?.dataTransfer?.types;
+        if (!types) return false;
+        const typeList = Array.from(types);
+        if (typeList.includes('application/x-png101-bulk-items')) return false;
+        return typeList.includes('Files');
+    }, []);
+
+    useEffect(() => {
+        globalDragCounterRef.current = 0;
+        setIsGlobalDragging(false);
+    }, [pathname]);
+
+    useEffect(() => {
+        const resetDrag = () => {
+            globalDragCounterRef.current = 0;
+            setIsGlobalDragging(false);
+        };
+        window.addEventListener('dragend', resetDrag);
+        return () => window.removeEventListener('dragend', resetDrag);
+    }, []);
+
+    const handleGlobalDragEnter = (e) => {
+        if (!isGlobalDropEnabled || !isExternalFileDrag(e)) return;
+        e.preventDefault();
+        globalDragCounterRef.current += 1;
+        setIsGlobalDragging(true);
+    };
+
+    const handleGlobalDragOver = (e) => {
+        if (!isGlobalDropEnabled || !isExternalFileDrag(e)) return;
+        e.preventDefault();
+    };
+
+    const handleGlobalDragLeave = (e) => {
+        if (!isGlobalDropEnabled || !isExternalFileDrag(e)) return;
+        globalDragCounterRef.current = Math.max(0, globalDragCounterRef.current - 1);
+        if (globalDragCounterRef.current === 0) {
+            setIsGlobalDragging(false);
+        }
+    };
+
+    const handleGlobalDrop = (e) => {
+        if (!isGlobalDropEnabled || !isExternalFileDrag(e)) return;
+        e.preventDefault();
+        globalDragCounterRef.current = 0;
+        setIsGlobalDragging(false);
+        const files = Array.from(e.dataTransfer?.files || []);
+        if (files.length > 0) {
+            startStagingUpload(files, null, { startMinimized: true });
+        }
+    };
+
     return (
-        <div className="h-screen overflow-hidden bg-background flex">
-            {/* Sidebar */}
-            <aside className={`admin-sidebar ${isCollapsed ? 'w-20 overflow-visible' : 'w-64'} bg-white dark:bg-[#0f172a] border-r border-slate-200 dark:border-slate-800/80 flex flex-col transition-all duration-300 ease-in-out relative shadow-sm dark:shadow-xl z-20`}>
-                {/* Toggle Button */}
-                <button
-                    type="button"
-                    onClick={toggleSidebar}
-                    className="absolute -right-3 top-9 bg-blue-600 border-2 border-white dark:border-slate-800 rounded-full p-1 text-white hover:bg-blue-500 shadow-md z-50 transition-colors cursor-pointer"
-                    title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-3 h-3 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                    </svg>
-                </button>
-
-                {/* Header */}
-                <div className={`p-6 border-b border-slate-200 dark:border-slate-800/80 flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} transition-all duration-300 h-[88px]`}>
-                    <Link href="/" className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center border border-blue-400/30 shadow-[0_0_15px_rgba(59,130,246,0.3)] flex-shrink-0">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-white">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-                        </svg>
-                    </Link>
-                    <div className={`overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}>
-                        <h1 className="text-xl font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                            Png101
-                        </h1>
-                        {session && (
-                            <p className="text-[11px] text-slate-500 dark:text-blue-300/70 truncate">
-                                {session.role === 'super_admin'
-                                    ? 'Super Admin'
-                                    : `Team · ${session.name || session.email}`}
-                            </p>
-                        )}
+        <AdminShellContext.Provider value={true}>
+            <div
+                className="h-screen overflow-hidden bg-background flex relative"
+                onDragEnter={handleGlobalDragEnter}
+                onDragOver={handleGlobalDragOver}
+                onDragLeave={handleGlobalDragLeave}
+                onDrop={handleGlobalDrop}
+            >
+                {isGlobalDragging && isGlobalDropEnabled && (
+                    <div className="fixed inset-0 z-[70] pointer-events-none bg-primary-glow/10 backdrop-blur-[2px] border-4 border-dashed border-primary-glow flex items-center justify-center animate-in fade-in duration-150">
+                        <div className="px-6 py-4 rounded-2xl bg-card-bg/95 border border-primary-glow/40 shadow-2xl flex items-center gap-3">
+                            <div className="p-2.5 rounded-xl bg-primary-glow/15 text-primary-glow">
+                                <UploadCloud className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-foreground">Drop PNG images anywhere to upload</p>
+                                <p className="text-xs text-foreground/60">Progress will appear in the bottom-right upload tracker</p>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                )}
+                {/* Sidebar */}
+                <aside className={`admin-sidebar ${isCollapsed ? 'w-20 overflow-visible' : 'w-64'} bg-white dark:bg-[#0f172a] border-r border-slate-200 dark:border-slate-800/80 flex flex-col transition-all duration-300 ease-in-out relative shadow-sm dark:shadow-xl z-20`}>
+                    {/* Toggle Button */}
+                    <button
+                        type="button"
+                        onClick={toggleSidebar}
+                        className="absolute -right-3 top-9 bg-blue-600 border-2 border-white dark:border-slate-800 rounded-full p-1 text-white hover:bg-blue-500 shadow-md z-50 transition-colors cursor-pointer"
+                        title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-3 h-3 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                        </svg>
+                    </button>
 
-                <nav className={`flex-1 p-4 space-y-2 ${isCollapsed ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden'}`}>
-                    {navItems.map((item) => {
-                        const isParentActive = item.children
-                            ? item.children.some((child) => pathname === child.href)
-                            : pathname === item.href;
-                        const hasChildren = item.children && item.children.length > 0;
-                        const isOpen = openMenus[item.name];
-                        const isLocked = !item.permitted && !hasChildren;
-                        const isMutedParent = !item.permitted && hasChildren;
+                    {/* Header */}
+                    <div className={`p-6 border-b border-slate-200 dark:border-slate-800/80 flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} transition-all duration-300 h-[88px]`}>
+                        <Link href="/" className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center border border-blue-400/30 shadow-[0_0_15px_rgba(59,130,246,0.3)] flex-shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-white">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
+                            </svg>
+                        </Link>
+                        <div className={`overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}>
+                            <h1 className="text-xl font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                                Png101
+                            </h1>
+                            {session && (
+                                <p className="text-[11px] text-slate-500 dark:text-blue-300/70 truncate">
+                                    {session.role === 'super_admin'
+                                        ? 'Super Admin'
+                                        : `Team · ${session.name || session.email}`}
+                                </p>
+                            )}
+                        </div>
+                    </div>
 
-                        return (
-                            <div key={item.name} className="group relative">
-                                <div
-                                    title={!item.permitted && item.reason ? item.reason : undefined}
-                                    aria-disabled={isLocked ? 'true' : undefined}
-                                    className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} px-4 py-3 rounded-xl transition-all ${
-                                        isLocked
-                                            ? 'opacity-45 cursor-not-allowed text-slate-400 dark:text-slate-500 bg-slate-100/40 dark:bg-slate-900/30 select-none'
-                                            : isParentActive
-                                            ? 'bg-blue-600 text-white font-medium shadow-md shadow-blue-600/25 cursor-pointer'
-                                            : isMutedParent
-                                            ? 'opacity-60 text-slate-500 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/40 cursor-pointer'
-                                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white cursor-pointer'
-                                    }`}
-                                    onClick={() => {
-                                        if (hasChildren) {
-                                            toggleMenu(item.name);
-                                        } else if (item.permitted) {
-                                            router.visit(item.href);
-                                        }
-                                    }}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        {item.icon}
-                                        <span className={`whitespace-nowrap overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 block'}`}>
-                                            {item.name}
-                                        </span>
-                                    </div>
-                                    {!isCollapsed && !item.permitted && !hasChildren && (
-                                        <Lock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
-                                    )}
-                                    {hasChildren && !isCollapsed && (
-                                        <div className="flex items-center gap-1.5">
-                                            {!item.permitted && (
-                                                <Lock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-                                            )}
-                                            <svg
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                strokeWidth={1.5}
-                                                stroke="currentColor"
-                                                className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-90' : 'rotate-0'}`}
-                                            >
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                                            </svg>
-                                        </div>
-                                    )}
-                                </div>
+                    <nav className={`flex-1 p-4 ${isCollapsed ? 'overflow-visible' : 'overflow-y-auto overflow-x-hidden'}`}>
+                        <div ref={navListRef} className="relative space-y-2">
+                            {/* Animated Sliding Active Background Shape */}
+                            <div
+                                aria-hidden="true"
+                                className="absolute left-0 right-0 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 shadow-[0_6px_18px_rgba(37,99,235,0.38)] pointer-events-none z-0"
+                                style={{
+                                    top: 0,
+                                    height: `${navIndicator.height}px`,
+                                    transform: `translate3d(0, ${navIndicator.top}px, 0)`,
+                                    opacity: navIndicator.visible ? 1 : 0,
+                                    transition: navIndicator.animate
+                                        ? 'transform 420ms cubic-bezier(0.22, 1.08, 0.36, 1), height 300ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease'
+                                        : 'opacity 200ms ease',
+                                }}
+                            />
 
-                                {isCollapsed && (
-                                    <div className="absolute left-full top-0 pl-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-                                        <div className="bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl py-1 px-1 min-w-max">
-                                            <div className="px-3 py-2 font-bold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800/80 mb-1 whitespace-nowrap text-xs flex items-center gap-2">
-                                                <span>{item.name}</span>
-                                                {!item.permitted && (
-                                                    <span className="inline-flex items-center gap-1 text-[10px] font-normal text-amber-500">
-                                                        <Lock className="w-3 h-3" /> Restricted
-                                                    </span>
-                                                )}
+                            {navItems.map((item) => {
+                                const isParentActive = activeParentName === item.name;
+                                const hasChildren = item.children && item.children.length > 0;
+                                const isOpen = openMenus[item.name];
+                                const isLocked = !item.permitted && !hasChildren;
+                                const isMutedParent = !item.permitted && hasChildren;
+
+                                return (
+                                    <div
+                                        key={item.name}
+                                        ref={(el) => {
+                                            itemWrapperRefs.current[item.name] = el;
+                                        }}
+                                        className="group relative z-10"
+                                    >
+                                        <div
+                                            ref={(el) => {
+                                                itemRowRefs.current[item.name] = el;
+                                            }}
+                                            title={!item.permitted && item.reason ? item.reason : undefined}
+                                            aria-disabled={isLocked ? 'true' : undefined}
+                                            className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} px-4 py-3 rounded-xl transition-colors duration-250 ${
+                                                isLocked
+                                                    ? 'opacity-45 cursor-not-allowed text-slate-400 dark:text-slate-500 bg-slate-100/40 dark:bg-slate-900/30 select-none'
+                                                    : isParentActive
+                                                        ? 'text-white font-medium cursor-pointer'
+                                                        : isMutedParent
+                                                            ? 'opacity-60 text-slate-500 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-slate-800/40 cursor-pointer'
+                                                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100/80 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white cursor-pointer'
+                                            }`}
+                                            onClick={() => {
+                                                if (hasChildren) {
+                                                    toggleMenu(item.name);
+                                                } else if (item.permitted) {
+                                                    setOptimisticPath(item.href);
+                                                    if (pathname !== item.href) {
+                                                        router.visit(item.href);
+                                                    }
+                                                }
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <span
+                                                    className={`flex-shrink-0 transition-transform duration-300 ${
+                                                        isParentActive ? 'scale-105 text-white' : ''
+                                                    }`}
+                                                >
+                                                    {item.icon}
+                                                </span>
+                                                <span className={`whitespace-nowrap overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 block'}`}>
+                                                    {item.name}
+                                                </span>
                                             </div>
-                                            {hasChildren && (
-                                                <div className="space-y-0.5">
-                                                    {item.children.map((child) =>
-                                                        child.permitted ? (
-                                                            <Link
-                                                                key={child.name}
-                                                                href={child.href}
-                                                                className={`block px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
-                                                                    pathname === child.href
-                                                                        ? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-300 font-semibold'
-                                                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
-                                                                }`}
-                                                            >
-                                                                {child.name}
-                                                            </Link>
-                                                        ) : (
-                                                            <div
-                                                                key={child.name}
-                                                                title={child.reason}
-                                                                className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs rounded-lg text-slate-400 dark:text-slate-500 opacity-55 cursor-not-allowed whitespace-nowrap"
-                                                            >
-                                                                <span>{child.name}</span>
-                                                                <Lock className="w-3 h-3" />
-                                                            </div>
-                                                        )
+                                            {!isCollapsed && !item.permitted && !hasChildren && (
+                                                <Lock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
+                                            )}
+                                            {hasChildren && !isCollapsed && (
+                                                <div className="flex items-center gap-1.5">
+                                                    {!item.permitted && (
+                                                        <Lock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                                                     )}
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        strokeWidth={1.5}
+                                                        stroke="currentColor"
+                                                        className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-90' : 'rotate-0'}`}
+                                                    >
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                                    </svg>
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
-                                )}
 
-                                {hasChildren && isOpen && !isCollapsed && (
-                                    <div className="ml-10 mt-1 space-y-1 animate-in slide-in-from-top-2 duration-200">
-                                        {item.children.map((child) => {
-                                            const isChildActive = pathname === child.href;
-                                            if (!child.permitted) {
-                                                return (
-                                                    <div
-                                                        key={child.name}
-                                                        title={child.reason}
-                                                        aria-disabled="true"
-                                                        className="flex items-center justify-between py-1.5 px-3 text-xs rounded-lg text-slate-400 dark:text-slate-500 opacity-50 cursor-not-allowed select-none"
-                                                    >
-                                                        <span>{child.name}</span>
-                                                        <Lock className="w-3 h-3 flex-shrink-0" />
+                                        {isCollapsed && (
+                                            <div className="absolute left-full top-0 pl-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+                                                <div className="bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl py-1 px-1 min-w-max">
+                                                    <div className="px-3 py-2 font-bold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800/80 mb-1 whitespace-nowrap text-xs flex items-center gap-2">
+                                                        <span>{item.name}</span>
+                                                        {!item.permitted && (
+                                                            <span className="inline-flex items-center gap-1 text-[10px] font-normal text-amber-500">
+                                                                <Lock className="w-3 h-3" /> Restricted
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                );
-                                            }
-                                            return (
-                                                <Link
-                                                    key={child.name}
-                                                    href={child.href}
-                                                    className={`block py-1.5 px-3 text-xs rounded-lg transition-colors ${
-                                                        isChildActive
-                                                            ? 'text-blue-600 dark:text-white font-semibold bg-blue-50 dark:bg-blue-800/30'
-                                                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/30'
-                                                    }`}
-                                                >
-                                                    {child.name}
-                                                </Link>
-                                            );
-                                        })}
+                                                    {hasChildren && (
+                                                        <div className="space-y-0.5">
+                                                            {item.children.map((child) =>
+                                                                child.permitted ? (
+                                                                    <Link
+                                                                        key={child.name}
+                                                                        href={child.href}
+                                                                        onClick={() => setOptimisticPath(child.href)}
+                                                                        className={`block px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
+                                                                            activePath === child.href
+                                                                                ? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-300 font-semibold'
+                                                                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+                                                                        }`}
+                                                                    >
+                                                                        {child.name}
+                                                                    </Link>
+                                                                ) : (
+                                                                    <div
+                                                                        key={child.name}
+                                                                        title={child.reason}
+                                                                        className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs rounded-lg text-slate-400 dark:text-slate-500 opacity-55 cursor-not-allowed whitespace-nowrap"
+                                                                    >
+                                                                        <span>{child.name}</span>
+                                                                        <Lock className="w-3 h-3" />
+                                                                    </div>
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {hasChildren && isOpen && !isCollapsed && (
+                                            <SubmenuList
+                                                items={item.children}
+                                                activePath={activePath}
+                                                onSelectChild={(href) => setOptimisticPath(href)}
+                                            />
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </nav>
-
-                {/* Bottom Bar: Theme Toggle & Sign Out */}
-                <div className="p-4 border-t border-slate-200 dark:border-slate-800/80 space-y-2">
-                    <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-1'} py-1`}>
-                        {!isCollapsed && (
-                            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                                Theme
-                            </span>
-                        )}
-                        <ThemeToggle
-                            size="sm"
-                            className="bg-slate-100 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-blue-500/50"
-                        />
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={handleSignOut}
-                        className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-4 py-2.5 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/15 transition-colors group relative cursor-pointer text-sm font-medium`}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 flex-shrink-0">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 2.062-2.062a.908.908 0 0 0 0-1.285L18.75 12m4.5 3L21 12m0 0 2.25-2.25" />
-                        </svg>
-                        <span className={`whitespace-nowrap overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 block'}`}>
-                            Sign Out
-                        </span>
-
-                        {isCollapsed && (
-                            <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-                                <div className="bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-blue-700 rounded-lg shadow-xl px-3 py-2 text-xs font-bold text-red-600 dark:text-red-300 whitespace-nowrap">
-                                    Sign Out
-                                </div>
-                            </div>
-                        )}
-                    </button>
-                </div>
-            </aside>
-
-            {/* Main Content */}
-            <main className="flex-1 p-8 overflow-y-auto">
-                {isCurrentRoutePermitted ? (
-                    <div className="w-full p-6 md:p-8 max-w-[1600px] mx-auto">
-                        <GlobalUpdateNotifier session={session} pathname={pathname} />
-                        {children}
-                    </div>
-                ) : (
-                    <div className="max-w-lg mx-auto mt-20 bg-card-bg border border-card-border rounded-2xl p-8 text-center shadow-2xl space-y-4">
-                        <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                            <ShieldAlert className="w-7 h-7" />
+                                );
+                            })}
                         </div>
-                        <h2 className="text-xl font-bold text-foreground">Access Restricted</h2>
-                        <p className="text-sm text-foreground/60">
-                            Your team account does not have permission to access this section. Contact the Super Admin if you need additional permissions.
-                        </p>
+                    </nav>
+
+                    {/* Bottom Bar: Theme Toggle & Sign Out */}
+                    <div className="p-4 border-t border-slate-200 dark:border-slate-800/80 space-y-2">
+                        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between px-1'} py-1`}>
+                            {!isCollapsed && (
+                                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                    Theme
+                                </span>
+                            )}
+                            <ThemeToggle
+                                size="sm"
+                                className="bg-slate-100 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-blue-500/50"
+                            />
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={handleSignOut}
+                            className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-4 py-2.5 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/15 transition-colors group relative cursor-pointer text-sm font-medium`}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 flex-shrink-0">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 2.062-2.062a.908.908 0 0 0 0-1.285L18.75 12m4.5 3L21 12m0 0 2.25-2.25" />
+                            </svg>
+                            <span className={`whitespace-nowrap overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0 hidden' : 'w-auto opacity-100 block'}`}>
+                                Sign Out
+                            </span>
+
+                            {isCollapsed && (
+                                <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                                    <div className="bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-blue-700 rounded-lg shadow-xl px-3 py-2 text-xs font-bold text-red-600 dark:text-red-300 whitespace-nowrap">
+                                        Sign Out
+                                    </div>
+                                </div>
+                            )}
+                        </button>
                     </div>
-                )}
-            </main>
-        </div>
+                </aside>
+
+                {/* Main Content */}
+                <main
+                    ref={mainRef}
+                    style={{
+                        transition:
+                            'margin-right 380ms cubic-bezier(0.22, 1, 0.36, 1), padding 300ms ease',
+                    }}
+                    className={`flex-1 overflow-y-auto ${
+                        shouldSlideOverForBulkEdit ? 'p-4 lg:p-6 lg:mr-[500px]' : 'p-8 lg:mr-0'
+                    }`}
+                >
+                    {isCurrentRoutePermitted ? (
+                        <div
+                            className={`w-full max-w-[1600px] mx-auto transition-all duration-300 ${
+                                shouldSlideOverForBulkEdit ? 'p-3 md:p-5' : 'p-6 md:p-8'
+                            }`}
+                        >
+                            <GlobalUpdateNotifier session={session} pathname={pathname} />
+                            {children}
+                        </div>
+                    ) : (
+                        <div className="max-w-lg mx-auto mt-20 bg-card-bg border border-card-border rounded-2xl p-8 text-center shadow-2xl space-y-4">
+                            <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                                <ShieldAlert className="w-7 h-7" />
+                            </div>
+                            <h2 className="text-xl font-bold text-foreground">Access Restricted</h2>
+                            <p className="text-sm text-foreground/60">
+                                Your team account does not have permission to access this section. Contact the Super Admin if you need additional permissions.
+                            </p>
+                        </div>
+                    )}
+                </main>
+            </div>
+        </AdminShellContext.Provider>
     );
+}
+
+export default function AdminLayout({ children }) {
+    const isInsidePersistentShell = useContext(AdminShellContext);
+    if (isInsidePersistentShell) {
+        return <>{children}</>;
+    }
+    return <PersistentAdminLayout>{children}</PersistentAdminLayout>;
 }

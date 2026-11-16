@@ -5,10 +5,12 @@ export default function Pagination({
     totalPages,
     totalItems,
     itemsPerPage,
-    onPageChange
+    onPageChange,
+    itemLabel = 'image',
 }) {
     const startItem = (currentPage - 1) * itemsPerPage + 1;
     const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+    const pluralLabel = `${itemLabel}${totalItems !== 1 ? 's' : ''}`;
 
     const getPageNumbers = () => {
         const pages = [];
@@ -44,16 +46,16 @@ export default function Pagination({
 
     if (totalPages <= 1) {
         return (
-            <div className="text-sm text-foreground/60 text-center py-4">
-                Showing {totalItems} image{totalItems !== 1 ? 's' : ''}
+            <div className="text-sm text-foreground/60 text-center py-1">
+                Showing {totalItems} {pluralLabel}
             </div>
         );
     }
 
     return (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-1">
             <div className="text-sm text-foreground/60">
-                Showing {startItem}-{endItem} of {totalItems} images
+                Showing {startItem}-{endItem} of {totalItems} {itemLabel}s
             </div>
 
             <div className="flex items-center gap-2">

@@ -155,31 +155,38 @@ class CollectionService
             $tagRules = self::normalizeTags($col->tagRules ?? []);
             $finalImages = [];
 
-            if ($col->type === 'smart_dynamic' && !empty($tagRules)) {
+            if ($col->type === 'smart_dynamic') {
                 $excludedIds = [];
                 $pinnedImages = [];
-                $pinnedIds = [];
+                $manualImages = [];
+                $explicitIds = [];
 
                 foreach ($col->images as $ci) {
                     if ($ci->isExcluded) {
                         $excludedIds[$ci->imageId] = true;
-                    } elseif ($ci->isPinned && $ci->image && $ci->image->status === 'published') {
-                        $pinnedImages[] = $ci->image;
-                        $pinnedIds[$ci->imageId] = true;
+                    } elseif ($ci->image && $ci->image->status === 'published') {
+                        if ($ci->isPinned) {
+                            $pinnedImages[] = $ci->image;
+                        } else {
+                            $manualImages[] = $ci->image;
+                        }
+                        $explicitIds[$ci->imageId] = true;
                     }
                 }
 
                 $dynamicMatches = [];
-                foreach ($publishedImages as $img) {
-                    if (isset($excludedIds[$img->id]) || isset($pinnedIds[$img->id])) {
-                        continue;
-                    }
-                    $imgTags = self::normalizeTags($img->tags ?? []);
-                    if (self::matchesTagRules($imgTags, $tagRules, $col->ruleMatchMode ?: 'any')) {
-                        $dynamicMatches[] = $img;
+                if (!empty($tagRules)) {
+                    foreach ($publishedImages as $img) {
+                        if (isset($excludedIds[$img->id]) || isset($explicitIds[$img->id])) {
+                            continue;
+                        }
+                        $imgTags = self::normalizeTags($img->tags ?? []);
+                        if (self::matchesTagRules($imgTags, $tagRules, $col->ruleMatchMode ?: 'any')) {
+                            $dynamicMatches[] = $img;
+                        }
                     }
                 }
-                $finalImages = array_merge($pinnedImages, $dynamicMatches);
+                $finalImages = array_merge($pinnedImages, $manualImages, $dynamicMatches);
             } else {
                 foreach ($col->images as $ci) {
                     if (!$ci->isExcluded && $ci->image && $ci->image->status === 'published') {
@@ -212,6 +219,14 @@ class CollectionService
                 'description' => $col->description,
                 'coverImageId' => $col->coverImageId,
                 'coverImagePath' => $coverPath,
+                'customThumbnailPath' => $col->coverImagePath,
+                'heroImagePath' => $col->heroImagePath,
+                'heroBgColor' => $col->heroBgColor,
+                'heroTextColor' => $col->heroTextColor,
+                'cardBgImagePath' => $col->cardBgImagePath,
+                'cardBgColor' => $col->cardBgColor,
+                'cardTextColor' => $col->cardTextColor,
+                'trendingCardImagePath' => $col->trendingCardImagePath,
                 'type' => $col->type,
                 'tagRules' => $tagRules,
                 'ruleMatchMode' => $col->ruleMatchMode ?: 'any',
@@ -257,34 +272,42 @@ class CollectionService
         $tagRules = self::normalizeTags($collection->tagRules ?? []);
         $resolved = [];
 
-        if ($collection->type === 'smart_dynamic' && !empty($tagRules)) {
+        if ($collection->type === 'smart_dynamic') {
             $excludedIds = [];
             $pinnedImages = [];
-            $pinnedIds = [];
+            $manualImages = [];
+            $explicitIds = [];
 
             foreach ($collection->images as $ci) {
                 if ($ci->isExcluded) {
                     $excludedIds[$ci->imageId] = true;
-                } elseif ($ci->isPinned && $ci->image && $ci->image->status === 'published') {
+                } elseif ($ci->image && $ci->image->status === 'published') {
                     $arr = $ci->image->toArray();
-                    $arr['isPinned'] = true;
-                    $pinnedImages[] = $arr;
-                    $pinnedIds[$ci->imageId] = true;
+                    $arr['isPinned'] = (bool) $ci->isPinned;
+                    $arr['isManual'] = true;
+                    if ($ci->isPinned) {
+                        $pinnedImages[] = $arr;
+                    } else {
+                        $manualImages[] = $arr;
+                    }
+                    $explicitIds[$ci->imageId] = true;
                 }
             }
 
-            $allPublished = Image::where('status', 'published')->orderByDesc('createdAt')->get();
             $dynamicMatches = [];
-            foreach ($allPublished as $img) {
-                if (isset($excludedIds[$img->id]) || isset($pinnedIds[$img->id])) {
-                    continue;
-                }
-                $imgTags = self::normalizeTags($img->tags ?? []);
-                if (self::matchesTagRules($imgTags, $tagRules, $collection->ruleMatchMode ?: 'any')) {
-                    $dynamicMatches[] = $img->toArray();
+            if (!empty($tagRules)) {
+                $allPublished = Image::where('status', 'published')->orderByDesc('createdAt')->get();
+                foreach ($allPublished as $img) {
+                    if (isset($excludedIds[$img->id]) || isset($explicitIds[$img->id])) {
+                        continue;
+                    }
+                    $imgTags = self::normalizeTags($img->tags ?? []);
+                    if (self::matchesTagRules($imgTags, $tagRules, $collection->ruleMatchMode ?: 'any')) {
+                        $dynamicMatches[] = $img->toArray();
+                    }
                 }
             }
-            $resolved = array_merge($pinnedImages, $dynamicMatches);
+            $resolved = array_merge($pinnedImages, $manualImages, $dynamicMatches);
         } else {
             foreach ($collection->images as $ci) {
                 if (!$ci->isExcluded && $ci->image && $ci->image->status === 'published') {
@@ -308,6 +331,14 @@ class CollectionService
                 'description' => $collection->description,
                 'coverImageId' => $collection->coverImageId,
                 'coverImagePath' => $coverPath,
+                'customThumbnailPath' => $collection->coverImagePath,
+                'heroImagePath' => $collection->heroImagePath,
+                'heroBgColor' => $collection->heroBgColor,
+                'heroTextColor' => $collection->heroTextColor,
+                'cardBgImagePath' => $collection->cardBgImagePath,
+                'cardBgColor' => $collection->cardBgColor,
+                'cardTextColor' => $collection->cardTextColor,
+                'trendingCardImagePath' => $collection->trendingCardImagePath,
                 'type' => $collection->type,
                 'tagRules' => $tagRules,
                 'ruleMatchMode' => $collection->ruleMatchMode ?: 'any',

@@ -12,9 +12,11 @@ import {
     Search,
     X,
     ChevronDown,
-    Check
+    Check,
+    LayoutGrid
 } from 'lucide-react';
 import { CountryFlag } from '../../ui/CountryFlag';
+import StudioSelect from '../../ui/StudioSelect';
 
 export function FilterSidebar({
     filters,
@@ -85,7 +87,7 @@ export function FilterSidebar({
         (filters.sortBy !== 'downloads_desc' ? 1 : 0);
 
     return (
-        <aside className="w-full lg:w-[280px] shrink-0 bg-card-bg border border-card-border rounded-2xl p-5 flex flex-col gap-6 h-fit shadow-lg">
+        <aside className="w-full lg:w-[280px] shrink-0 bg-card-bg border border-card-border rounded-2xl p-5 flex flex-col gap-6 h-fit">
             {/* Header */}
             <div className="flex items-center justify-between pb-4 border-b border-card-border">
                 <div className="flex items-center gap-2.5">
@@ -118,9 +120,9 @@ export function FilterSidebar({
                     <Monitor className="w-3.5 h-3.5 text-primary-glow" />
                     Device Type
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-4 gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
                     {[
-                        { id: 'all', label: 'All', icon: null },
+                        { id: 'all', label: 'All Devices', icon: LayoutGrid },
                         { id: 'desktop', label: 'Desktop', icon: Monitor },
                         { id: 'mobile', label: 'Mobile', icon: Smartphone },
                         { id: 'tablet', label: 'Tablet', icon: Tablet },
@@ -130,15 +132,17 @@ export function FilterSidebar({
                         return (
                             <button
                                 key={item.id}
+                                type="button"
                                 onClick={() => onChange({ ...filters, deviceType: item.id })}
-                                className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
+                                title={item.label}
+                                aria-label={item.label}
+                                className={`h-8 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
                                     isActive
-                                        ? 'bg-primary-glow text-white border-primary-glow shadow-md shadow-primary-glow/20'
-                                        : 'bg-background/50 text-foreground/70 border-card-border hover:border-foreground/30 hover:text-foreground'
+                                        ? 'bg-primary-glow text-white shadow-sm'
+                                        : 'bg-card-bg text-foreground/65 hover:text-foreground shadow-sm'
                                 }`}
                             >
-                                {Icon && <Icon className="w-3.5 h-3.5" />}
-                                {item.label}
+                                <Icon className="w-4 h-4" />
                             </button>
                         );
                     })}
@@ -314,22 +318,20 @@ export function FilterSidebar({
                     <ArrowUpDown className="w-3.5 h-3.5 text-amber-400" />
                     Sort By
                 </label>
-                <div className="relative">
-                    <select
-                        value={filters.sortBy}
-                        onChange={(e) => onChange({ ...filters, sortBy: e.target.value })}
-                        className="w-full appearance-none px-3 py-2.5 rounded-xl bg-background/60 border border-card-border text-sm text-foreground focus:outline-none focus:border-primary-glow cursor-pointer"
-                    >
-                        <option value="downloads_desc">Most Downloaded</option>
-                        <option value="downloads_asc">Least Downloaded</option>
-                        <option value="views_desc">Most Viewed</option>
-                        <option value="conversion_desc">Highest Conversion</option>
-                        <option value="recent">Most Recent</option>
-                        <option value="name_asc">Name (A-Z)</option>
-                        <option value="name_desc">Name (Z-A)</option>
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-foreground/40 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
+                <StudioSelect
+                    aria-label="Sort analytics"
+                    value={filters.sortBy}
+                    onChange={(e) => onChange({ ...filters, sortBy: e.target.value })}
+                    className="w-full"
+                >
+                    <option value="downloads_desc">Most Downloaded</option>
+                    <option value="downloads_asc">Least Downloaded</option>
+                    <option value="views_desc">Most Viewed</option>
+                    <option value="conversion_desc">Highest Conversion</option>
+                    <option value="recent">Most Recent</option>
+                    <option value="name_asc">Name (A-Z)</option>
+                    <option value="name_desc">Name (Z-A)</option>
+                </StudioSelect>
             </div>
 
             {/* 5. Minimum Downloads */}

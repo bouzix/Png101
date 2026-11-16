@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     X,
     Star,
@@ -9,9 +9,15 @@ import {
     Image as ImageIcon,
     ExternalLink,
     Layers,
+    Palette,
+    Upload,
+    RotateCcw,
+    Share2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AssetPickerModal from './AssetPickerModal';
+import HeroBannerCustomizer from './HeroBannerCustomizer';
+import StudioSelect from '../../ui/StudioSelect';
 
 export default function EditCollectionModal({
     isOpen,
@@ -33,6 +39,16 @@ export default function EditCollectionModal({
     const [tags, setTags] = useState([]);
     const [tagInput, setTagInput] = useState('');
     const [ruleMatchMode, setRuleMatchMode] = useState('any');
+
+    const [heroImagePath, setHeroImagePath] = useState('');
+    const [heroBgColor, setHeroBgColor] = useState('');
+    const [heroTextColor, setHeroTextColor] = useState('');
+    const [coverImagePath, setCoverImagePath] = useState('');
+    const [cardBgImagePath, setCardBgImagePath] = useState('');
+    const [cardBgColor, setCardBgColor] = useState('');
+    const [cardTextColor, setCardTextColor] = useState('');
+    const [trendingCardImagePath, setTrendingCardImagePath] = useState('');
+    const [pickerTargetField, setPickerTargetField] = useState(null);
 
     const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
 
@@ -59,6 +75,14 @@ export default function EditCollectionModal({
                 setIsFeatured(Boolean(data.collection.isFeatured));
                 setTags(Array.isArray(data.collection.tagRules) ? data.collection.tagRules : []);
                 setRuleMatchMode(data.collection.ruleMatchMode || 'any');
+                setHeroImagePath(data.collection.heroImagePath || '');
+                setHeroBgColor(data.collection.heroBgColor || '');
+                setHeroTextColor(data.collection.heroTextColor || '');
+                setCoverImagePath(data.collection.customThumbnailPath || '');
+                setCardBgImagePath(data.collection.cardBgImagePath || '');
+                setCardBgColor(data.collection.cardBgColor || '');
+                setCardTextColor(data.collection.cardTextColor || '');
+                setTrendingCardImagePath(data.collection.trendingCardImagePath || '');
             } else {
                 toast.error('Failed to load collection details');
                 onClose();
@@ -84,6 +108,37 @@ export default function EditCollectionModal({
         setTags((prev) => prev.filter((item) => item !== t));
     };
 
+    const handlePickCatalogHero = async (ids) => {
+        if (!Array.isArray(ids) || ids.length === 0) return;
+        const targetId = ids[ids.length - 1];
+        const field = pickerTargetField || 'heroImagePath';
+        const applyPath = (path) => {
+            if (!path) return;
+            if (field === 'cardBgImagePath') setCardBgImagePath(path);
+            else if (field === 'coverImagePath') setCoverImagePath(path);
+            else if (field === 'trendingCardImagePath') setTrendingCardImagePath(path);
+            else setHeroImagePath(path);
+        };
+
+        const foundInCol = images.find((img) => img.id === targetId);
+        if (foundInCol?.path) {
+            applyPath(foundInCol.path);
+            return;
+        }
+        try {
+            const res = await fetch('/api/images?status=published');
+            if (res.ok) {
+                const list = await res.json();
+                const match = Array.isArray(list) ? list.find((i) => i.id === targetId) : null;
+                if (match?.path) {
+                    applyPath(match.path);
+                }
+            }
+        } catch {
+            // Ignore
+        }
+    };
+
     const handleSaveGeneral = async (e) => {
         e.preventDefault();
         if (!collectionId) return;
@@ -101,6 +156,14 @@ export default function EditCollectionModal({
                     isFeatured,
                     tagRules: tags,
                     ruleMatchMode,
+                    coverImagePath: coverImagePath.trim() || null,
+                    heroImagePath: heroImagePath.trim() || null,
+                    heroBgColor: heroBgColor.trim() || null,
+                    heroTextColor: heroTextColor.trim() || null,
+                    cardBgImagePath: cardBgImagePath.trim() || null,
+                    cardBgColor: cardBgColor.trim() || null,
+                    cardTextColor: cardTextColor.trim() || null,
+                    trendingCardImagePath: trendingCardImagePath.trim() || null,
                 }),
             });
 
@@ -130,6 +193,7 @@ export default function EditCollectionModal({
             if (res.ok) {
                 toast.success('Cover image updated');
                 fetchCollectionDetail();
+                onSuccess?.();
             }
         } catch {
             toast.error('Failed to set cover image');
@@ -152,6 +216,7 @@ export default function EditCollectionModal({
             if (res.ok) {
                 toast.success(newPinned ? 'Image pinned to top' : 'Image unpinned');
                 fetchCollectionDetail();
+                onSuccess?.();
             }
         } catch {
             toast.error('Failed to toggle pin');
@@ -167,6 +232,7 @@ export default function EditCollectionModal({
             if (res.ok) {
                 toast.success('Image removed from collection');
                 fetchCollectionDetail();
+                onSuccess?.();
             }
         } catch {
             toast.error('Failed to remove image');
@@ -182,8 +248,12 @@ export default function EditCollectionModal({
                 body: JSON.stringify({ action: 'add', imageIds: newImageIds }),
             });
             if (res.ok) {
-                toast.success(`Added ${newImageIds.length} images to collection`);
+                toast.success(`Added ${newImageIds.length} ${newImageIds.length === 1 ? 'image' : 'images'} to collection`);
                 fetchCollectionDetail();
+                onSuccess?.();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                toast.error(err.error || 'Failed to add images');
             }
         } catch {
             toast.error('Failed to add images');
@@ -288,14 +358,15 @@ export default function EditCollectionModal({
                                 <label className="block text-xs font-bold text-foreground mb-1 uppercase tracking-wider">
                                     Status
                                 </label>
-                                <select
+                                <StudioSelect
+                                    aria-label="Collection status"
                                     value={status}
                                     onChange={(e) => setStatus(e.target.value)}
-                                    className="w-full bg-input-bg border border-input-border rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary-glow"
+                                    className="w-full"
                                 >
                                     <option value="published">Published</option>
                                     <option value="draft">Draft</option>
-                                </select>
+                                </StudioSelect>
                             </div>
 
                             <div className="flex items-center gap-2 pt-6">
@@ -349,6 +420,35 @@ export default function EditCollectionModal({
                                 </div>
                             </div>
                         )}
+
+                        {/* Optional Hero Banner & Recommendation Card Customization */}
+                        <HeroBannerCustomizer
+                            collectionId={collectionId}
+                            collectionName={name}
+                            imageCount={totalImages}
+                            heroImagePath={heroImagePath}
+                            setHeroImagePath={setHeroImagePath}
+                            heroBgColor={heroBgColor}
+                            setHeroBgColor={setHeroBgColor}
+                            heroTextColor={heroTextColor}
+                            setHeroTextColor={setHeroTextColor}
+                            coverImagePath={coverImagePath}
+                            setCoverImagePath={setCoverImagePath}
+                            fallbackThumbnailPath={images[0]?.path || collection?.coverImagePath || ''}
+                            cardBgImagePath={cardBgImagePath}
+                            setCardBgImagePath={setCardBgImagePath}
+                            cardBgColor={cardBgColor}
+                            setCardBgColor={setCardBgColor}
+                            cardTextColor={cardTextColor}
+                            setCardTextColor={setCardTextColor}
+                            trendingCardImagePath={trendingCardImagePath}
+                            setTrendingCardImagePath={setTrendingCardImagePath}
+                            previewImages={images.slice(0, 4)}
+                            onOpenLibraryPicker={(field) => setPickerTargetField(field || 'heroImagePath')}
+                            onStudioHeroSaved={() => {
+                                onSuccess?.();
+                            }}
+                        />
 
                         <button
                             type="submit"
@@ -487,6 +587,13 @@ export default function EditCollectionModal({
                 onClose={() => setIsAssetPickerOpen(false)}
                 onConfirm={handleAddImages}
                 title="Add Graphics to this Collection"
+            />
+
+            <AssetPickerModal
+                isOpen={Boolean(pickerTargetField)}
+                onClose={() => setPickerTargetField(null)}
+                onConfirm={handlePickCatalogHero}
+                title="Pick Image from Library"
             />
         </div>
     );

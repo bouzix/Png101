@@ -411,23 +411,27 @@ export default function TeamPage() {
                         </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto">
                         <a
                             href="/team/login"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card-bg hover:bg-white/5 border border-card-border hover:border-primary-glow/50 text-xs font-bold text-foreground/80 hover:text-foreground transition-all shadow-lg"
+                            className="h-8 px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 transition-all"
                         >
-                            <ExternalLink className="w-4 h-4 text-primary-glow" />
-                            Team Login Page
+                            <ExternalLink className="w-3.5 h-3.5 text-primary-glow" />
+                            <span>Team Login Page</span>
                         </a>
                         <button
                             type="button"
                             onClick={() => setShowSmtp(!showSmtp)}
-                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card-bg hover:bg-white/5 border border-card-border hover:border-primary-glow/50 text-xs font-bold text-foreground/80 hover:text-foreground transition-all shadow-lg cursor-pointer"
+                            className={`h-8 px-3 rounded-lg text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                                showSmtp
+                                    ? 'bg-primary-glow text-white'
+                                    : 'bg-card-bg text-foreground/80 hover:text-primary-glow'
+                            }`}
                         >
-                            <Server className="w-4 h-4 text-purple-400" />
-                            SMTP Email Settings
+                            <Server className="w-3.5 h-3.5" />
+                            <span>SMTP Email Settings</span>
                             {showSmtp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                         </button>
                     </div>
@@ -471,7 +475,7 @@ export default function TeamPage() {
 
                 {/* Collapsible SMTP Email Configuration Card */}
                 {showSmtp && (
-                    <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl animate-in fade-in duration-200">
+                    <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden animate-in fade-in duration-200">
                         <div className="p-6 border-b border-card-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div className="flex items-center gap-3">
                                 <div className="p-2.5 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
@@ -484,14 +488,16 @@ export default function TeamPage() {
                                     </p>
                                 </div>
                             </div>
-                            <button
-                                type="button"
-                                onClick={applyMailpitPreset}
-                                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-xs font-bold text-purple-300 cursor-pointer transition-all self-start sm:self-auto"
-                            >
-                                <Sparkles className="w-3.5 h-3.5" />
-                                Use Local Mailpit (127.0.0.1:1025)
-                            </button>
+                            <div className="p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto">
+                                <button
+                                    type="button"
+                                    onClick={applyMailpitPreset}
+                                    className="h-7 px-2.5 rounded-lg bg-card-bg hover:text-purple-400 text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 cursor-pointer transition-all"
+                                >
+                                    <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                                    <span>Use Local Mailpit (127.0.0.1:1025)</span>
+                                </button>
+                            </div>
                         </div>
 
                         <form onSubmit={handleSaveSmtp} className="p-6 space-y-4">
@@ -500,36 +506,42 @@ export default function TeamPage() {
                                     <label className="block text-xs font-bold uppercase text-foreground/70 mb-1.5">
                                         SMTP Host
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={smtp.host}
-                                        onChange={(e) => setSmtp({ ...smtp, host: e.target.value })}
-                                        placeholder="smtp.gmail.com"
-                                        className="w-full bg-background border border-card-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary-glow focus:ring-1 focus:ring-primary-glow/30 transition-all"
-                                    />
+                                    <div className="p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                        <input
+                                            type="text"
+                                            value={smtp.host}
+                                            onChange={(e) => setSmtp({ ...smtp, host: e.target.value })}
+                                            placeholder="smtp.gmail.com"
+                                            className="w-full h-8 rounded-lg bg-card-bg px-3 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-glow/60 transition-all"
+                                        />
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold uppercase text-foreground/70 mb-1.5">
                                         SMTP Port
                                     </label>
-                                    <input
-                                        type="number"
-                                        value={smtp.port}
-                                        onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) })}
-                                        placeholder="587"
-                                        className="w-full bg-background border border-card-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary-glow focus:ring-1 focus:ring-primary-glow/30 transition-all"
-                                    />
-                                </div>
-                                <div className="flex items-end pb-2">
-                                    <label className="flex items-center gap-2.5 cursor-pointer text-sm text-foreground">
+                                    <div className="p-1 bg-card-header-bg border border-card-border rounded-xl">
                                         <input
-                                            type="checkbox"
-                                            checked={smtp.secure}
-                                            onChange={(e) => setSmtp({ ...smtp, secure: e.target.checked })}
-                                            className="w-4 h-4 rounded accent-blue-500"
+                                            type="number"
+                                            value={smtp.port}
+                                            onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) })}
+                                            placeholder="587"
+                                            className="w-full h-8 rounded-lg bg-card-bg px-3 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-glow/60 transition-all"
                                         />
-                                        <span>Use SSL/TLS (Port 465)</span>
-                                    </label>
+                                    </div>
+                                </div>
+                                <div className="flex items-end pb-1">
+                                    <div className="p-1 bg-card-header-bg border border-card-border rounded-xl w-full">
+                                        <label className="h-8 px-3 rounded-lg bg-card-bg shadow-sm flex items-center gap-2.5 cursor-pointer text-xs font-bold text-foreground">
+                                            <input
+                                                type="checkbox"
+                                                checked={smtp.secure}
+                                                onChange={(e) => setSmtp({ ...smtp, secure: e.target.checked })}
+                                                className="w-3.5 h-3.5 rounded accent-blue-500"
+                                            />
+                                            <span>Use SSL/TLS (Port 465)</span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
 
@@ -538,25 +550,29 @@ export default function TeamPage() {
                                     <label className="block text-xs font-bold uppercase text-foreground/70 mb-1.5">
                                         SMTP Username
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={smtp.user}
-                                        onChange={(e) => setSmtp({ ...smtp, user: e.target.value })}
-                                        placeholder="your-email@gmail.com"
-                                        className="w-full bg-background border border-card-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary-glow focus:ring-1 focus:ring-primary-glow/30 transition-all"
-                                    />
+                                    <div className="p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                        <input
+                                            type="text"
+                                            value={smtp.user}
+                                            onChange={(e) => setSmtp({ ...smtp, user: e.target.value })}
+                                            placeholder="your-email@gmail.com"
+                                            className="w-full h-8 rounded-lg bg-card-bg px-3 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-glow/60 transition-all"
+                                        />
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold uppercase text-foreground/70 mb-1.5">
                                         SMTP Password / App Password
                                     </label>
-                                    <input
-                                        type="password"
-                                        value={smtp.pass}
-                                        onChange={(e) => setSmtp({ ...smtp, pass: e.target.value })}
-                                        placeholder="••••••••••••••••"
-                                        className="w-full bg-background border border-card-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary-glow focus:ring-1 focus:ring-primary-glow/30 transition-all"
-                                    />
+                                    <div className="p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                        <input
+                                            type="password"
+                                            value={smtp.pass}
+                                            onChange={(e) => setSmtp({ ...smtp, pass: e.target.value })}
+                                            placeholder="••••••••••••••••"
+                                            className="w-full h-8 rounded-lg bg-card-bg px-3 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-glow/60 transition-all"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -565,60 +581,64 @@ export default function TeamPage() {
                                     <label className="block text-xs font-bold uppercase text-foreground/70 mb-1.5">
                                         Sender Name
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={smtp.fromName}
-                                        onChange={(e) => setSmtp({ ...smtp, fromName: e.target.value })}
-                                        placeholder="Png101 Admin"
-                                        className="w-full bg-background border border-card-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary-glow focus:ring-1 focus:ring-primary-glow/30 transition-all"
-                                    />
+                                    <div className="p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                        <input
+                                            type="text"
+                                            value={smtp.fromName}
+                                            onChange={(e) => setSmtp({ ...smtp, fromName: e.target.value })}
+                                            placeholder="Png101 Admin"
+                                            className="w-full h-8 rounded-lg bg-card-bg px-3 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-glow/60 transition-all"
+                                        />
+                                    </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold uppercase text-foreground/70 mb-1.5">
                                         Sender Email
                                     </label>
-                                    <input
-                                        type="email"
-                                        value={smtp.fromEmail}
-                                        onChange={(e) => setSmtp({ ...smtp, fromEmail: e.target.value })}
-                                        placeholder="noreply@png101.com"
-                                        className="w-full bg-background border border-card-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary-glow focus:ring-1 focus:ring-primary-glow/30 transition-all"
-                                    />
+                                    <div className="p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                        <input
+                                            type="email"
+                                            value={smtp.fromEmail}
+                                            onChange={(e) => setSmtp({ ...smtp, fromEmail: e.target.value })}
+                                            placeholder="noreply@png101.com"
+                                            className="w-full h-8 rounded-lg bg-card-bg px-3 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-glow/60 transition-all"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
                             <div className="pt-2 border-t border-card-border/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div className="flex flex-1 items-center gap-2 max-w-md">
+                                <div className="flex flex-1 items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl max-w-md">
                                     <input
                                         type="email"
                                         value={testEmailTo}
                                         onChange={(e) => setTestEmailTo(e.target.value)}
                                         placeholder="test@png101.local (Send Test Email)"
-                                        className="flex-1 bg-background border border-card-border rounded-xl px-3.5 py-2 text-xs text-foreground focus:outline-none focus:border-primary-glow"
+                                        className="flex-1 h-7 rounded-lg bg-card-bg px-2.5 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-glow/60"
                                     />
                                     <button
                                         type="button"
                                         onClick={handleSendTestEmail}
                                         disabled={sendingTestEmail || !smtp.host}
-                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-bold text-emerald-300 cursor-pointer disabled:opacity-50 transition-all whitespace-nowrap"
+                                        className="h-7 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all whitespace-nowrap"
                                     >
                                         <Send className="w-3.5 h-3.5" />
                                         {sendingTestEmail ? 'Sending...' : 'Send Test'}
                                     </button>
                                 </div>
 
-                                <div className="flex justify-end gap-3">
+                                <div className="flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-end md:self-auto">
                                     <button
                                         type="button"
                                         onClick={() => setShowSmtp(false)}
-                                        className="px-4 py-2.5 rounded-xl border border-card-border text-sm text-foreground/70 hover:text-foreground cursor-pointer transition-colors"
+                                        className="h-7 px-3 rounded-lg bg-card-bg text-xs font-bold text-foreground/70 hover:text-foreground shadow-sm cursor-pointer transition-colors"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={savingSmtp}
-                                        className="px-5 py-2.5 rounded-xl bg-primary-glow hover:bg-primary-glow/90 text-white text-sm font-bold shadow-lg shadow-primary-glow/20 cursor-pointer disabled:opacity-50 transition-all"
+                                        className="h-7 px-3.5 rounded-lg bg-primary-glow hover:bg-primary-glow/90 text-white text-xs font-bold shadow-sm cursor-pointer disabled:opacity-50 transition-all"
                                     >
                                         {savingSmtp ? 'Saving...' : 'Save SMTP Settings'}
                                     </button>
@@ -704,7 +724,7 @@ export default function TeamPage() {
                 )}
 
                 {/* Card 1: Add & Invite New Team Member */}
-                <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                     <div className="p-6 border-b border-card-border flex items-center gap-3">
                         <div className="p-2.5 rounded-lg bg-primary-glow/10 text-primary-glow border border-primary-glow/20">
                             <UserPlus className="w-5 h-5" />
@@ -723,29 +743,33 @@ export default function TeamPage() {
                                 <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">
                                     Member Name
                                 </label>
-                                <input
-                                    type="text"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    placeholder="e.g., Sarah (Content Editor)"
-                                    className="w-full bg-background border border-card-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary-glow focus:ring-1 focus:ring-primary-glow/30 transition-all"
-                                />
+                                <div className="p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                    <input
+                                        type="text"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        placeholder="e.g., Sarah (Content Editor)"
+                                        className="w-full h-8 rounded-lg bg-card-bg px-3 text-xs font-medium text-foreground shadow-sm focus:outline-none focus:ring-1 focus:ring-primary-glow/60 transition-all"
+                                    />
+                                </div>
                             </div>
 
                             <div>
                                 <label className="block text-xs font-bold uppercase tracking-wider text-foreground/70 mb-2">
                                     Email Address *
                                 </label>
-                                <div className="relative">
-                                    <Mail className="w-4 h-4 text-foreground/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                                    <input
-                                        type="email"
-                                        required
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        placeholder="member@example.com"
-                                        className="w-full bg-background border border-card-border rounded-xl pl-10 pr-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary-glow focus:ring-1 focus:ring-primary-glow/30 transition-all"
-                                    />
+                                <div className="p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                    <div className="relative h-8 rounded-lg bg-card-bg shadow-sm flex items-center px-2.5 gap-2 focus-within:ring-1 focus-within:ring-primary-glow/60 transition-all">
+                                        <Mail className="w-3.5 h-3.5 text-foreground/45 shrink-0 pointer-events-none" />
+                                        <input
+                                            type="email"
+                                            required
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                            placeholder="member@example.com"
+                                            className="w-full h-full bg-transparent text-xs font-medium text-foreground focus:outline-none"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -763,23 +787,25 @@ export default function TeamPage() {
                                         Generate
                                     </button>
                                 </div>
-                                <div className="relative">
-                                    <Lock className="w-4 h-4 text-foreground/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                                    <input
-                                        type={showPassword ? 'text' : 'password'}
-                                        required
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        placeholder="Create password"
-                                        className="w-full bg-background border border-card-border rounded-xl pl-10 pr-10 py-2.5 text-sm text-foreground font-mono focus:outline-none focus:border-primary-glow focus:ring-1 focus:ring-primary-glow/30 transition-all"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/40 hover:text-foreground cursor-pointer"
-                                    >
-                                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                    </button>
+                                <div className="p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                    <div className="relative h-8 rounded-lg bg-card-bg shadow-sm flex items-center px-2.5 gap-2 focus-within:ring-1 focus-within:ring-primary-glow/60 transition-all">
+                                        <Lock className="w-3.5 h-3.5 text-foreground/45 shrink-0 pointer-events-none" />
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            required
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            placeholder="Create password"
+                                            className="w-full h-full bg-transparent text-xs font-mono text-foreground focus:outline-none"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="text-foreground/45 hover:text-foreground cursor-pointer shrink-0"
+                                        >
+                                            {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -794,7 +820,7 @@ export default function TeamPage() {
                                     </span>
                                 </div>
 
-                                <div className="flex flex-wrap items-center gap-1.5 bg-background rounded-lg p-1 border border-card-border">
+                                <div className="flex flex-wrap items-center gap-1 p-1 bg-card-header-bg rounded-xl border border-card-border">
                                     <button
                                         type="button"
                                         onClick={() =>
@@ -806,7 +832,7 @@ export default function TeamPage() {
                                                 'export_analytics',
                                             ])
                                         }
-                                        className="px-3 py-1 rounded-md text-xs font-bold transition-all text-foreground/70 hover:text-foreground hover:bg-card-bg cursor-pointer"
+                                        className="h-7 px-2.5 rounded-lg bg-card-bg text-xs font-bold shadow-sm transition-all text-foreground/75 hover:text-primary-glow cursor-pointer"
                                     >
                                         Uploader + Analytics
                                     </button>
@@ -815,7 +841,7 @@ export default function TeamPage() {
                                         onClick={() =>
                                             setSelectedPermissions(['upload_images', 'edit_images', 'delete_images'])
                                         }
-                                        className="px-3 py-1 rounded-md text-xs font-bold transition-all text-foreground/70 hover:text-foreground hover:bg-card-bg cursor-pointer"
+                                        className="h-7 px-2.5 rounded-lg bg-card-bg text-xs font-bold shadow-sm transition-all text-foreground/75 hover:text-primary-glow cursor-pointer"
                                     >
                                         Images Only
                                     </button>
@@ -824,14 +850,14 @@ export default function TeamPage() {
                                         onClick={() =>
                                             setSelectedPermissions(availablePermissions.map((p) => p.key))
                                         }
-                                        className="px-3 py-1 rounded-md text-xs font-bold transition-all text-primary-glow hover:bg-primary-glow/10 cursor-pointer"
+                                        className="h-7 px-2.5 rounded-lg bg-card-bg text-xs font-bold shadow-sm transition-all text-primary-glow hover:bg-primary-glow hover:text-white cursor-pointer"
                                     >
                                         Select All
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => setSelectedPermissions([])}
-                                        className="px-3 py-1 rounded-md text-xs font-bold transition-all text-foreground/50 hover:text-foreground hover:bg-card-bg cursor-pointer"
+                                        className="h-7 px-2.5 rounded-lg bg-card-bg text-xs font-bold shadow-sm transition-all text-foreground/55 hover:text-foreground cursor-pointer"
                                     >
                                         Clear
                                     </button>
@@ -893,20 +919,22 @@ export default function TeamPage() {
                             <p className="text-xs text-foreground/50">
                                 Note: Team members cannot access this Team Management page or modify administrator privileges.
                             </p>
-                            <button
-                                type="submit"
-                                disabled={submitting}
-                                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary-glow hover:bg-blue-600 text-white font-semibold text-sm shadow-lg shadow-primary-glow/20 transition-all hover:-translate-y-0.5 cursor-pointer disabled:opacity-50"
-                            >
-                                <Send className="w-4 h-4" />
-                                <span>{submitting ? 'Creating & Sending Invite...' : 'Create Member & Send Invite'}</span>
-                            </button>
+                            <div className="p-1 bg-card-header-bg border border-card-border rounded-xl self-end sm:self-auto">
+                                <button
+                                    type="submit"
+                                    disabled={submitting}
+                                    className="h-8 px-4 rounded-lg bg-primary-glow hover:bg-blue-600 text-white font-bold text-xs shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                                >
+                                    <Send className="w-3.5 h-3.5" />
+                                    <span>{submitting ? 'Creating & Sending Invite...' : 'Create Member & Send Invite'}</span>
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>
 
                 {/* Card 2: Existing Team Members List */}
-                <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                     <div className="p-6 border-b border-card-border flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -1008,22 +1036,22 @@ export default function TeamPage() {
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-2 self-end lg:self-center shrink-0">
+                                        <div className="flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-end lg:self-center shrink-0">
                                             <button
                                                 type="button"
                                                 onClick={() => openEditModal(member)}
-                                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 text-xs font-bold transition-all cursor-pointer hover:-translate-y-0.5"
+                                                className="h-7 px-2.5 rounded-lg bg-card-bg hover:text-primary-glow text-foreground/80 shadow-sm text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer"
                                             >
-                                                <Edit3 className="w-3.5 h-3.5" />
-                                                Edit
+                                                <Edit3 className="w-3.5 h-3.5 text-primary-glow" />
+                                                <span>Edit</span>
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setDeleteTarget(member)}
-                                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs font-bold transition-all cursor-pointer hover:-translate-y-0.5"
+                                                className="h-7 px-2.5 rounded-lg bg-card-bg hover:bg-red-500/20 text-red-400 shadow-sm text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer"
                                             >
                                                 <Trash2 className="w-3.5 h-3.5" />
-                                                Remove
+                                                <span>Remove</span>
                                             </button>
                                         </div>
                                     </div>

@@ -1,12 +1,18 @@
 import React from 'react';
 import { Link } from '@inertiajs/react';
 
-export default function Footer({ info = {}, currentUrl = '' }) {
+export default function Footer({ info = {}, currentUrl = '', showConverters = false, footerTools = [], editorNav = {} }) {
+    const showConvertersInNav = Boolean(showConverters);
+    const showEditorInFooter = Boolean(editorNav?.showInFooter);
+    const editorNavLabel = editorNav?.navLabel || 'Image Editor';
+    const activeFooterTools = Array.isArray(footerTools) ? footerTools.slice(0, 5) : [];
+    const hasToolsColumn = activeFooterTools.length > 0;
     const pathname = currentUrl || (typeof window !== 'undefined' ? window.location.pathname : '');
 
     if (
         pathname?.startsWith('/admin') ||
         pathname?.startsWith('/team') ||
+        pathname?.startsWith('/image-editor') ||
         pathname === '/maintenance'
     ) {
         return null;
@@ -14,13 +20,16 @@ export default function Footer({ info = {}, currentUrl = '' }) {
 
     const currentYear = new Date().getFullYear();
 
-    const footerLinks = [
+    const baseFooterLinks = [
         { name: 'About Us', href: '/about-us' },
         { name: 'Contact Us', href: '/contact-us' },
         { name: 'Terms of Service', href: '/terms-of-service' },
         { name: 'Privacy Policy', href: '/privacy-policy' },
         { name: 'DMCA Policy', href: '/dmca-policy' },
     ];
+    const footerLinks = hasToolsColumn
+        ? [...baseFooterLinks, { name: 'Tools', href: '/tools' }]
+        : baseFooterLinks;
 
     const siteName = info.websiteName || 'Png101';
 
@@ -29,7 +38,7 @@ export default function Footer({ info = {}, currentUrl = '' }) {
             <div className="w-full px-6 sm:px-10 md:px-16 py-12">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-10 border-b border-card-border">
                     {/* Brand Column */}
-                    <div className="md:col-span-5 space-y-4">
+                    <div className={`${hasToolsColumn ? 'md:col-span-4' : 'md:col-span-5'} space-y-4`}>
                         <Link href="/" className="inline-flex items-center gap-3 hover:opacity-80 transition-opacity">
                             <div className="w-8 h-8 bg-primary-glow/20 rounded-lg flex items-center justify-center border border-primary-glow/50 shadow-[0_0_10px_rgba(59,130,246,0.3)]">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-primary-glow">
@@ -57,7 +66,7 @@ export default function Footer({ info = {}, currentUrl = '' }) {
                     </div>
 
                     {/* Company & Info Links */}
-                    <div className="md:col-span-3 space-y-3">
+                    <div className={`${hasToolsColumn ? 'md:col-span-2' : 'md:col-span-3'} space-y-3`}>
                         <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">
                             Explore &amp; Company
                         </h3>
@@ -86,6 +95,26 @@ export default function Footer({ info = {}, currentUrl = '' }) {
                                     Tags Directory (A–Z)
                                 </Link>
                             </li>
+                            {showConvertersInNav && (
+                                <li>
+                                    <Link
+                                        href="/tools/convert"
+                                        className="text-foreground/60 hover:text-primary-glow transition-colors"
+                                    >
+                                        Image Converters
+                                    </Link>
+                                </li>
+                            )}
+                            {showEditorInFooter && (
+                                <li>
+                                    <Link
+                                        href="/image-editor"
+                                        className="text-foreground/60 hover:text-primary-glow transition-colors font-medium"
+                                    >
+                                        {editorNavLabel}
+                                    </Link>
+                                </li>
+                            )}
                             <li>
                                 <Link
                                     href="/about-us"
@@ -106,7 +135,7 @@ export default function Footer({ info = {}, currentUrl = '' }) {
                     </div>
 
                     {/* Legal & Policies Links */}
-                    <div className="md:col-span-4 space-y-3">
+                    <div className={`${hasToolsColumn ? 'md:col-span-3' : 'md:col-span-4'} space-y-3`}>
                         <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">
                             Legal &amp; Policies
                         </h3>
@@ -137,6 +166,27 @@ export default function Footer({ info = {}, currentUrl = '' }) {
                             </li>
                         </ul>
                     </div>
+
+                    {/* Tools Column (only shown when converter tools are active) */}
+                    {hasToolsColumn && (
+                        <div className="md:col-span-3 space-y-3">
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-foreground/80">
+                                Tools
+                            </h3>
+                            <ul className="space-y-2.5 text-sm">
+                                {activeFooterTools.map((tool) => (
+                                    <li key={tool.slug}>
+                                        <Link
+                                            href={tool.href}
+                                            className="text-foreground/60 hover:text-primary-glow transition-colors"
+                                        >
+                                            {tool.shortTitle || tool.title}
+                                        </Link>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </div>
 
                 {/* Bottom Bar */}
@@ -144,7 +194,7 @@ export default function Footer({ info = {}, currentUrl = '' }) {
                     <p>
                         &copy; {currentYear} {info.companyName || siteName}. All rights reserved.
                     </p>
-                    <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+                    <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 md:pr-10">
                         {footerLinks.map((link) => (
                             <Link
                                 key={link.href}

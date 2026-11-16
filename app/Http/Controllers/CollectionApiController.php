@@ -60,7 +60,14 @@ class CollectionApiController extends Controller
             'slug' => $slug,
             'description' => $request->input('description'),
             'coverImageId' => $request->input('coverImageId'),
-            'coverImagePath' => $request->input('coverImagePath'),
+            'coverImagePath' => $request->input('coverImagePath') ?: null,
+            'heroImagePath' => $request->input('heroImagePath') ?: null,
+            'heroBgColor' => $request->input('heroBgColor') ?: null,
+            'heroTextColor' => $request->input('heroTextColor') ?: null,
+            'cardBgImagePath' => $request->input('cardBgImagePath') ?: null,
+            'cardBgColor' => $request->input('cardBgColor') ?: null,
+            'cardTextColor' => $request->input('cardTextColor') ?: null,
+            'trendingCardImagePath' => $request->input('trendingCardImagePath') ?: null,
             'type' => $type,
             'tagRules' => $tagRules,
             'ruleMatchMode' => $ruleMatchMode,
@@ -136,9 +143,16 @@ class CollectionApiController extends Controller
             return response()->json(['error' => 'Collection not found'], 404);
         }
 
-        foreach (['name', 'description', 'coverImageId', 'coverImagePath', 'type', 'ruleMatchMode', 'status'] as $field) {
+        $nullableFields = [
+            'heroImagePath', 'heroBgColor', 'heroTextColor',
+            'cardBgImagePath', 'cardBgColor', 'cardTextColor',
+            'trendingCardImagePath',
+            'description', 'coverImageId', 'coverImagePath',
+        ];
+        foreach (['name', 'description', 'coverImageId', 'coverImagePath', 'heroImagePath', 'heroBgColor', 'heroTextColor', 'cardBgImagePath', 'cardBgColor', 'cardTextColor', 'trendingCardImagePath', 'type', 'ruleMatchMode', 'status'] as $field) {
             if ($request->has($field)) {
-                $collection->{$field} = $request->input($field);
+                $val = $request->input($field);
+                $collection->{$field} = ($val === '' && in_array($field, $nullableFields, true)) ? null : $val;
             }
         }
         if ($request->has('slug')) {
@@ -270,6 +284,56 @@ class CollectionApiController extends Controller
         $tagRules = $request->input('tags', $request->input('tagRules', []));
         $mode = $request->input('mode', $request->input('ruleMatchMode', 'any'));
         return response()->json(CollectionService::previewTagMatches(is_array($tagRules) ? $tagRules : [], $mode));
+    }
+
+    public function uploadHero(Request $request)
+    {
+        $session = TeamService::getCurrentSession($request);
+        if (!TeamService::hasPermission($session, 'manage_collections')) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        if (!$request->hasFile('file')) {
+            return response()->json(['error' => 'No image file provided'], 400);
+        }
+
+        $file = $request->file('file');
+        if (!$file->isValid()) {
+            return response()->json(['error' => 'Invalid file upload'], 400);
+        }
+
+        $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+        if (!in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'], true)) {
+            return response()->json(['error' => 'Unsupported image format'], 400);
+        }
+
+        $dir = public_path('uploads/collections');
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+
+        $filename = 'hero-' . uniqid() . '-' . time() . '.' . $ext;
+        $file->move($dir, $filename);
+        $publicPath = '/uploads/collections/' . $filename;
+
+        $collectionId = trim((string) $request->input('collectionId', ''));
+        $targetField = trim((string) $request->input('targetField', 'heroImagePath'));
+        if (!in_array($targetField, ['heroImagePath', 'cardBgImagePath', 'coverImagePath', 'trendingCardImagePath'], true)) {
+            $targetField = 'heroImagePath';
+        }
+        if ($collectionId !== '') {
+            $collection = Collection::find($collectionId);
+            if ($collection) {
+                $collection->{$targetField} = $publicPath;
+                $collection->save();
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'path' => $publicPath,
+            'targetField' => $targetField,
+        ]);
     }
 
     public function generateAi(Request $request)

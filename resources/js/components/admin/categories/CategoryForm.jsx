@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import StudioSelect from '../../ui/StudioSelect';
 
 export default function CategoryForm({ isOpen, onClose, onSubmit, initialData, categories = [] }) {
     const [formData, setFormData] = useState({
@@ -94,11 +95,12 @@ export default function CategoryForm({ isOpen, onClose, onSubmit, initialData, c
                         <label className="block text-xs font-bold text-foreground/60 uppercase tracking-wider mb-2">
                             Parent Category (Optional)
                         </label>
-                        <select
+                        <StudioSelect
                             name="parentId"
+                            aria-label="Parent category"
                             value={formData.parentId || ''}
                             onChange={handleChange}
-                            className="w-full bg-background border border-card-border text-foreground px-4 py-3 rounded-lg focus:outline-none focus:border-primary-glow focus:ring-1 focus:ring-primary-glow/50 transition-all appearance-none"
+                            className="w-full"
                         >
                             <option value="">None (Top Level)</option>
                             {availableParents.map(cat => (
@@ -106,7 +108,7 @@ export default function CategoryForm({ isOpen, onClose, onSubmit, initialData, c
                                     {cat.name}
                                 </option>
                             ))}
-                        </select>
+                        </StudioSelect>
                     </div>
 
                     <div className="mb-6">

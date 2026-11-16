@@ -142,6 +142,10 @@ class SeoGeneratorService
             ['path' => '/dmca-policy', 'priority' => '0.5', 'changefreq' => 'yearly'],
         ];
 
+        foreach (ConverterToolsService::getSitemapPaths() as $toolPage) {
+            $staticPages[] = $toolPage;
+        }
+
         $pagesXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n";
         foreach ($staticPages as $p) {
             $loc = self::escapeXml($baseUrl . $p['path']);

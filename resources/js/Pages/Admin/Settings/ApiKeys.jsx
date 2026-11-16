@@ -247,13 +247,15 @@ export default function ApiKeysPage() {
                         </p>
                     </div>
 
-                    <button
-                        onClick={openAddModal}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-glow hover:bg-blue-600 text-white font-semibold text-sm rounded-xl shadow-lg shadow-primary-glow/20 transition-all hover:-translate-y-0.5 cursor-pointer self-start sm:self-auto"
-                    >
-                        <Plus className="w-4 h-4" />
-                        <span>Add New Key</span>
-                    </button>
+                    <div className="inline-flex items-center p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto">
+                        <button
+                            onClick={openAddModal}
+                            className="h-8 inline-flex items-center gap-2 px-3.5 bg-primary-glow hover:bg-blue-600 text-white font-bold text-xs rounded-lg shadow-sm transition-all cursor-pointer"
+                        >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add New Key</span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Primary Stat Cards Grid */}
@@ -289,7 +291,7 @@ export default function ApiKeysPage() {
                 </div>
 
                 {/* Table Card */}
-                <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                     <div className="p-6 border-b border-card-border flex items-center justify-between">
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 rounded-lg bg-primary-glow/10 text-primary-glow border border-primary-glow/20">

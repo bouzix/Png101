@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export default function ThemeToggle({ className = '', size = 'md' }) {
+export default function ThemeToggle({ className = '', size = 'md', customTooltip = false }) {
     const [isDark, setIsDark] = useState(true);
 
     useEffect(() => {
@@ -59,7 +59,8 @@ export default function ThemeToggle({ className = '', size = 'md' }) {
             type="button"
             onClick={toggleTheme}
             className={`p-2 rounded-xl bg-card-bg/80 dark:bg-slate-900/80 hover:bg-blue-200/70 dark:hover:bg-blue-500/20 text-foreground border border-card-border hover:border-blue-500/50 transition-all duration-200 cursor-pointer shadow-sm flex items-center justify-center group ${className}`}
-            title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            title={customTooltip ? undefined : (isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode')}
+            data-tooltip={customTooltip ? (isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode') : undefined}
             aria-label="Toggle Theme"
         >
             {isDark ? (

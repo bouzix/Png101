@@ -1,0 +1,1 @@
+var e=`/build/assets/avif_dec-B7YOdlSS.wasm`;export{e as default};

@@ -14,6 +14,7 @@ class TeamService
         ['key' => 'edit_images', 'label' => 'Edit Images', 'description' => 'Edit titles, tags, alt text, descriptions, and categories of staged or published images.', 'group' => 'Assets & Catalog'],
         ['key' => 'delete_images', 'label' => 'Delete Images', 'description' => 'Permanently delete staged or published images from the catalog.', 'group' => 'Assets & Catalog'],
         ['key' => 'manage_collections', 'label' => 'Manage Collections', 'description' => 'Create, edit, and delete categories/collections.', 'group' => 'Assets & Catalog'],
+        ['key' => 'manage_editor', 'label' => 'Manage Image Editor', 'description' => 'Access Editor dashboard, templates, categories, presets, fonts, analytics, and settings.', 'group' => 'Image Editor'],
         ['key' => 'view_analytics', 'label' => 'View Analytics', 'description' => 'Access the Analytics dashboard, charts, and search intelligence.', 'group' => 'Analytics'],
         ['key' => 'export_analytics', 'label' => 'Export Analytics CSV', 'description' => 'Download analytics reports as CSV files.', 'group' => 'Analytics'],
         ['key' => 'manage_general_settings', 'label' => 'General Settings & Legal Pages', 'description' => 'Edit website branding, contact details, and legal/about pages.', 'group' => 'Settings'],

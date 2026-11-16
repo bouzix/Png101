@@ -19,6 +19,7 @@ import {
     Clock,
     ShieldCheck,
     LayoutGrid,
+    X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AdminLayout from '@/Layouts/AdminLayout';
@@ -168,10 +169,10 @@ export default function TeamWorkspace() {
 
     return (
         <AdminLayout>
-            <Head title="Team Hub & Search Intelligence - Png101 Admin" />
+            <Head title="Dashboard & Search Intelligence - Png101 Admin" />
             <div className="space-y-6 pb-20">
                 {/* Welcome & Quick Role Overview */}
-                <div className="bg-card-bg border border-card-border rounded-2xl p-6 shadow-xl">
+                <div className="bg-card-bg border border-card-border rounded-2xl p-6">
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
                         <div className="space-y-2">
                             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs font-bold text-blue-400">
@@ -208,7 +209,7 @@ export default function TeamWorkspace() {
                         <div className="flex flex-wrap items-center gap-2.5">
                             {canUpload ? (
                                 <Link
-                                    href="/admin/dashboard"
+                                    href="/admin/upload"
                                     className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-glow hover:bg-primary-glow/90 text-white text-xs font-bold shadow-lg shadow-primary-glow/20 transition-all"
                                 >
                                     <Upload className="w-4 h-4" />
@@ -294,7 +295,7 @@ export default function TeamWorkspace() {
                 </div>
 
                 {/* Extended Search Intelligence + Catalog Quality Workspace */}
-                <div className="bg-card-bg border border-card-border rounded-2xl overflow-hidden shadow-xl">
+                <div className="bg-card-bg border border-card-border rounded-2xl overflow-hidden">
                     {/* Toolbar */}
                     <div className="p-5 border-b border-card-border space-y-4">
                         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -308,17 +309,17 @@ export default function TeamWorkspace() {
                                 </p>
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-2.5">
-                                <div className="inline-flex rounded-xl bg-background border border-card-border p-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <div className="inline-flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
                                     {TIMEFRAMES.map((tf) => (
                                         <button
                                             key={tf.value}
                                             type="button"
                                             onClick={() => setTimeframe(tf.value)}
-                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                            className={`h-7 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                                                 timeframe === tf.value
-                                                    ? 'bg-primary-glow text-white shadow'
-                                                    : 'text-foreground/60 hover:text-foreground'
+                                                    ? 'bg-primary-glow text-white shadow-sm'
+                                                    : 'bg-card-bg text-foreground/70 hover:text-primary-glow shadow-sm'
                                             }`}
                                         >
                                             {tf.label}
@@ -326,45 +327,47 @@ export default function TeamWorkspace() {
                                     ))}
                                 </div>
 
-                                <button
-                                    type="button"
-                                    onClick={() => loadWorkspace(timeframe, queryFilter)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-background hover:bg-white/5 border border-card-border text-xs font-bold text-foreground/80 cursor-pointer"
-                                    title="Refresh data"
-                                >
-                                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                                    Refresh
-                                </button>
-
-                                {activeTab !== 'queue' && (
+                                <div className="inline-flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
                                     <button
                                         type="button"
-                                        onClick={exportSearchCsv}
-                                        disabled={!currentRows.length}
-                                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-bold text-emerald-400 cursor-pointer disabled:opacity-40"
+                                        onClick={() => loadWorkspace(timeframe, queryFilter)}
+                                        className="h-7 px-2.5 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 cursor-pointer transition-all"
+                                        title="Refresh data"
                                     >
-                                        <Download className="w-3.5 h-3.5" />
-                                        Export CSV
+                                        <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-primary-glow' : ''}`} />
+                                        <span>Refresh</span>
                                     </button>
-                                )}
+
+                                    {activeTab !== 'queue' && (
+                                        <button
+                                            type="button"
+                                            onClick={exportSearchCsv}
+                                            disabled={!currentRows.length}
+                                            className="h-7 px-2.5 rounded-lg bg-card-bg hover:bg-emerald-500/20 text-xs font-bold text-emerald-400 shadow-sm inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-40 transition-all"
+                                        >
+                                            <Download className="w-3.5 h-3.5" />
+                                            <span>Export CSV</span>
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
                         {/* Tabs + Filter Input */}
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start">
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('gaps')}
-                                    className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border cursor-pointer transition-all ${
+                                    className={`h-7 px-2.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-all ${
                                         activeTab === 'gaps'
-                                            ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
-                                            : 'bg-background border-card-border text-foreground/70 hover:text-foreground'
+                                            ? 'bg-amber-500 text-slate-950 shadow-sm'
+                                            : 'bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
                                     }`}
                                 >
                                     <AlertTriangle className="w-3.5 h-3.5" />
-                                    Content Gaps (0 Results)
-                                    <span className="px-1.5 py-0.5 rounded-full bg-black/20 text-[10px]">
+                                    <span>Content Gaps (0 Results)</span>
+                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px]">
                                         {searchIntel.zeroResults.length}
                                     </span>
                                 </button>
@@ -372,15 +375,15 @@ export default function TeamWorkspace() {
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('low')}
-                                    className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border cursor-pointer transition-all ${
+                                    className={`h-7 px-2.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-all ${
                                         activeTab === 'low'
-                                            ? 'bg-blue-500/15 border-blue-500/40 text-blue-400'
-                                            : 'bg-background border-card-border text-foreground/70 hover:text-foreground'
+                                            ? 'bg-primary-glow text-white shadow-sm'
+                                            : 'bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
                                     }`}
                                 >
                                     <TrendingUp className="w-3.5 h-3.5" />
-                                    Under-Served (1-3 Results)
-                                    <span className="px-1.5 py-0.5 rounded-full bg-black/20 text-[10px]">
+                                    <span>Under-Served (1-3 Results)</span>
+                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px]">
                                         {searchIntel.lowResults.length}
                                     </span>
                                 </button>
@@ -388,15 +391,15 @@ export default function TeamWorkspace() {
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('top')}
-                                    className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border cursor-pointer transition-all ${
+                                    className={`h-7 px-2.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-all ${
                                         activeTab === 'top'
-                                            ? 'bg-purple-500/15 border-purple-500/40 text-purple-400'
-                                            : 'bg-background border-card-border text-foreground/70 hover:text-foreground'
+                                            ? 'bg-purple-600 text-white shadow-sm'
+                                            : 'bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
                                     }`}
                                 >
                                     <Search className="w-3.5 h-3.5" />
-                                    All Top Searches
-                                    <span className="px-1.5 py-0.5 rounded-full bg-black/20 text-[10px]">
+                                    <span>All Top Searches</span>
+                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px]">
                                         {searchIntel.topSearches.length}
                                     </span>
                                 </button>
@@ -404,30 +407,42 @@ export default function TeamWorkspace() {
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('queue')}
-                                    className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border cursor-pointer transition-all ${
+                                    className={`h-7 px-2.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-all ${
                                         activeTab === 'queue'
-                                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
-                                            : 'bg-background border-card-border text-foreground/70 hover:text-foreground'
+                                            ? 'bg-emerald-600 text-white shadow-sm'
+                                            : 'bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
                                     }`}
                                 >
                                     <FileWarning className="w-3.5 h-3.5" />
-                                    Catalog Quality Queue
-                                    <span className="px-1.5 py-0.5 rounded-full bg-black/20 text-[10px]">
+                                    <span>Catalog Quality Queue</span>
+                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px]">
                                         {actionQueueTotal}
                                     </span>
                                 </button>
                             </div>
 
                             {activeTab !== 'queue' && (
-                                <div className="relative w-full md:w-72">
-                                    <Search className="w-4 h-4 text-foreground/40 absolute left-3 top-1/2 -translate-y-1/2" />
-                                    <input
-                                        type="text"
-                                        value={queryFilter}
-                                        onChange={(e) => setQueryFilter(e.target.value)}
-                                        placeholder="Filter keywords..."
-                                        className="w-full bg-background border border-card-border rounded-xl pl-9 pr-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary-glow"
-                                    />
+                                <div className="w-full md:w-72 p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                    <div className="relative h-7 rounded-lg bg-card-bg shadow-sm flex items-center px-2.5 gap-2 focus-within:ring-1 focus-within:ring-primary-glow/60 transition-all">
+                                        <Search className="w-3.5 h-3.5 text-foreground/45 shrink-0 pointer-events-none" />
+                                        <input
+                                            type="text"
+                                            value={queryFilter}
+                                            onChange={(e) => setQueryFilter(e.target.value)}
+                                            placeholder="Filter keywords..."
+                                            className="w-full h-full bg-transparent text-xs font-medium text-foreground placeholder:text-foreground/40 focus:outline-none"
+                                        />
+                                        {queryFilter && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setQueryFilter('')}
+                                                title="Clear filter"
+                                                className="p-0.5 rounded-md text-foreground/45 hover:text-foreground hover:bg-card-header-bg transition-colors cursor-pointer shrink-0"
+                                            >
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -565,7 +580,7 @@ export default function TeamWorkspace() {
                                         </div>
                                         {canUpload && (
                                             <Link
-                                                href="/admin/dashboard"
+                                                href="/admin/upload"
                                                 className="text-xs font-bold text-primary-glow hover:underline"
                                             >
                                                 Open Upload Staging →
@@ -597,7 +612,7 @@ export default function TeamWorkspace() {
                                                     </div>
                                                     {canUpload && (
                                                         <Link
-                                                            href="/admin/dashboard"
+                                                            href="/admin/upload"
                                                             className="px-2.5 py-1 rounded-lg bg-primary-glow/15 text-primary-glow text-[11px] font-bold flex-shrink-0"
                                                         >
                                                             Resume

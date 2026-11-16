@@ -2,17 +2,6 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Hide default browser number spin buttons */
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-input[type="number"] {
-  -moz-appearance: textfield;
-}
-
 :root {
   /* Dark Navy Theme Base (Default) */
   --background: #0f172a;
@@ -98,30 +87,332 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Custom Scrollbar Styles */
+/* Custom Scrollbar Styles (Brand Blue across Chrome & Firefox) */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--card-bg);
-  border-radius: 4px;
+  background: transparent;
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--primary-glow);
-  border-radius: 4px;
-  transition: background 0.2s ease;
+  background: rgba(59, 130, 246, 0.75);
+  border-radius: 9999px;
+  border: 1.5px solid transparent;
+  background-clip: content-box;
+  transition: background-color 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
+  background: #3b82f6;
+  background-clip: content-box;
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: rgba(37, 99, 235, 0.72);
+  background-clip: content-box;
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
   background: #2563eb;
+  background-clip: content-box;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--primary-glow) var(--card-bg);
+  scrollbar-color: #3b82f6 transparent;
+}
+
+.light * {
+  scrollbar-color: #2563eb transparent;
+}
+
+/* Cross-Browser Chrome-Style Range Sliders (Brand Blue) */
+input[type="range"] {
+  --range-track: #334155;
+  --range-fill: #3b82f6;
+  --range-thumb: #3b82f6;
+  --range-thumb-hover: #60a5fa;
+  --range-thumb-ring: #ffffff;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent !important;
+  height: 18px;
+  cursor: pointer;
+}
+
+.light input[type="range"] {
+  --range-track: #cbd5e1;
+  --range-fill: #2563eb;
+  --range-thumb: #2563eb;
+  --range-thumb-hover: #1d4ed8;
+  --range-thumb-ring: #ffffff;
+}
+
+input[type="range"]:focus {
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--range-fill) 0%,
+    var(--range-fill) var(--range-pct, 50%),
+    var(--range-track) var(--range-pct, 50%),
+    var(--range-track) 100%
+  );
+  transition: filter 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -4px;
+  border-radius: 9999px;
+  background: var(--range-thumb);
+  border: 2px solid var(--range-thumb-ring);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  background: var(--range-thumb-hover);
+  transform: scale(1.1);
+}
+
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35), 0 1px 4px rgba(15, 23, 42, 0.35);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--range-track);
+}
+
+input[type="range"]::-moz-range-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--range-fill);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--range-thumb);
+  border: 2px solid var(--range-thumb-ring);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="range"]:hover::-moz-range-thumb {
+  background: var(--range-thumb-hover);
+  transform: scale(1.1);
+}
+
+input[type="range"]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35), 0 1px 4px rgba(15, 23, 42, 0.35);
+}
+
+input[type="range"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Custom Cross-Browser Form Controls (eliminates OS/browser default checkboxes, radios, spinners, file buttons & focus rings) */
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html.light {
+    color-scheme: light;
+  }
+
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  a:focus-visible,
+  input:not([type="range"]):focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: 2px solid rgba(59, 130, 246, 0.6);
+    outline-offset: 2px;
+  }
+
+  input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: inline-grid;
+    place-content: center;
+    width: 1rem;
+    height: 1rem;
+    min-width: 1rem;
+    min-height: 1rem;
+    border-radius: 0.35rem;
+    border: 1.5px solid #475569;
+    background-color: #0f172a;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 72% 72%;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.12s ease;
+  }
+
+  .light input[type="checkbox"] {
+    border-color: #cbd5e1;
+    background-color: #ffffff;
+  }
+
+  input[type="checkbox"]:hover:not(:disabled) {
+    border-color: #60a5fa;
+  }
+
+  .light input[type="checkbox"]:hover:not(:disabled) {
+    border-color: #2563eb;
+  }
+
+  input[type="checkbox"]:checked {
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3.5 8.5L6.5 11.5L12.5 4.5' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
+
+  .light input[type="checkbox"]:checked {
+    background-color: #2563eb;
+    border-color: #2563eb;
+  }
+
+  input[type="checkbox"]:indeterminate {
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3.5 8H12.5' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  }
+
+  input[type="checkbox"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  input[type="radio"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: inline-grid;
+    place-content: center;
+    width: 1rem;
+    height: 1rem;
+    min-width: 1rem;
+    min-height: 1rem;
+    border-radius: 9999px;
+    border: 1.5px solid #475569;
+    background-color: #0f172a;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  }
+
+  .light input[type="radio"] {
+    border-color: #cbd5e1;
+    background-color: #ffffff;
+  }
+
+  input[type="radio"]:hover:not(:disabled) {
+    border-color: #60a5fa;
+  }
+
+  .light input[type="radio"]:hover:not(:disabled) {
+    border-color: #2563eb;
+  }
+
+  input[type="radio"]:checked {
+    border-width: 5px;
+    border-color: #3b82f6;
+    background-color: #0f172a;
+  }
+
+  .light input[type="radio"]:checked {
+    border-color: #2563eb;
+    background-color: #ffffff;
+  }
+
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type="search"]::-webkit-search-cancel-button,
+  input[type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+  }
+
+  input[type="file"]::file-selector-button {
+    border: 0;
+    border-radius: 0.55rem;
+    padding: 0.35rem 0.75rem;
+    margin-right: 0.65rem;
+    background-color: rgba(59, 130, 246, 0.18);
+    color: #60a5fa;
+    font-weight: 700;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  input[type="file"]::file-selector-button:hover {
+    background-color: #3b82f6;
+    color: #ffffff;
+  }
+
+  .light input[type="file"]::file-selector-button {
+    background-color: rgba(37, 99, 235, 0.12);
+    color: #2563eb;
+  }
+
+  .light input[type="file"]::file-selector-button:hover {
+    background-color: #2563eb;
+    color: #ffffff;
+  }
+
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.15s ease;
+  }
+
+  input[type="time"]::-webkit-calendar-picker-indicator:hover,
+  input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+
+  /* Fallback CSS customization if any raw <select> renders anywhere */
+  select {
+    -webkit-appearance: none;
+    appearance: none;
+    padding-right: 2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%2394a3b8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.55rem center;
+    background-size: 1rem 1rem;
+    cursor: pointer;
+  }
+
+  .light select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%2364748b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  }
 }
 
 /* Shimmer & Flowing Gradient Animation for Buttons */
@@ -648,4 +939,157 @@ button:disabled {
   background: linear-gradient(135deg, #2563eb 0%, #3b82f6 100%);
   box-shadow: 0 6px 18px rgba(37, 99, 235, 0.45);
   transition: background 0.35s ease, box-shadow 0.35s ease;
+}
+
+/* Brand-Adapted iOS 7 Spectrum Progress Bar & Perimeter Card Progress */
+@property --card-deg {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.batch-perimeter-ring {
+  transition: --card-deg 0.28s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease;
+}
+
+.batch-perimeter-ring--done:hover {
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.38);
+}
+
+@keyframes batch-waiting-sheen {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  100% {
+    transform: translateX(220%) skewX(-18deg);
+  }
+}
+
+@keyframes batch-waiting-pulse {
+  0%, 100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes batch-waiting-stripe {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 36px 0;
+  }
+}
+
+.batch-waiting-sheen {
+  animation: batch-waiting-sheen 2.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.batch-waiting-ring {
+  animation: batch-waiting-pulse 2s ease-in-out infinite;
+}
+
+.brand-ios-progress {
+  background-color: var(--card-border);
+  position: relative;
+  border-radius: 9999px;
+}
+
+.brand-ios-progress--lg {
+  height: 10px;
+}
+
+.brand-ios-progress--md {
+  height: 8px;
+}
+
+.brand-ios-progress--sm {
+  height: 6px;
+}
+
+.brand-ios-progress--pending {
+  overflow: hidden;
+  background-image: repeating-linear-gradient(
+    -55deg,
+    rgba(148, 163, 184, 0.16) 0px,
+    rgba(148, 163, 184, 0.16) 8px,
+    rgba(59, 130, 246, 0.24) 8px,
+    rgba(59, 130, 246, 0.24) 16px
+  );
+  background-size: 36px 100%;
+  animation: batch-waiting-stripe 1.1s linear infinite;
+}
+
+.brand-ios-progress__bar {
+  background-image: linear-gradient(to right, #10b981, #06b6d4, #3b82f6, #6366f1, #8b5cf6, #ec4899);
+  background-size: 100% 100%;
+  height: 100%;
+  border-radius: 9999px;
+  position: relative;
+  transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.brand-ios-progress__bar--error {
+  background-image: linear-gradient(to right, #f43f5e, #e11d48);
+}
+
+.brand-ios-progress__shadow {
+  background-image: linear-gradient(to bottom, rgba(59, 130, 246, 0.22), transparent);
+  height: 14px;
+  width: 100%;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  transform: skew(45deg);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.light .brand-ios-progress__shadow {
+  background-image: linear-gradient(to bottom, rgba(37, 99, 235, 0.16), transparent);
+}
+
+/* Editor TopBar Animated Save Pill (Spinner -> Progress Bar -> Checkmark Morph) */
+@keyframes studio-save-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes studio-save-bar-fill {
+  0% {
+    width: 12%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+@keyframes studio-save-check-pop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.16);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.studio-save-spinner {
+  animation: studio-save-spin 0.65s linear infinite;
+}
+
+.studio-save-progress-bar {
+  animation: studio-save-bar-fill 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.studio-save-check {
+  animation: studio-save-check-pop 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }

@@ -67,6 +67,9 @@ export default function MobileBottomNav({ currentPath = '/' }) {
     };
 
     const cleanPath = (currentPath || '/').split('?')[0];
+    if (cleanPath.startsWith('/image-editor')) {
+        return null;
+    }
     let activeIndex = -1;
     if (searchOpen || cleanPath.startsWith('/search')) {
         activeIndex = 2;

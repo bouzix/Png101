@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
     Sparkles,
     Tag,
@@ -8,9 +8,64 @@ import {
     Loader2,
     Eye,
     Layers,
+    Check,
+    Palette,
+    Upload,
+    Image as ImageIcon,
+    RotateCcw,
+    Share2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AssetPickerModal from './AssetPickerModal';
+import HeroBannerCustomizer from './HeroBannerCustomizer';
+import StudioSelect from '@/components/ui/StudioSelect';
+
+const STOP_WORDS = new Set([
+    'the', 'and', 'for', 'with', 'from', 'this', 'that', 'your', 'our', 'are',
+    'was', 'were', 'have', 'has', 'had', 'will', 'can', 'all', 'any', 'into',
+    'onto', 'over', 'under', 'by', 'of', 'in', 'on', 'to', 'at', 'is', 'it',
+    'as', 'be', 'or', 'an', 'a', 'not', 'but', 'so', 'if', 'up', 'out', 'about',
+    'who', 'what', 'when', 'where', 'why', 'how', 'which', 'their', 'there',
+    'these', 'those', 'more', 'most', 'some', 'such', 'no', 'nor', 'too', 'very',
+    'just', 'also', 'than', 'then', 'now', 'here', 'free', 'download', 'high',
+    'quality', 'resolution', 'transparent', 'background', 'backgrounds',
+    'collection', 'collections', 'pack', 'packs', 'bundle', 'bundles', 'set',
+    'sets', 'image', 'images', 'png', 'pngs', 'file', 'files', 'graphic',
+    'graphics', 'asset', 'assets', 'best', 'new', 'great', 'perfect', 'use',
+]);
+
+function stemWord(word) {
+    if (!word || word.length <= 3) return word;
+    if (word.endsWith('ies') && word.length > 4) return `${word.slice(0, -3)}y`;
+    if (word.endsWith('es') && word.length > 4 && /(shes|ches|xes|zes|ses)$/.test(word)) {
+        return word.slice(0, -2);
+    }
+    if (word.endsWith('s') && !word.endsWith('ss') && word.length > 3) {
+        return word.slice(0, -1);
+    }
+    if (word.endsWith('ing') && word.length > 5) return word.slice(0, -3);
+    return word;
+}
+
+function extractTokens(text) {
+    if (!text || typeof text !== 'string') return [];
+    const rawTokens = text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, ' ')
+        .split(/[\s-]+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 2 && !STOP_WORDS.has(t));
+
+    const unique = [];
+    const seen = new Set();
+    for (const token of rawTokens) {
+        if (!seen.has(token)) {
+            seen.add(token);
+            unique.push({ raw: token, stem: stemWord(token) });
+        }
+    }
+    return unique;
+}
 
 export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
     const [mode, setMode] = useState('smart');
@@ -36,12 +91,26 @@ export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiGenerating, setAiGenerating] = useState(false);
 
-    const [popularTags, setPopularTags] = useState([]);
+    const [heroImagePath, setHeroImagePath] = useState('');
+    const [heroBgColor, setHeroBgColor] = useState('');
+    const [heroTextColor, setHeroTextColor] = useState('');
+    const [coverImagePath, setCoverImagePath] = useState('');
+    const [cardBgImagePath, setCardBgImagePath] = useState('');
+    const [cardBgColor, setCardBgColor] = useState('');
+    const [cardTextColor, setCardTextColor] = useState('');
+    const [trendingCardImagePath, setTrendingCardImagePath] = useState('');
+    const [pickerTargetField, setPickerTargetField] = useState(null);
+
+    const [catalogImages, setCatalogImages] = useState([]);
+    const [allLibraryTags, setAllLibraryTags] = useState([]);
+    const [isTagInputFocused, setIsTagInputFocused] = useState(false);
+    const [highlightedAutoIdx, setHighlightedAutoIdx] = useState(0);
+    const tagInputRef = useRef(null);
 
     useEffect(() => {
         if (isOpen) {
             resetForm();
-            fetchPopularTags();
+            fetchCatalogAndTags();
         }
     }, [isOpen]);
 
@@ -59,14 +128,26 @@ export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
         setPreviewSampleImages([]);
         setSelectedImageIds([]);
         setAiPrompt('');
+        setHeroImagePath('');
+        setHeroBgColor('');
+        setHeroTextColor('');
+        setCoverImagePath('');
+        setCardBgImagePath('');
+        setCardBgColor('');
+        setCardTextColor('');
+        setTrendingCardImagePath('');
+        setPickerTargetField(null);
+        setIsTagInputFocused(false);
+        setHighlightedAutoIdx(0);
     };
 
-    const fetchPopularTags = async () => {
+    const fetchCatalogAndTags = async () => {
         try {
             const res = await fetch('/api/images?status=published');
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data)) {
+                    setCatalogImages(data);
                     const counts = new Map();
                     data.forEach((img) => {
                         if (Array.isArray(img.tags)) {
@@ -80,15 +161,240 @@ export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
                     });
                     const sorted = Array.from(counts.entries())
                         .map(([tag, count]) => ({ tag, count }))
-                        .sort((a, b) => b.count - a.count)
-                        .slice(0, 12);
-                    setPopularTags(sorted);
+                        .sort((a, b) => b.count - a.count);
+                    setAllLibraryTags(sorted);
                 }
             }
         } catch (e) {
-            console.error('Failed to load popular tags:', e);
+            console.error('Failed to load catalog tags:', e);
         }
     };
+
+    // Compute smart contextual tag scores based on Collection Name, Description, and already-selected tags
+    const contextualTagData = useMemo(() => {
+        const nameTokens = extractTokens(name);
+        const descTokens = extractTokens(description);
+        const nameLower = name.trim().toLowerCase();
+        const descLower = description.trim().toLowerCase();
+        const hasContext = nameTokens.length > 0 || descTokens.length > 0 || tags.length > 0;
+
+        const scoreMap = new Map();
+        const reasonMap = new Map();
+
+        if (!hasContext) {
+            return {
+                hasContext: false,
+                scoreMap,
+                reasonMap,
+                suggestions: allLibraryTags.slice(0, 14).map((item) => ({
+                    ...item,
+                    isContextual: false,
+                    reason: null,
+                })),
+            };
+        }
+
+        const addScore = (tag, pts, reason) => {
+            if (!tag) return;
+            scoreMap.set(tag, (scoreMap.get(tag) || 0) + pts);
+            if (reason && !reasonMap.has(tag)) {
+                reasonMap.set(tag, reason);
+            }
+        };
+
+        // 1. Direct & stem matching against library tags from Collection Name & Description
+        for (const { tag } of allLibraryTags) {
+            const tagStem = stemWord(tag);
+
+            if (nameLower && nameLower.length >= 3 && nameLower.includes(tag)) {
+                addScore(tag, 130, 'Matches name');
+            }
+            for (const nt of nameTokens) {
+                if (tag === nt.raw || tagStem === nt.stem) {
+                    addScore(tag, 120, 'Matches name');
+                } else if (
+                    (nt.raw.length >= 3 && tag.includes(nt.raw)) ||
+                    (nt.stem.length >= 3 && tag.includes(nt.stem)) ||
+                    (tag.length >= 3 && nt.raw.includes(tag))
+                ) {
+                    addScore(tag, 65, 'Related to name');
+                }
+            }
+
+            if (descLower && descLower.length >= 3 && descLower.includes(tag)) {
+                addScore(tag, 80, 'Matches description');
+            }
+            for (const dt of descTokens) {
+                if (tag === dt.raw || tagStem === dt.stem) {
+                    addScore(tag, 75, 'Matches description');
+                } else if (
+                    (dt.raw.length >= 3 && tag.includes(dt.raw)) ||
+                    (dt.stem.length >= 3 && tag.includes(dt.stem)) ||
+                    (tag.length >= 3 && dt.raw.includes(tag))
+                ) {
+                    addScore(tag, 40, 'Related to description');
+                }
+            }
+        }
+
+        // 2. Semantic co-occurrence from catalog images that match Name, Description, or selected tags
+        const selectedTagSet = new Set(tags);
+        for (const img of catalogImages) {
+            const imgTags = Array.isArray(img.tags)
+                ? img.tags.map((t) => String(t).trim().toLowerCase()).filter(Boolean)
+                : [];
+            if (imgTags.length === 0) continue;
+
+            const imgText = `${img.name || ''} ${img.filename || ''} ${img.description || ''} ${
+                img.altText || ''
+            }`.toLowerCase();
+
+            let imgRelevance = 0;
+
+            for (const nt of nameTokens) {
+                if (
+                    imgTags.some((t) => t === nt.raw || stemWord(t) === nt.stem || t.includes(nt.stem))
+                ) {
+                    imgRelevance += 30;
+                } else if (nt.stem.length >= 3 && imgText.includes(nt.stem)) {
+                    imgRelevance += 18;
+                }
+            }
+
+            for (const dt of descTokens) {
+                if (
+                    imgTags.some((t) => t === dt.raw || stemWord(t) === dt.stem || t.includes(dt.stem))
+                ) {
+                    imgRelevance += 18;
+                } else if (dt.stem.length >= 3 && imgText.includes(dt.stem)) {
+                    imgRelevance += 10;
+                }
+            }
+
+            for (const st of selectedTagSet) {
+                if (imgTags.includes(st)) {
+                    imgRelevance += 25;
+                }
+            }
+
+            if (imgRelevance > 0) {
+                for (const t of imgTags) {
+                    addScore(t, imgRelevance, 'Co-occurs in matching PNGs');
+                }
+            }
+        }
+
+        // 3. Also surface high-value keywords directly typed in Collection Name / Description even if new
+        const libraryTagMap = new Map(allLibraryTags.map((item) => [item.tag, item.count]));
+        for (const nt of nameTokens) {
+            if (!libraryTagMap.has(nt.raw) && nt.raw.length >= 3) {
+                addScore(nt.raw, 45, 'From collection name');
+            }
+            if (nt.stem !== nt.raw && libraryTagMap.has(nt.stem)) {
+                addScore(nt.stem, 110, 'Matches name');
+            }
+        }
+        for (const dt of descTokens) {
+            if (!libraryTagMap.has(dt.raw) && dt.raw.length >= 3) {
+                addScore(dt.raw, 25, 'From description');
+            }
+        }
+
+        // Build ranked suggestion list
+        const candidateSet = new Set([
+            ...allLibraryTags.map((i) => i.tag),
+            ...Array.from(scoreMap.keys()),
+        ]);
+
+        const scoredCandidates = Array.from(candidateSet).map((tag) => {
+            const count = libraryTagMap.get(tag) || 0;
+            const contextScore = scoreMap.get(tag) || 0;
+            return {
+                tag,
+                count,
+                contextScore,
+                isContextual: contextScore > 0,
+                reason: reasonMap.get(tag) || null,
+            };
+        });
+
+        scoredCandidates.sort((a, b) => {
+            if (b.contextScore !== a.contextScore) return b.contextScore - a.contextScore;
+            return b.count - a.count;
+        });
+
+        // Prefer contextual matches; fill remaining slots with popular library tags if needed
+        const contextualMatches = scoredCandidates.filter((c) => c.contextScore > 0);
+        const finalSuggestions =
+            contextualMatches.length >= 6
+                ? contextualMatches.slice(0, 14)
+                : scoredCandidates.slice(0, 14);
+
+        return {
+            hasContext: contextualMatches.length > 0,
+            scoreMap,
+            reasonMap,
+            suggestions: finalSuggestions,
+        };
+    }, [name, description, tags, catalogImages, allLibraryTags]);
+
+    // Smart Autocomplete matches as the user types in the tag input box
+    const autocompleteOptions = useMemo(() => {
+        const q = tagInput.trim().toLowerCase().replace(/^#/, '');
+        const selectedSet = new Set(tags);
+
+        if (!q) {
+            // When input is empty but focused, show top unselected contextual suggestions
+            if (!contextualTagData.hasContext) return [];
+            return contextualTagData.suggestions
+                .filter((item) => !selectedSet.has(item.tag) && item.isContextual)
+                .slice(0, 6);
+        }
+
+        const qStem = stemWord(q);
+        const matches = [];
+
+        for (const { tag, count } of allLibraryTags) {
+            if (selectedSet.has(tag)) continue;
+            const startsWith = tag.startsWith(q);
+            const includes = tag.includes(q) || (qStem.length >= 3 && tag.includes(qStem));
+            if (!startsWith && !includes) continue;
+
+            const contextScore = contextualTagData.scoreMap.get(tag) || 0;
+            const rankScore =
+                (tag === q ? 10000 : 0) +
+                (startsWith ? 2000 : 500) +
+                contextScore * 5 +
+                count;
+
+            matches.push({
+                tag,
+                count,
+                startsWith,
+                isContextual: contextScore > 0,
+                reason: contextualTagData.reasonMap.get(tag) || null,
+                rankScore,
+            });
+        }
+
+        matches.sort((a, b) => b.rankScore - a.rankScore);
+        return matches.slice(0, 8);
+    }, [tagInput, tags, allLibraryTags, contextualTagData]);
+
+    // Inline ghost completion if the top autocomplete option starts with what the user typed
+    const inlineGhostSuffix = useMemo(() => {
+        const raw = tagInput.trim().toLowerCase();
+        if (!raw || autocompleteOptions.length === 0) return '';
+        const top = autocompleteOptions[highlightedAutoIdx] || autocompleteOptions[0];
+        if (top && top.tag.startsWith(raw) && top.tag.length > raw.length) {
+            return top.tag.slice(raw.length);
+        }
+        return '';
+    }, [tagInput, autocompleteOptions, highlightedAutoIdx]);
+
+    useEffect(() => {
+        setHighlightedAutoIdx(0);
+    }, [tagInput]);
 
     const handleNameChange = (val) => {
         setName(val);
@@ -143,9 +449,50 @@ export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
     };
 
     const handleTagKeyDown = (e) => {
+        if (e.key === 'ArrowDown' && autocompleteOptions.length > 0) {
+            e.preventDefault();
+            setIsTagInputFocused(true);
+            setHighlightedAutoIdx((prev) => (prev + 1) % autocompleteOptions.length);
+            return;
+        }
+        if (e.key === 'ArrowUp' && autocompleteOptions.length > 0) {
+            e.preventDefault();
+            setIsTagInputFocused(true);
+            setHighlightedAutoIdx((prev) =>
+                prev - 1 < 0 ? autocompleteOptions.length - 1 : prev - 1
+            );
+            return;
+        }
+        if (e.key === 'Tab' && tagInput.trim() && autocompleteOptions.length > 0) {
+            e.preventDefault();
+            const chosen = autocompleteOptions[highlightedAutoIdx] || autocompleteOptions[0];
+            if (chosen) {
+                addTag(chosen.tag);
+            }
+            return;
+        }
+        if (e.key === 'Escape') {
+            setIsTagInputFocused(false);
+            return;
+        }
+        if (e.key === 'Backspace' && !tagInput && tags.length > 0) {
+            removeTag(tags[tags.length - 1]);
+            return;
+        }
         if (e.key === 'Enter' || e.key === ',') {
             e.preventDefault();
-            addTag(tagInput);
+            if (
+                e.key === 'Enter' &&
+                isTagInputFocused &&
+                tagInput.trim() &&
+                autocompleteOptions.length > 0 &&
+                highlightedAutoIdx >= 0 &&
+                autocompleteOptions[highlightedAutoIdx]
+            ) {
+                addTag(autocompleteOptions[highlightedAutoIdx].tag);
+            } else if (tagInput.trim()) {
+                addTag(tagInput);
+            }
         }
     };
 
@@ -184,6 +531,19 @@ export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
         }
     };
 
+    const handlePickCatalogHero = (ids) => {
+        if (!Array.isArray(ids) || ids.length === 0) return;
+        const targetId = ids[ids.length - 1];
+        const match = catalogImages.find((i) => i.id === targetId);
+        if (match?.path) {
+            const field = pickerTargetField || 'heroImagePath';
+            if (field === 'cardBgImagePath') setCardBgImagePath(match.path);
+            else if (field === 'coverImagePath') setCoverImagePath(match.path);
+            else if (field === 'trendingCardImagePath') setTrendingCardImagePath(match.path);
+            else setHeroImagePath(match.path);
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!name.trim()) {
@@ -209,6 +569,14 @@ export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
                 description: description.trim() || null,
                 status,
                 isFeatured,
+                coverImagePath: coverImagePath.trim() || null,
+                heroImagePath: heroImagePath.trim() || null,
+                heroBgColor: heroBgColor.trim() || null,
+                heroTextColor: heroTextColor.trim() || null,
+                cardBgImagePath: cardBgImagePath.trim() || null,
+                cardBgColor: cardBgColor.trim() || null,
+                cardTextColor: cardTextColor.trim() || null,
+                trendingCardImagePath: trendingCardImagePath.trim() || null,
             };
 
             if (mode === 'smart') {
@@ -390,14 +758,15 @@ export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
                                 <label className="block text-xs font-bold text-foreground mb-1.5 uppercase tracking-wider">
                                     Status
                                 </label>
-                                <select
+                                <StudioSelect
+                                    aria-label="Collection status"
                                     value={status}
                                     onChange={(e) => setStatus(e.target.value)}
-                                    className="w-full bg-input-bg border border-input-border rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary-glow"
+                                    className="w-full"
                                 >
                                     <option value="published">Published (Visible on site)</option>
                                     <option value="draft">Draft (Admin only)</option>
-                                </select>
+                                </StudioSelect>
                             </div>
                         </div>
 
@@ -425,53 +794,223 @@ export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
                                 <span className="text-[11px] text-foreground/50">Press Enter or comma to add</span>
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-2 p-2.5 bg-input-bg border border-input-border rounded-xl min-h-[48px] focus-within:border-primary-glow">
-                                {tags.map((t) => (
-                                    <span
-                                        key={t}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-tag-bg text-tag-text border border-tag-border text-xs font-semibold"
-                                    >
-                                        #{t}
-                                        <button
-                                            type="button"
-                                            onClick={() => removeTag(t)}
-                                            className="text-foreground/50 hover:text-red-400 cursor-pointer"
+                            <div className="relative">
+                                <div
+                                    onClick={() => tagInputRef.current?.focus()}
+                                    className="flex flex-wrap items-center gap-2 p-2.5 bg-input-bg border border-input-border rounded-xl min-h-[48px] focus-within:border-primary-glow transition-colors cursor-text"
+                                >
+                                    {tags.map((t) => (
+                                        <span
+                                            key={t}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-tag-bg text-tag-text border border-tag-border text-xs font-semibold"
                                         >
-                                            <X className="w-3 h-3" />
-                                        </button>
-                                    </span>
-                                ))}
-                                <input
-                                    type="text"
-                                    value={tagInput}
-                                    onChange={(e) => setTagInput(e.target.value)}
-                                    onKeyDown={handleTagKeyDown}
-                                    onBlur={() => tagInput.trim() && addTag(tagInput)}
-                                    placeholder={tags.length === 0 ? "Type tag e.g. 'christmas'..." : 'Add tag...'}
-                                    className="flex-1 min-w-[120px] bg-transparent text-sm text-foreground focus:outline-none py-1"
-                                />
+                                            #{t}
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    removeTag(t);
+                                                }}
+                                                className="text-foreground/50 hover:text-red-400 cursor-pointer"
+                                            >
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </span>
+                                    ))}
+
+                                    <div className="relative flex-1 min-w-[160px] flex items-center">
+                                        {inlineGhostSuffix && isTagInputFocused && (
+                                            <div
+                                                aria-hidden="true"
+                                                className="absolute inset-y-0 left-0 flex items-center pointer-events-none text-sm select-none overflow-hidden whitespace-pre"
+                                            >
+                                                <span className="opacity-0">{tagInput}</span>
+                                                <span className="text-foreground/35">{inlineGhostSuffix}</span>
+                                                <span className="ml-2 px-1.5 py-0.5 rounded bg-primary-glow/15 border border-primary-glow/30 text-[10px] font-bold text-primary-glow">
+                                                    Tab ↹
+                                                </span>
+                                            </div>
+                                        )}
+                                        <input
+                                            ref={tagInputRef}
+                                            type="text"
+                                            value={tagInput}
+                                            onFocus={() => setIsTagInputFocused(true)}
+                                            onChange={(e) => {
+                                                setTagInput(e.target.value);
+                                                setIsTagInputFocused(true);
+                                            }}
+                                            onKeyDown={handleTagKeyDown}
+                                            onBlur={() => {
+                                                setIsTagInputFocused(false);
+                                                if (tagInput.trim()) {
+                                                    addTag(tagInput);
+                                                }
+                                            }}
+                                            placeholder={
+                                                tags.length === 0
+                                                    ? "Type tag (auto-completes with Tab/Enter)..."
+                                                    : 'Add another tag...'
+                                            }
+                                            className="w-full bg-transparent text-sm text-foreground focus:outline-none py-1 relative z-10"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Smart Autocomplete Dropdown */}
+                                {isTagInputFocused &&
+                                    (tagInput.trim().length > 0 || autocompleteOptions.length > 0) && (
+                                        <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-card-bg border border-card-border rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                                            <div className="px-3 py-1.5 bg-card-header-bg border-b border-card-border flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-foreground/50">
+                                                <span className="flex items-center gap-1.5">
+                                                    <Sparkles className="w-3 h-3 text-primary-glow" />
+                                                    {tagInput.trim()
+                                                        ? 'Smart Tag Autocomplete'
+                                                        : 'Recommended from Name & Description'}
+                                                </span>
+                                                <span>↑↓ Navigate · Tab / Enter Select</span>
+                                            </div>
+
+                                            {autocompleteOptions.length > 0 ? (
+                                                <div className="max-h-52 overflow-y-auto divide-y divide-card-border/50">
+                                                    {autocompleteOptions.map((item, idx) => {
+                                                        const isHighlighted = idx === highlightedAutoIdx;
+                                                        return (
+                                                            <button
+                                                                key={item.tag}
+                                                                type="button"
+                                                                onMouseEnter={() => setHighlightedAutoIdx(idx)}
+                                                                onMouseDown={(e) => {
+                                                                    e.preventDefault();
+                                                                    addTag(item.tag);
+                                                                }}
+                                                                className={`w-full px-3.5 py-2 text-left flex items-center justify-between gap-2 text-xs transition-colors cursor-pointer ${
+                                                                    isHighlighted
+                                                                        ? 'bg-primary-glow/15 text-foreground'
+                                                                        : 'hover:bg-foreground/5 text-foreground/80'
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    <span className="font-bold text-primary-glow">
+                                                                        #{item.tag}
+                                                                    </span>
+                                                                    {item.isContextual && (
+                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-primary-glow/15 text-primary-glow border border-primary-glow/30">
+                                                                            <Sparkles className="w-2.5 h-2.5" />
+                                                                            {item.reason || 'Matches theme'}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <span className="text-[11px] font-medium text-foreground/50 shrink-0">
+                                                                    {item.count > 0
+                                                                        ? `${item.count} PNG${
+                                                                              item.count === 1 ? '' : 's'
+                                                                          }`
+                                                                        : 'New tag'}
+                                                                </span>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
+                                                        addTag(tagInput);
+                                                    }}
+                                                    className="w-full px-3.5 py-2.5 text-left flex items-center justify-between text-xs text-foreground/80 hover:bg-primary-glow/10 cursor-pointer"
+                                                >
+                                                    <span>
+                                                        Add custom tag{' '}
+                                                        <strong className="text-primary-glow">
+                                                            #{tagInput.trim().toLowerCase()}
+                                                        </strong>
+                                                    </span>
+                                                    <span className="text-[10px] font-semibold text-foreground/45">
+                                                        Press Enter
+                                                    </span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                             </div>
 
-                            {popularTags.length > 0 && (
-                                <div className="space-y-1.5">
-                                    <span className="text-[10px] uppercase font-bold tracking-wider text-foreground/50">
-                                        Frequent Library Tags:
-                                    </span>
+                            {contextualTagData.suggestions.length > 0 && (
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-[10px] uppercase font-bold tracking-wider text-foreground/60 flex items-center gap-1.5">
+                                            {contextualTagData.hasContext ? (
+                                                <>
+                                                    <Sparkles className="w-3.5 h-3.5 text-primary-glow" />
+                                                    <span className="text-primary-glow">
+                                                        Smart Tag Suggestions (from Name & Description):
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                <span>Frequent Library Tags (type a Name or Description for smart suggestions):</span>
+                                            )}
+                                        </span>
+
+                                        {contextualTagData.hasContext &&
+                                            contextualTagData.suggestions.some(
+                                                (s) => s.isContextual && !tags.includes(s.tag)
+                                            ) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const toAdd = contextualTagData.suggestions
+                                                            .filter((s) => s.isContextual && !tags.includes(s.tag))
+                                                            .slice(0, 6)
+                                                            .map((s) => s.tag);
+                                                        if (toAdd.length > 0) {
+                                                            setTags((prev) =>
+                                                                Array.from(new Set([...prev, ...toAdd]))
+                                                            );
+                                                        }
+                                                    }}
+                                                    className="text-[11px] font-bold text-primary-glow hover:underline cursor-pointer"
+                                                >
+                                                    + Add Top Matches
+                                                </button>
+                                            )}
+                                    </div>
+
                                     <div className="flex flex-wrap gap-1.5">
-                                        {popularTags.map(({ tag, count }) => (
-                                            <button
-                                                key={tag}
-                                                type="button"
-                                                onClick={() => addTag(tag)}
-                                                className={`text-xs px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
-                                                    tags.includes(tag)
-                                                        ? 'bg-primary-glow text-white border-primary-glow'
-                                                        : 'bg-card-bg border-card-border text-foreground/70 hover:text-foreground hover:border-primary-glow/50'
-                                                }`}
-                                            >
-                                                +{tag} <span className="text-[10px] opacity-60">({count})</span>
-                                            </button>
-                                        ))}
+                                        {contextualTagData.suggestions.map(({ tag, count, isContextual, reason }) => {
+                                            const isSelected = tags.includes(tag);
+                                            return (
+                                                <button
+                                                    key={tag}
+                                                    type="button"
+                                                    onClick={() => (isSelected ? removeTag(tag) : addTag(tag))}
+                                                    title={
+                                                        reason
+                                                            ? `${reason} (${count} matching PNGs in library)`
+                                                            : `${count} PNGs in library`
+                                                    }
+                                                    className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border transition-all cursor-pointer font-medium ${
+                                                        isSelected
+                                                            ? 'bg-primary-glow text-white border-primary-glow shadow-sm'
+                                                            : isContextual
+                                                            ? 'bg-primary-glow/10 border-primary-glow/35 text-primary-glow hover:bg-primary-glow/20 hover:border-primary-glow'
+                                                            : 'bg-card-bg border-card-border text-foreground/70 hover:text-foreground hover:border-primary-glow/50'
+                                                    }`}
+                                                >
+                                                    {isSelected ? (
+                                                        <Check className="w-3 h-3" />
+                                                    ) : isContextual ? (
+                                                        <Sparkles className="w-3 h-3 text-primary-glow" />
+                                                    ) : (
+                                                        <span>+</span>
+                                                    )}
+                                                    <span>{tag}</span>
+                                                    {count > 0 && (
+                                                        <span className="text-[10px] opacity-65">({count})</span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -481,28 +1020,30 @@ export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
                                     <label className="block text-xs font-bold text-foreground mb-1 uppercase tracking-wider">
                                         Match Logic
                                     </label>
-                                    <select
+                                    <StudioSelect
+                                        aria-label="Tag match logic"
                                         value={ruleMatchMode}
                                         onChange={(e) => setRuleMatchMode(e.target.value)}
-                                        className="w-full bg-input-bg border border-input-border rounded-xl px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary-glow"
+                                        className="w-full"
                                     >
                                         <option value="any">Match ANY tag (broadest, OR)</option>
                                         <option value="all">Match ALL tags (strict, AND)</option>
-                                    </select>
+                                    </StudioSelect>
                                 </div>
 
                                 <div>
                                     <label className="block text-xs font-bold text-foreground mb-1 uppercase tracking-wider">
                                         Sync Behavior
                                     </label>
-                                    <select
+                                    <StudioSelect
+                                        aria-label="Collection sync behavior"
                                         value={smartType}
                                         onChange={(e) => setSmartType(e.target.value)}
-                                        className="w-full bg-input-bg border border-input-border rounded-xl px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary-glow"
+                                        className="w-full"
                                     >
                                         <option value="smart_dynamic">Live Dynamic (auto-includes new uploads)</option>
                                         <option value="smart_snapshot">Snapshot (one-time freeze)</option>
-                                    </select>
+                                    </StudioSelect>
                                 </div>
                             </div>
 
@@ -565,6 +1106,32 @@ export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
                         </div>
                     )}
 
+                    {/* Optional Hero Banner & Recommendation Card Customization */}
+                    <HeroBannerCustomizer
+                        collectionId={null}
+                        collectionName={name}
+                        imageCount={mode === 'smart' ? previewMatchCount || 0 : selectedImageIds.length}
+                        heroImagePath={heroImagePath}
+                        setHeroImagePath={setHeroImagePath}
+                        heroBgColor={heroBgColor}
+                        setHeroBgColor={setHeroBgColor}
+                        heroTextColor={heroTextColor}
+                        setHeroTextColor={setHeroTextColor}
+                        coverImagePath={coverImagePath}
+                        setCoverImagePath={setCoverImagePath}
+                        fallbackThumbnailPath={previewSampleImages[0]?.path || ''}
+                        cardBgImagePath={cardBgImagePath}
+                        setCardBgImagePath={setCardBgImagePath}
+                        cardBgColor={cardBgColor}
+                        setCardBgColor={setCardBgColor}
+                        cardTextColor={cardTextColor}
+                        setCardTextColor={setCardTextColor}
+                        trendingCardImagePath={trendingCardImagePath}
+                        setTrendingCardImagePath={setTrendingCardImagePath}
+                        previewImages={previewSampleImages}
+                        onOpenLibraryPicker={(field) => setPickerTargetField(field || 'heroImagePath')}
+                    />
+
                     <div className="flex items-center gap-3 pt-2">
                         <input
                             type="checkbox"
@@ -604,6 +1171,13 @@ export default function CreateCollectionModal({ isOpen, onClose, onSuccess }) {
                 onClose={() => setIsAssetPickerOpen(false)}
                 initialSelectedIds={selectedImageIds}
                 onConfirm={(ids) => setSelectedImageIds(ids)}
+            />
+
+            <AssetPickerModal
+                isOpen={Boolean(pickerTargetField)}
+                onClose={() => setPickerTargetField(null)}
+                onConfirm={handlePickCatalogHero}
+                title="Pick Image from Library"
             />
         </div>
     );

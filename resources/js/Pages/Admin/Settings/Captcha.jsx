@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Head } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
+import StudioSelect from '@/components/ui/StudioSelect';
 import { toast } from 'sonner';
 import {
     ShieldCheck,
@@ -136,7 +137,7 @@ export default function AdminCaptchaSettings() {
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                     {/* 1. Entry Point Assignments */}
-                    <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                    <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                         <div className="p-6 border-b border-card-border flex items-start gap-3">
                             <div className="p-2.5 rounded-lg bg-primary-glow/10 text-primary-glow border border-primary-glow/20 mt-0.5">
                                 <ShieldCheck className="w-5 h-5" />
@@ -166,7 +167,8 @@ export default function AdminCaptchaSettings() {
                                     <label className="block text-[11px] font-bold uppercase tracking-wider text-foreground/60 mb-1.5">
                                         Captcha Provider
                                     </label>
-                                    <select
+                                    <StudioSelect
+                                        aria-label="Download page captcha provider"
                                         value={form.downloadProvider}
                                         onChange={(e) => {
                                             setForm({ ...form, downloadProvider: e.target.value });
@@ -174,14 +176,14 @@ export default function AdminCaptchaSettings() {
                                                 setActiveGuideId(e.target.value);
                                             }
                                         }}
-                                        className="w-full px-3 py-2.5 rounded-lg bg-card-bg border border-card-border text-sm text-foreground focus:outline-none focus:border-primary-glow cursor-pointer"
+                                        className="w-full"
                                     >
                                         {providerOptions.map((opt) => (
-                                            <option key={opt.id} value={opt.id} className="bg-card-bg text-foreground">
+                                            <option key={opt.id} value={opt.id}>
                                                 {opt.name}
                                             </option>
                                         ))}
-                                    </select>
+                                    </StudioSelect>
                                     {!isProviderReady(form.downloadProvider) && (
                                         <p className="mt-1.5 text-[11px] text-amber-400 flex items-center gap-1">
                                             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -209,16 +211,16 @@ export default function AdminCaptchaSettings() {
                                             }
                                             className="w-24 px-3 py-1.5 rounded-lg bg-card-bg border border-card-border text-sm font-mono text-foreground focus:outline-none focus:border-primary-glow"
                                         />
-                                        <div className="flex gap-1">
+                                        <div className="inline-flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
                                             {[0, 3, 5, 10].map((sec) => (
                                                 <button
                                                     key={sec}
                                                     type="button"
                                                     onClick={() => setForm({ ...form, downloadCountdownSeconds: sec })}
-                                                    className={`px-2 py-1 rounded text-[11px] font-semibold border cursor-pointer transition-colors ${
+                                                    className={`h-7 px-2.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
                                                         Number(form.downloadCountdownSeconds) === sec
-                                                            ? 'bg-primary-glow text-white border-primary-glow'
-                                                            : 'bg-card-bg border-card-border text-foreground/65 hover:text-foreground'
+                                                            ? 'bg-primary-glow text-white shadow-sm'
+                                                            : 'bg-card-bg text-foreground/65 hover:text-foreground shadow-sm'
                                                     }`}
                                                 >
                                                     {sec}s
@@ -245,7 +247,8 @@ export default function AdminCaptchaSettings() {
                                     <label className="block text-[11px] font-bold uppercase tracking-wider text-foreground/60 mb-1.5">
                                         Captcha Provider
                                     </label>
-                                    <select
+                                    <StudioSelect
+                                        aria-label="Super admin login captcha provider"
                                         value={form.adminLoginProvider}
                                         onChange={(e) => {
                                             setForm({ ...form, adminLoginProvider: e.target.value });
@@ -253,14 +256,14 @@ export default function AdminCaptchaSettings() {
                                                 setActiveGuideId(e.target.value);
                                             }
                                         }}
-                                        className="w-full px-3 py-2.5 rounded-lg bg-card-bg border border-card-border text-sm text-foreground focus:outline-none focus:border-primary-glow cursor-pointer"
+                                        className="w-full"
                                     >
                                         {providerOptions.map((opt) => (
-                                            <option key={opt.id} value={opt.id} className="bg-card-bg text-foreground">
+                                            <option key={opt.id} value={opt.id}>
                                                 {opt.name}
                                             </option>
                                         ))}
-                                    </select>
+                                    </StudioSelect>
                                     {!isProviderReady(form.adminLoginProvider) && (
                                         <p className="mt-1.5 text-[11px] text-amber-400 flex items-center gap-1">
                                             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -290,7 +293,8 @@ export default function AdminCaptchaSettings() {
                                     <label className="block text-[11px] font-bold uppercase tracking-wider text-foreground/60 mb-1.5">
                                         Captcha Provider
                                     </label>
-                                    <select
+                                    <StudioSelect
+                                        aria-label="Team member login captcha provider"
                                         value={form.teamLoginProvider}
                                         onChange={(e) => {
                                             setForm({ ...form, teamLoginProvider: e.target.value });
@@ -298,14 +302,14 @@ export default function AdminCaptchaSettings() {
                                                 setActiveGuideId(e.target.value);
                                             }
                                         }}
-                                        className="w-full px-3 py-2.5 rounded-lg bg-card-bg border border-card-border text-sm text-foreground focus:outline-none focus:border-primary-glow cursor-pointer"
+                                        className="w-full"
                                     >
                                         {providerOptions.map((opt) => (
-                                            <option key={opt.id} value={opt.id} className="bg-card-bg text-foreground">
+                                            <option key={opt.id} value={opt.id}>
                                                 {opt.name}
                                             </option>
                                         ))}
-                                    </select>
+                                    </StudioSelect>
                                     {!isProviderReady(form.teamLoginProvider) && (
                                         <p className="mt-1.5 text-[11px] text-amber-400 flex items-center gap-1">
                                             <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -322,7 +326,7 @@ export default function AdminCaptchaSettings() {
                     </div>
 
                     {/* 2. Third-Party Provider API Keys & Setup Instructions */}
-                    <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                    <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                         <div className="p-6 border-b border-card-border flex items-start gap-3">
                             <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 mt-0.5">
                                 <KeyRound className="w-5 h-5" />
@@ -482,7 +486,7 @@ export default function AdminCaptchaSettings() {
                     </div>
 
                     {/* Save Bar */}
-                    <div className="flex items-center justify-between p-4 rounded-xl bg-card-bg border border-card-border shadow-lg">
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-card-bg border border-card-border">
                         <p className="text-xs text-foreground/55">
                             Changes apply immediately across Download Popups, Admin Login, and Team Login.
                         </p>

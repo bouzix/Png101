@@ -247,23 +247,23 @@ export default function AnalyticsPage() {
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start md:self-auto">
                         <button
                             onClick={handleRefreshAll}
                             disabled={isRefreshing}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-card-bg border border-card-border text-sm font-medium text-foreground/80 hover:text-foreground hover:border-foreground/30 transition-all cursor-pointer"
+                            className="h-8 px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer"
                         >
-                            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-primary-glow' : ''}`} />
-                            Refresh
+                            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-primary-glow' : ''}`} />
+                            <span>Refresh</span>
                         </button>
                         {hasPermission('export_analytics') && (
                             <button
                                 onClick={handleExportCSV}
                                 disabled={!stats?.popularImages.length}
-                                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-glow text-white text-sm font-medium hover:bg-blue-600 transition-all shadow-lg shadow-primary-glow/20 cursor-pointer disabled:opacity-50"
+                                className="h-8 px-3.5 rounded-lg bg-primary-glow hover:bg-blue-600 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
                             >
-                                <FileDown className="w-4 h-4" />
-                                Export CSV
+                                <FileDown className="w-3.5 h-3.5" />
+                                <span>Export CSV</span>
                             </button>
                         )}
                     </div>
@@ -317,7 +317,7 @@ export default function AnalyticsPage() {
                 </div>
 
                 {/* ROW 2: Interactive Growth Chart */}
-                <GlassCard className="p-6">
+                <GlassCard className="p-6 shadow-none">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                         <div>
                             <div className="flex items-center gap-3">
@@ -347,15 +347,15 @@ export default function AnalyticsPage() {
                         </div>
 
                         {/* Time Range Pill Switcher */}
-                        <div className="flex items-center gap-1 bg-background/60 border border-card-border p-1 rounded-xl">
+                        <div className="flex items-center gap-1 bg-card-header-bg border border-card-border p-1 rounded-xl self-start sm:self-auto">
                             {TIME_RANGES.map((tr) => (
                                 <button
                                     key={tr.key}
                                     onClick={() => setChartTimeRange(tr.key)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                    className={`h-7 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                                         chartTimeRange === tr.key
                                             ? 'bg-primary-glow text-white shadow-sm'
-                                            : 'text-foreground/60 hover:text-foreground'
+                                            : 'bg-card-bg text-foreground/70 hover:text-primary-glow shadow-sm'
                                     }`}
                                 >
                                     {tr.label}
@@ -441,7 +441,7 @@ export default function AnalyticsPage() {
                 {/* ROW 3: Audience Intelligence (3 Columns) */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Device Breakdown */}
-                    <GlassCard className="p-6 flex flex-col justify-between">
+                    <GlassCard className="p-6 flex flex-col justify-between shadow-none">
                         <div>
                             <h3 className="text-base font-bold text-foreground flex items-center gap-2 mb-1">
                                 <Smartphone className="w-4 h-4 text-purple-400" />
@@ -523,7 +523,7 @@ export default function AnalyticsPage() {
                     </GlassCard>
 
                     {/* Top Countries */}
-                    <GlassCard className="p-6 flex flex-col">
+                    <GlassCard className="p-6 flex flex-col shadow-none">
                         <div className="mb-4">
                             <h3 className="text-base font-bold text-foreground flex items-center gap-2 mb-1">
                                 <Globe className="w-4 h-4 text-emerald-400" />
@@ -569,7 +569,7 @@ export default function AnalyticsPage() {
                     </GlassCard>
 
                     {/* Custom Size & Resolution Stats */}
-                    <GlassCard className="p-6 flex flex-col justify-between">
+                    <GlassCard className="p-6 flex flex-col justify-between shadow-none">
                         <div>
                             <h3 className="text-base font-bold text-foreground flex items-center gap-2 mb-1">
                                 <Maximize2 className="w-4 h-4 text-teal-400" />
@@ -631,7 +631,7 @@ export default function AnalyticsPage() {
                 {/* ROW 4: Content & Search Intelligence (2 Columns) */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Top Tags & Categories */}
-                    <GlassCard className="p-6">
+                    <GlassCard className="p-6 shadow-none">
                         <div className="flex items-center justify-between mb-5">
                             <div>
                                 <h3 className="text-base font-bold text-foreground flex items-center gap-2">
@@ -726,7 +726,7 @@ export default function AnalyticsPage() {
                     </GlassCard>
 
                     {/* Search Intelligence */}
-                    <GlassCard className="p-6">
+                    <GlassCard className="p-6 shadow-none">
                         <div className="mb-5">
                             <h3 className="text-base font-bold text-foreground flex items-center gap-2">
                                 <Search className="w-4 h-4 text-amber-400" />
@@ -793,7 +793,7 @@ export default function AnalyticsPage() {
                 </div>
 
                 {/* ROW 5: Live Recent Downloads Stream */}
-                <GlassCard className="p-6">
+                <GlassCard className="p-6 shadow-none">
                     <div className="flex items-center justify-between mb-4">
                         <div>
                             <h3 className="text-base font-bold text-foreground flex items-center gap-2">
@@ -870,7 +870,7 @@ export default function AnalyticsPage() {
                         </div>
 
                         {/* Time Range Selector for Table & Stats */}
-                        <div className="flex items-center gap-1 bg-card-bg border border-card-border p-1 rounded-xl w-fit">
+                        <div className="flex items-center gap-1 bg-card-header-bg border border-card-border p-1 rounded-xl w-fit">
                             {TIME_RANGES.map((tr) => (
                                 <button
                                     key={tr.key}
@@ -878,10 +878,10 @@ export default function AnalyticsPage() {
                                         setPopularTimeRange(tr.key);
                                         setPage(1);
                                     }}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                    className={`h-7 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                                         popularTimeRange === tr.key
                                             ? 'bg-primary-glow text-white shadow-sm'
-                                            : 'text-foreground/60 hover:text-foreground'
+                                            : 'bg-card-bg text-foreground/70 hover:text-primary-glow shadow-sm'
                                     }`}
                                 >
                                     {tr.label}
@@ -902,7 +902,7 @@ export default function AnalyticsPage() {
                         />
 
                         {/* Main Results Table */}
-                        <GlassCard className="flex-1 w-full overflow-hidden">
+                        <GlassCard className="flex-1 w-full overflow-hidden shadow-none">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse">
                                     <thead>

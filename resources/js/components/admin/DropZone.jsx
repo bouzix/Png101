@@ -4,7 +4,14 @@ const DropZone = ({ onFilesDropped }) => {
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef(null);
 
+    const isInternalBulkDrag = (e) => {
+        const types = e?.dataTransfer?.types;
+        if (!types) return false;
+        return Array.from(types).includes('application/x-png101-bulk-items');
+    };
+
     const handleDragOver = (e) => {
+        if (isInternalBulkDrag(e)) return;
         e.preventDefault();
         setIsDragging(true);
     };
@@ -14,7 +21,9 @@ const DropZone = ({ onFilesDropped }) => {
     };
 
     const handleDrop = (e) => {
+        if (isInternalBulkDrag(e)) return;
         e.preventDefault();
+        e.stopPropagation();
         setIsDragging(false);
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             onFilesDropped(Array.from(e.dataTransfer.files));

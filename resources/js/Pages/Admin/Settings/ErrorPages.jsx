@@ -275,14 +275,14 @@ export default function ErrorPagesSettingsPage() {
                             </p>
                         </div>
 
-                        <div className="flex items-center gap-3">
+                        <div className="inline-flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
                             <button
                                 type="button"
                                 onClick={() => setPreviewModalOpen(true)}
-                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card-bg hover:bg-white/5 text-foreground font-semibold text-sm border border-card-border hover:border-primary-glow/50 transition-all shadow-lg cursor-pointer"
+                                className="h-8 flex items-center gap-2 px-3.5 rounded-lg bg-card-bg hover:bg-foreground/5 text-foreground font-bold text-xs transition-all shadow-sm cursor-pointer"
                                 title="Open interactive page mockup"
                             >
-                                <Eye className="w-4 h-4 text-primary-glow" />
+                                <Eye className="w-3.5 h-3.5 text-primary-glow" />
                                 <span>Live Preview</span>
                             </button>
 
@@ -290,9 +290,9 @@ export default function ErrorPagesSettingsPage() {
                                 type="button"
                                 onClick={handleSave}
                                 disabled={saving}
-                                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary-glow hover:bg-blue-600 disabled:opacity-50 text-white font-semibold text-sm shadow-lg shadow-primary-glow/25 transition-all cursor-pointer"
+                                className="h-8 flex items-center gap-2 px-4 rounded-lg bg-primary-glow hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
                             >
-                                {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                                 <span>{saving ? 'Saving...' : 'Save Changes'}</span>
                             </button>
                         </div>
@@ -331,7 +331,7 @@ export default function ErrorPagesSettingsPage() {
                     </div>
 
                     {/* Main Configuration Card */}
-                    <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-xl">
+                    <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
                         {/* Card Header with Tab Switcher */}
                         <div className="p-6 border-b border-card-border flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
                             <div className="flex items-start gap-3">
@@ -379,15 +379,15 @@ export default function ErrorPagesSettingsPage() {
                                 </div>
                             </div>
 
-                            <div className="flex gap-1.5 bg-background rounded-lg p-1 border border-card-border self-stretch sm:self-auto overflow-x-auto">
+                            <div className="inline-flex gap-1 bg-card-header-bg rounded-xl p-1 border border-card-border self-stretch sm:self-auto overflow-x-auto">
                                 {tabs.map((tab) => (
                                     <button
                                         key={tab.key}
                                         onClick={() => setActiveTab(tab.key)}
-                                        className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                                        className={`h-8 flex items-center gap-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
                                             activeTab === tab.key
-                                                ? 'bg-primary-glow text-white shadow-lg shadow-primary-glow/20'
-                                                : 'text-foreground/60 hover:text-foreground hover:bg-card-bg'
+                                                ? 'bg-primary-glow text-white shadow-sm'
+                                                : 'bg-card-bg text-foreground/60 hover:text-foreground shadow-sm'
                                         }`}
                                     >
                                         {tab.icon}

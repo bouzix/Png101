@@ -3,6 +3,8 @@
 namespace App\Http\Middleware;
 
 use App\Services\CodeInjectionService;
+use App\Services\ConverterToolsService;
+use App\Services\EditorSettingsService;
 use App\Services\ImageProcessingService;
 use App\Services\TeamService;
 use App\Services\WebsiteInfoService;
@@ -24,6 +26,8 @@ class HandleInertiaRequests extends Middleware
             'websiteInfo' => fn () => WebsiteInfoService::get(),
             'codeInjection' => fn () => CodeInjectionService::get(),
             'auth' => fn () => TeamService::getCurrentSession($request),
+            'bonusToolsNav' => fn () => ConverterToolsService::getPublicUiFlags(),
+            'editorNav' => fn () => EditorSettingsService::getPublicFlags(),
             'uploadLimits' => fn () => str_starts_with($request->path(), 'admin')
                 ? ImageProcessingService::getUploadLimits()
                 : null,
