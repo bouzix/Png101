@@ -12,6 +12,7 @@ import {
     Terminal,
     ShieldCheck,
     ExternalLink,
+    Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -119,9 +120,9 @@ export default function GlobalUpdateNotifier({ session, pathname }) {
 
     return (
         <>
-            {/* Global Pill Notification Button (only shown when updates are pending) */}
+            {/* Floating Global Pill Notification Button (only shown when updates are pending) */}
             {hasPendingUpdates && (
-                <div className="sticky top-2 z-30 flex justify-end mb-4 pointer-events-none">
+                <div className="fixed top-5 right-6 z-40 flex justify-end pointer-events-none">
                     <button
                         type="button"
                         onClick={() => {
@@ -135,8 +136,8 @@ export default function GlobalUpdateNotifier({ session, pathname }) {
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75" />
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
                         </span>
-                        <Rocket className="w-3.5 h-3.5" />
-                        <span>Update Available</span>
+                        <Rocket className={`w-3.5 h-3.5 ${runningUpdate ? 'animate-bounce' : ''}`} />
+                        <span>{runningUpdate ? 'Applying Update...' : 'Update Available'}</span>
                         <span className="px-2 py-0.5 rounded-full bg-white/15 border border-white/20 text-[10px] font-mono">
                             {pillSubtitle}
                         </span>
@@ -373,6 +374,28 @@ export default function GlobalUpdateNotifier({ session, pathname }) {
                                 </div>
                             )}
 
+                            {/* Live Applying Update Animation */}
+                            {runningUpdate && (
+                                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/30 space-y-3 animate-in fade-in duration-200">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 rounded-lg bg-blue-600 text-white shadow-sm">
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-xs font-bold text-foreground">
+                                                Applying Update to v{targetVersion}...
+                                            </div>
+                                            <div className="text-[11px] text-foreground/65 mt-0.5">
+                                                Synchronizing database migrations, refreshing caches, and rebuilding sitemaps.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="w-full h-2 rounded-full bg-background border border-card-border overflow-hidden">
+                                        <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-blue-600 via-primary-glow to-emerald-400 animate-pulse" />
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Execution Output */}
                             {updateResult && (
                                 <div className="pt-3 border-t border-card-border space-y-2.5">
@@ -445,7 +468,11 @@ export default function GlobalUpdateNotifier({ session, pathname }) {
                                         disabled={runningUpdate || isLocal}
                                         className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-lg shadow-blue-600/25 transition-all cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
                                     >
-                                        <Rocket className={`w-3.5 h-3.5 ${runningUpdate ? 'animate-bounce' : ''}`} />
+                                        {runningUpdate ? (
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        ) : (
+                                            <Rocket className="w-3.5 h-3.5" />
+                                        )}
                                         {runningUpdate
                                             ? 'Applying Updates...'
                                             : isLocal
