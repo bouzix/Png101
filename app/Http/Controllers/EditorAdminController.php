@@ -10,6 +10,7 @@ use App\Models\EditorUsageLog;
 use App\Models\Image;
 use App\Services\EditorDefaultsService;
 use App\Services\EditorSettingsService;
+use App\Services\ImageProcessingService;
 use App\Services\TeamService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -834,7 +835,7 @@ class EditorAdminController extends Controller
             $topAssets[] = [
                 'id' => $imgId,
                 'name' => $img?->name ?: ($img?->filename ?: 'Deleted Asset'),
-                'thumbUrl' => $img?->thumbPath ?: ($img?->path ?: null),
+                'thumbUrl' => $img ? ImageProcessingService::ensureWebpThumbnail($img) : null,
                 'inserts' => $cnt,
             ];
         }

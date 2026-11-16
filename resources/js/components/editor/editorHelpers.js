@@ -8,6 +8,9 @@ import {
     Textbox,
     FabricImage,
     FabricObject,
+    InteractiveFabricObject,
+    Control,
+    controlsUtils,
     Gradient,
     Shadow,
     filters,
@@ -16,11 +19,15 @@ import {
 } from 'fabric';
 import { buildZipBlob, extractColorPalette } from '../../lib/imageConverter';
 import { ensureGoogleFontCss } from './googleFontsHelper';
+import { makeArtboardBackgroundFill } from './artboardHelpers';
 
 export const CUSTOM_PROPS = [
     'layerId',
     'layerName',
     'lockedLayer',
+    'artboardId',
+    'layerRole',
+    'isPersistentGroup',
     'assetId',
     'frameShape',
     'stickerOutlineColor',
@@ -30,7 +37,48 @@ export const CUSTOM_PROPS = [
     'globalCompositeOperation',
     'filterState',
     'bgMeta',
+    'eraserPaths',
 ];
+
+export function buildBezierSvgPath(anchors = [], closed = false) {
+    if (!Array.isArray(anchors) || anchors.length === 0) return '';
+    const fmt = (n) => Number(n || 0).toFixed(2);
+    const cmds = [`M ${fmt(anchors[0].x)} ${fmt(anchors[0].y)}`];
+    for (let i = 1; i < anchors.length; i++) {
+        const prev = anchors[i - 1];
+        const cur = anchors[i];
+        const cp1x = prev.x + (prev.outX || 0);
+        const cp1y = prev.y + (prev.outY || 0);
+        const cp2x = cur.x + (cur.inX || 0);
+        const cp2y = cur.y + (cur.inY || 0);
+        const isLine =
+            (prev.outX || 0) === 0 &&
+            (prev.outY || 0) === 0 &&
+            (cur.inX || 0) === 0 &&
+            (cur.inY || 0) === 0;
+        if (isLine) {
+            cmds.push(`L ${fmt(cur.x)} ${fmt(cur.y)}`);
+        } else {
+            cmds.push(`C ${fmt(cp1x)} ${fmt(cp1y)} ${fmt(cp2x)} ${fmt(cp2y)} ${fmt(cur.x)} ${fmt(cur.y)}`);
+        }
+    }
+    if (closed && anchors.length > 1) {
+        const last = anchors[anchors.length - 1];
+        const first = anchors[0];
+        const hasCurve =
+            (last.outX || 0) !== 0 ||
+            (last.outY || 0) !== 0 ||
+            (first.inX || 0) !== 0 ||
+            (first.inY || 0) !== 0;
+        if (hasCurve) {
+            cmds.push(
+                `C ${fmt(last.x + (last.outX || 0))} ${fmt(last.y + (last.outY || 0))} ${fmt(first.x + (first.inX || 0))} ${fmt(first.y + (first.inY || 0))} ${fmt(first.x)} ${fmt(first.y)}`
+            );
+        }
+        cmds.push('Z');
+    }
+    return cmds.join(' ');
+}
 
 export function uid(prefix = 'id') {
     return `${prefix}-${Math.random().toString(36).slice(2, 9)}-${Date.now().toString(36)}`;
@@ -705,13 +753,49 @@ export function installMultiEffectRenderer() {
 
     const origRender = FabricObject.prototype.render;
     const origNeedsOwnCache = FabricObject.prototype.needsItsOwnCache;
+    const origDrawObject = FabricObject.prototype.drawObject;
 
     FabricObject.prototype.needsItsOwnCache = function () {
+        if (Array.isArray(this.eraserPaths) && this.eraserPaths.length > 0) return true;
         const { outer, inner } = collectObjectEffects(this);
         if (outer.length > 0 || inner.length > 0) return true;
         const gco = normalizeBlendMode(this.globalCompositeOperation);
         if (gco === 'dissolve' || gco === 'subtract') return true;
         return origNeedsOwnCache.call(this);
+    };
+
+    FabricObject.prototype.drawObject = function (ctx, forClipping, context) {
+        origDrawObject.call(this, ctx, forClipping, context);
+        if (!forClipping && Array.isArray(this.eraserPaths) && this.eraserPaths.length > 0) {
+            ctx.save();
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = 'rgba(0,0,0,1)';
+            ctx.fillStyle = 'rgba(0,0,0,1)';
+            for (const ep of this.eraserPaths) {
+                const pts = ep?.points;
+                if (!Array.isArray(pts) || pts.length === 0) continue;
+                const w = Math.max(1, Number(ep.width || 20));
+                if (pts.length === 1) {
+                    ctx.beginPath();
+                    ctx.arc(pts[0].x, pts[0].y, w / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.lineWidth = w;
+                    ctx.beginPath();
+                    ctx.moveTo(pts[0].x, pts[0].y);
+                    for (let i = 1; i < pts.length; i++) {
+                        const prev = pts[i - 1];
+                        const cur = pts[i];
+                        ctx.quadraticCurveTo(prev.x, prev.y, (prev.x + cur.x) / 2, (prev.y + cur.y) / 2);
+                    }
+                    ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+                    ctx.stroke();
+                }
+            }
+            ctx.restore();
+        }
     };
 
     FabricObject.prototype.render = function (ctx) {
@@ -813,6 +897,13 @@ function normalizeProjectRecord(payload) {
     const activePageIdx = Math.min(Math.max(0, Number(payload.activePageIdx) || 0), Math.max(0, pages.length - 1));
     const activePage = pages[activePageIdx] || pages[0] || null;
     const id = String(payload.id || uid('proj'));
+    const totalArtboards = pages.reduce(
+        (sum, p) => sum + (Array.isArray(p?.artboards) && p.artboards.length > 0 ? p.artboards.length : 1),
+        0
+    );
+    const artboardPreviews = Array.isArray(payload.artboardPreviews)
+        ? payload.artboardPreviews.filter((a) => a && typeof a === 'object')
+        : [];
     return {
         ...payload,
         id,
@@ -820,6 +911,8 @@ function normalizeProjectRecord(payload) {
         width: Number(payload.width || activePage?.width) || 1080,
         height: Number(payload.height || activePage?.height) || 1080,
         pageCount: pages.length || Number(payload.pageCount) || 1,
+        artboardCount: Number(payload.artboardCount) || Math.max(1, totalArtboards),
+        artboardPreviews,
         activePageIdx,
         pages,
         thumbnail: payload.thumbnail || null,
@@ -827,6 +920,70 @@ function normalizeProjectRecord(payload) {
         updatedAt: Number(payload.updatedAt || payload.savedAt) || now,
         savedAt: Number(payload.savedAt || payload.updatedAt) || now,
     };
+}
+
+const EMERGENCY_DRAFT_PREFIX = 'png101:editor:pendingDraft:v1:';
+
+export function writePendingProjectDraftSync(payload) {
+    try {
+        if (!payload?.id || !Array.isArray(payload.pages) || typeof window === 'undefined' || !window.localStorage) {
+            return false;
+        }
+        const compact = {
+            ...normalizeProjectRecord({ ...payload, thumbnail: null, artboardPreviews: [] }),
+            thumbnail: null,
+            artboardPreviews: [],
+        };
+        window.localStorage.setItem(`${EMERGENCY_DRAFT_PREFIX}${compact.id}`, JSON.stringify(compact));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export function readPendingProjectDraftSync(projectId) {
+    try {
+        if (!projectId || typeof window === 'undefined' || !window.localStorage) return null;
+        const raw = window.localStorage.getItem(`${EMERGENCY_DRAFT_PREFIX}${projectId}`);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && Array.isArray(parsed.pages) && parsed.pages.length > 0 ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+export function clearPendingProjectDraftSync(projectId) {
+    try {
+        if (!projectId || typeof window === 'undefined' || !window.localStorage) return;
+        window.localStorage.removeItem(`${EMERGENCY_DRAFT_PREFIX}${projectId}`);
+    } catch {
+        // ignore storage errors
+    }
+}
+
+function collectPendingDraftsFromStorage() {
+    const out = [];
+    try {
+        if (typeof window === 'undefined' || !window.localStorage) return out;
+        for (let i = 0; i < window.localStorage.length; i += 1) {
+            const k = window.localStorage.key(i);
+            if (!k || !k.startsWith(EMERGENCY_DRAFT_PREFIX)) continue;
+            const raw = window.localStorage.getItem(k);
+            if (!raw) continue;
+            try {
+                const parsed = JSON.parse(raw);
+                if (parsed?.id && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
+                    out.push(parsed);
+                }
+            } catch {
+                // ignore malformed entry
+            }
+        }
+    } catch {
+        // ignore storage errors
+    }
+    return out;
 }
 
 export async function saveProjectToIdb(payload) {
@@ -845,6 +1002,12 @@ export async function saveProjectToIdb(payload) {
             tx.onerror = () => reject(tx.error);
         });
         db.close();
+        if (normalized?.id) {
+            const pending = readPendingProjectDraftSync(normalized.id);
+            if (!pending || (Number(normalized.updatedAt) || 0) >= (Number(pending.updatedAt) || 0)) {
+                clearPendingProjectDraftSync(normalized.id);
+            }
+        }
         return true;
     } catch {
         // Ignore quota / private browsing errors gracefully
@@ -910,7 +1073,14 @@ export async function listSavedProjectsFromIdb() {
             tx.onerror = () => reject(tx.error);
         });
         db.close();
-        return projects.sort((a, b) => (b.updatedAt || b.savedAt || 0) - (a.updatedAt || a.savedAt || 0));
+        const byId = new Map(projects.map((p) => [p.id, p]));
+        collectPendingDraftsFromStorage().forEach((draft) => {
+            const existing = byId.get(draft.id);
+            if (!existing || (Number(draft.updatedAt) || 0) > (Number(existing.updatedAt) || 0)) {
+                byId.set(draft.id, { ...existing, ...draft, thumbnail: existing?.thumbnail || draft.thumbnail || null });
+            }
+        });
+        return [...byId.values()].sort((a, b) => (b.updatedAt || b.savedAt || 0) - (a.updatedAt || a.savedAt || 0));
     } catch {
         return [];
     }
@@ -935,6 +1105,7 @@ export async function getSavedProjectFromIdb(projectId) {
 
 export async function deleteSavedProjectFromIdb(projectId) {
     if (!projectId) return false;
+    clearPendingProjectDraftSync(projectId);
     try {
         const db = await openIdb();
         await new Promise((resolve, reject) => {
@@ -1012,14 +1183,10 @@ export async function clearProjectFromIdb() {
     }
 }
 
-export function captureLightweightThumbnail(canvas) {
+export function captureLightweightThumbnail(canvas, logicalW = null, logicalH = null, artboardX = 0, artboardY = 0) {
     if (!canvas) return null;
     try {
-        const w = canvas.getWidth?.() || 0;
-        const h = canvas.getHeight?.() || 0;
-        if (w <= 0 || h <= 0) return null;
-        const mult = Math.min(380 / w, 260 / h, 1);
-        return canvas.toDataURL({ format: 'png', multiplier: mult });
+        return captureScopedArtboardDataUrl(canvas, 380, 260, { quality: 0.85 }, logicalW, logicalH, artboardX, artboardY);
     } catch {
         return null;
     }
@@ -1549,23 +1716,186 @@ export function attachSnappingGuides(canvas, logicalWRef, logicalHRef, onGuidesC
     };
 }
 
-// ==================== PALETTE EXTRACTION FROM ACTIVE CANVAS ====================
-export async function extractPaletteFromCanvas(canvas) {
+import { PASTEBOARD_PAD, OUTSIDE_CANVAS_MODES } from './outsideCanvasModes';
+
+export { PASTEBOARD_PAD, OUTSIDE_CANVAS_MODES };
+
+export function applyPasteboardOverlayEffect(
+    canvas,
+    artboardsOrW,
+    modeOrH,
+    modeOrScratch = 'grayscale-dim',
+    scratchOrOpacity = null,
+    maybeOpacity = null
+) {
+    const isArrayMode = Array.isArray(artboardsOrW);
+    const artboards = isArrayMode
+        ? artboardsOrW
+        : [{ x: 0, y: 0, width: Number(artboardsOrW) || 1, height: Number(modeOrH) || 1, visible: true }];
+    const mode = isArrayMode ? (modeOrH || 'grayscale-dim') : modeOrScratch;
+    const scratchRef = isArrayMode ? modeOrScratch : scratchOrOpacity;
+    const opacity = isArrayMode ? scratchOrOpacity : maybeOpacity;
+
+    if (!canvas || mode === 'original') return;
+    const el = canvas.lowerCanvasEl;
+    const ctx = canvas.getContext?.();
+    if (!el || !ctx || !el.width || !el.height) return;
+
+    const v = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+    const canvasCssW = Math.max(1, canvas.getWidth?.() || el.width);
+    const dpr = el.width / canvasCssW;
+    const scaleX = v[0] || 1;
+    const scaleY = v[3] || 1;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.beginPath();
+    ctx.rect(0, 0, el.width, el.height);
+    for (const ab of artboards) {
+        if (!ab || ab.visible === false) continue;
+        const ax = Number(ab.x) || 0;
+        const ay = Number(ab.y) || 0;
+        const aw = Math.max(1, Number(ab.width) || 1);
+        const ah = Math.max(1, Number(ab.height) || 1);
+        const abPxLeft = (ax * scaleX + (v[4] || 0)) * dpr;
+        const abPxTop = (ay * scaleY + (v[5] || 0)) * dpr;
+        const abPxW = aw * scaleX * dpr;
+        const abPxH = ah * scaleY * dpr;
+        ctx.rect(abPxLeft, abPxTop, abPxW, abPxH);
+    }
+    ctx.clip('evenodd');
+
+    if (mode === 'hidden') {
+        ctx.clearRect(0, 0, el.width, el.height);
+        ctx.restore();
+        return;
+    }
+
+    let scratch = scratchRef?.current || null;
+    if (!scratch && typeof document !== 'undefined') {
+        scratch = document.createElement('canvas');
+        if (scratchRef) scratchRef.current = scratch;
+    }
+    if (!scratch) {
+        ctx.restore();
+        return;
+    }
+    if (scratch.width !== el.width || scratch.height !== el.height) {
+        scratch.width = el.width;
+        scratch.height = el.height;
+    }
+    const sCtx = scratch.getContext('2d');
+    sCtx.setTransform(1, 0, 0, 1, 0, 0);
+    sCtx.clearRect(0, 0, scratch.width, scratch.height);
+    sCtx.drawImage(el, 0, 0);
+
+    const customAlpha = Number.isFinite(Number(opacity))
+        ? Math.min(1, Math.max(0.05, Number(opacity)))
+        : null;
+
+    ctx.clearRect(0, 0, el.width, el.height);
+    if (mode === 'grayscale') {
+        ctx.filter = 'grayscale(100%)';
+        ctx.globalAlpha = 0.9;
+    } else if (mode === 'dimmed') {
+        ctx.filter = 'none';
+        ctx.globalAlpha = customAlpha ?? 0.42;
+    } else {
+        ctx.filter = 'grayscale(100%) contrast(0.92)';
+        ctx.globalAlpha = customAlpha ?? 0.5;
+    }
+    ctx.drawImage(scratch, 0, 0);
+    ctx.filter = 'none';
+    ctx.restore();
+}
+
+function captureScopedArtboardDataUrl(
+    canvas,
+    maxW,
+    maxH,
+    opts = {},
+    logicalW = null,
+    logicalH = null,
+    artboardX = 0,
+    artboardY = 0
+) {
+    if (!canvas) return null;
+    const prevVpt = [...(canvas.viewportTransform || [1, 0, 0, 1, 0, 0])];
+    const prevW = canvas.getWidth?.() || 0;
+    const prevH = canvas.getHeight?.() || 0;
+    const prevZoom = prevVpt[0] || 1;
+    const padX = prevVpt[4] || 0;
+    const padY = prevVpt[5] || 0;
+    const lw = Math.max(1, Number(logicalW) || Math.round((prevW - padX * 2) / prevZoom));
+    const lh = Math.max(1, Number(logicalH) || Math.round((prevH - padY * 2) / prevZoom));
+    if (lw <= 0 || lh <= 0) return null;
+    const scale = Math.min(maxW / lw, maxH / lh, 1);
+    const ax = Number(artboardX) || 0;
+    const ay = Number(artboardY) || 0;
+
+    canvas.__suppressPasteboardEffect = true;
     try {
-        const prevZoom = canvas.getZoom();
-        const prevW = canvas.getWidth();
-        const prevH = canvas.getHeight();
-        canvas.setZoom(0.25);
-        const lw = Math.max(1, Math.round(prevW / prevZoom));
-        const lh = Math.max(1, Math.round(prevH / prevZoom));
-        canvas.setDimensions({ width: Math.round(lw * 0.25), height: Math.round(lh * 0.25) });
+        canvas.setViewportTransform([scale, 0, 0, scale, -ax * scale, -ay * scale]);
+        canvas.setDimensions({
+            width: Math.max(1, Math.round(lw * scale)),
+            height: Math.max(1, Math.round(lh * scale)),
+        });
         canvas.renderAll();
-
-        const dataUrl = canvas.toDataURL({ format: 'png' });
-
-        canvas.setZoom(prevZoom);
+        return canvas.toDataURL({ format: 'png', ...opts });
+    } finally {
+        canvas.__suppressPasteboardEffect = false;
+        canvas.setViewportTransform(prevVpt);
         canvas.setDimensions({ width: prevW, height: prevH });
         canvas.renderAll();
+    }
+}
+
+export function generateArtboardThumbnails(canvas, artboards = []) {
+    if (!canvas || !Array.isArray(artboards) || artboards.length === 0) return [];
+    const prevVpt = [...(canvas.viewportTransform || [1, 0, 0, 1, 0, 0])];
+    const prevW = canvas.getWidth?.() || 0;
+    const prevH = canvas.getHeight?.() || 0;
+    const previews = [];
+
+    canvas.__suppressPasteboardEffect = true;
+    try {
+        for (const ab of artboards) {
+            const lw = Math.max(1, Number(ab.width) || 1080);
+            const lh = Math.max(1, Number(ab.height) || 1080);
+            const scale = Math.min(360 / lw, 360 / lh, 1);
+            const ax = Number(ab.x) || 0;
+            const ay = Number(ab.y) || 0;
+            canvas.setViewportTransform([scale, 0, 0, scale, -ax * scale, -ay * scale]);
+            canvas.setDimensions({
+                width: Math.max(1, Math.round(lw * scale)),
+                height: Math.max(1, Math.round(lh * scale)),
+            });
+            canvas.renderAll();
+            const thumb = canvas.toDataURL({ format: 'png', quality: 0.8 });
+            previews.push({
+                id: ab.id,
+                name: ab.name || 'Artboard',
+                width: lw,
+                height: lh,
+                thumbnail: thumb,
+            });
+        }
+    } catch {
+        // fallback gracefully
+    } finally {
+        canvas.__suppressPasteboardEffect = false;
+        canvas.setViewportTransform(prevVpt);
+        canvas.setDimensions({ width: prevW, height: prevH });
+        canvas.renderAll();
+    }
+    return previews;
+}
+
+// ==================== PALETTE EXTRACTION FROM ACTIVE CANVAS ====================
+export async function extractPaletteFromCanvas(canvas, logicalW = null, logicalH = null) {
+    try {
+        const dataUrl = captureScopedArtboardDataUrl(canvas, 320, 320, {}, logicalW, logicalH);
+        if (!dataUrl) throw new Error('Empty canvas');
 
         const img = await new Promise((resolve, reject) => {
             const el = new Image();
@@ -1625,22 +1955,89 @@ export async function renderPageOffscreen(pageData, { format = 'png', quality = 
     return resp.blob();
 }
 
-export async function generateThumbnailDataUrl(canvas, logicalW, logicalH) {
+export async function renderArtboardOffscreen(
+    artboard,
+    fabricJson,
+    { format = 'png', quality = 0.92, multiplier = 1, transparent = true } = {},
+    isPrimaryArtboard = false
+) {
+    const w = Math.max(1, Number(artboard?.width) || 1080);
+    const h = Math.max(1, Number(artboard?.height) || 1080);
+    const ax = Number(artboard?.x) || 0;
+    const ay = Number(artboard?.y) || 0;
+
+    const el = document.createElement('canvas');
+    el.width = w;
+    el.height = h;
+    const sc = new StaticCanvas(el, { width: w, height: h });
+
+    const jsonCopy = JSON.parse(JSON.stringify(fabricJson || { version: '6.0.0', objects: [] }));
+    jsonCopy.objects = (jsonCopy.objects || [])
+        .filter((o) => {
+            if (!artboard?.id) return true;
+            if (!o.artboardId) return isPrimaryArtboard;
+            return o.artboardId === artboard.id;
+        })
+        .map((o) => ({
+            ...o,
+            originX: o.originX || 'left',
+            originY: o.originY || 'top',
+        }));
+
+    delete jsonCopy.background;
+    delete jsonCopy.backgroundColor;
+    await sc.loadFromJSON(jsonCopy);
+
+    const artboardBg = makeArtboardBackgroundFill(artboard, 0, 0);
+    if (artboardBg) {
+        sc.backgroundColor = artboardBg;
+    } else if (format === 'jpeg' || (!transparent && (!artboard?.bgMeta || artboard.bgMeta.mode === 'transparent'))) {
+        sc.backgroundColor = '#ffffff';
+    } else {
+        sc.backgroundColor = null;
+    }
+
+    sc.setViewportTransform([1, 0, 0, 1, -ax, -ay]);
+    sc.renderAll();
+
+    if (format === 'svg') {
+        const svgMarkup = sc.toSVG();
+        sc.dispose();
+        return new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
+    }
+
+    const dataUrl = sc.toDataURL({
+        format: format === 'jpeg' ? 'jpeg' : format === 'webp' ? 'webp' : 'png',
+        quality: Math.max(0.1, Math.min(1, quality)),
+        multiplier,
+    });
+    sc.dispose();
+
+    const resp = await fetch(dataUrl);
+    return resp.blob();
+}
+
+export async function exportArtboardsAsZip(artboards = [], fabricJson, safeTitle, exportOpts) {
+    const files = [];
+    const ext = exportOpts.format === 'jpeg' ? 'jpg' : exportOpts.format;
+    for (let i = 0; i < artboards.length; i += 1) {
+        const ab = artboards[i];
+        const blob = await renderArtboardOffscreen(ab, fabricJson, exportOpts, i === 0);
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        const abSlug = String(ab.name || `artboard-${i + 1}`)
+            .toLowerCase()
+            .replace(/[^a-z0-9-_]+/g, '-');
+        files.push({
+            name: `${safeTitle}-${String(i + 1).padStart(2, '0')}-${abSlug}-${ab.width}x${ab.height}.${ext}`,
+            data: bytes,
+        });
+    }
+    return buildZipBlob(files);
+}
+
+export async function generateThumbnailDataUrl(canvas, logicalW, logicalH, artboardX = 0, artboardY = 0) {
     try {
-        const prevZoom = canvas.getZoom();
-        const prevW = canvas.getWidth();
-        const prevH = canvas.getHeight();
-        const scale = Math.min(400 / logicalW, 300 / logicalH, 1);
-
-        canvas.setZoom(scale);
-        canvas.setDimensions({ width: Math.max(1, Math.round(logicalW * scale)), height: Math.max(1, Math.round(logicalH * scale)) });
-        canvas.renderAll();
-        const dataUrl = canvas.toDataURL({ format: 'png', quality: 0.85 });
-
-        canvas.setZoom(prevZoom);
-        canvas.setDimensions({ width: prevW, height: prevH });
-        canvas.renderAll();
-        return dataUrl;
+        return captureScopedArtboardDataUrl(canvas, 400, 300, { quality: 0.85 }, logicalW, logicalH, artboardX, artboardY);
     } catch {
         return null;
     }
@@ -1651,15 +2048,33 @@ export async function exportPagesAsZip(pages, safeTitle, exportOpts) {
     const ext = exportOpts.format === 'jpeg' ? 'jpg' : exportOpts.format;
     for (let i = 0; i < pages.length; i++) {
         const page = pages[i];
-        const blob = await renderPageOffscreen(page, exportOpts);
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        const pageName = String(page.name || `page-${i + 1}`)
-            .toLowerCase()
-            .replace(/[^a-z0-9-_]+/g, '-');
-        files.push({
-            name: `${safeTitle}-${String(i + 1).padStart(2, '0')}-${pageName}.${ext}`,
-            data: bytes,
-        });
+        const pageArtboards = Array.isArray(page.artboards) && page.artboards.length > 0 ? page.artboards : null;
+        if (pageArtboards && pageArtboards.length > 1) {
+            for (let j = 0; j < pageArtboards.length; j += 1) {
+                const ab = pageArtboards[j];
+                const blob = await renderArtboardOffscreen(ab, page.fabricJson, exportOpts, j === 0);
+                const bytes = new Uint8Array(await blob.arrayBuffer());
+                const abSlug = String(ab.name || `artboard-${j + 1}`)
+                    .toLowerCase()
+                    .replace(/[^a-z0-9-_]+/g, '-');
+                files.push({
+                    name: `${safeTitle}-p${i + 1}-${abSlug}-${ab.width}x${ab.height}.${ext}`,
+                    data: bytes,
+                });
+            }
+        } else {
+            const blob = pageArtboards?.[0]
+                ? await renderArtboardOffscreen(pageArtboards[0], page.fabricJson, exportOpts, true)
+                : await renderPageOffscreen(page, exportOpts);
+            const bytes = new Uint8Array(await blob.arrayBuffer());
+            const pageName = String(page.name || `page-${i + 1}`)
+                .toLowerCase()
+                .replace(/[^a-z0-9-_]+/g, '-');
+            files.push({
+                name: `${safeTitle}-${String(i + 1).padStart(2, '0')}-${pageName}.${ext}`,
+                data: bytes,
+            });
+        }
     }
     return buildZipBlob(files);
 }
@@ -1763,4 +2178,219 @@ export function createTextboxLayer(text, opts = {}) {
         lineHeight: opts.lineHeight || 1.15,
         charSpacing: opts.charSpacing || 0,
     });
+}
+
+function makeRotateCursor(deg = 0) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g transform="rotate(${Math.round(deg)} 12 12)"><path d="M7.2 8.8A6 6 0 0 1 16.8 8.8" fill="none" stroke="#ffffff" stroke-width="3.6" stroke-linecap="round"/><path d="M7.2 8.8A6 6 0 0 1 16.8 8.8" fill="none" stroke="#0f172a" stroke-width="1.8" stroke-linecap="round"/><path d="M5.2 7.1L7 10.9L10.1 8.4Z" fill="#0f172a" stroke="#ffffff" stroke-width="1"/><path d="M18.8 7.1L17 10.9L13.9 8.4Z" fill="#0f172a" stroke="#ffffff" stroke-width="1"/></g></svg>`;
+    return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 12 12, grab`;
+}
+
+function renderCircleCornerControl(ctx, left, top, styleOverride, fabricObject) {
+    const size = styleOverride?.cornerSize ?? fabricObject?.cornerSize ?? 11;
+    const r = size / 2;
+    ctx.save();
+    ctx.shadowColor = 'rgba(15, 23, 42, 0.25)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1;
+    ctx.beginPath();
+    ctx.arc(left, top, r, 0, Math.PI * 2);
+    ctx.fillStyle = styleOverride?.cornerColor || '#ffffff';
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = styleOverride?.cornerStrokeColor || '#7c3aed';
+    ctx.stroke();
+    ctx.restore();
+}
+
+function renderPillEdgeControl(isVertical) {
+    return function (ctx, left, top, styleOverride, fabricObject) {
+        const w = isVertical ? 5 : 16;
+        const h = isVertical ? 16 : 5;
+        const rad = 2.5;
+        const angle = ((fabricObject?.getTotalAngle?.() || 0) * Math.PI) / 180;
+        ctx.save();
+        ctx.translate(left, top);
+        ctx.rotate(angle);
+        ctx.shadowColor = 'rgba(15, 23, 42, 0.24)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetY = 1;
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+            ctx.roundRect(-w / 2, -h / 2, w, h, rad);
+        } else {
+            ctx.rect(-w / 2, -h / 2, w, h);
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = styleOverride?.cornerStrokeColor || '#7c3aed';
+        ctx.stroke();
+        ctx.restore();
+    };
+}
+
+function renderCanvaRotateButton(ctx, left, top, styleOverride, fabricObject) {
+    const isActiveRot = fabricObject?.__corner === 'mtr';
+    const r = 11.5;
+    ctx.save();
+    ctx.shadowColor = 'rgba(15, 23, 42, 0.22)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 2;
+    ctx.beginPath();
+    ctx.arc(left, top, r, 0, Math.PI * 2);
+    ctx.fillStyle = isActiveRot ? '#7c3aed' : '#ffffff';
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = isActiveRot ? '#6d28d9' : '#cbd5e1';
+    ctx.stroke();
+
+    const iconColor = isActiveRot ? '#ffffff' : '#334155';
+    ctx.strokeStyle = iconColor;
+    ctx.fillStyle = iconColor;
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    const ar = 4.8;
+    ctx.beginPath();
+    ctx.arc(left, top, ar, -Math.PI * 0.85, Math.PI * 0.05);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(left + ar + 2.1, top - 0.8);
+    ctx.lineTo(left + ar - 1.9, top - 0.6);
+    ctx.lineTo(left + ar + 0.5, top + 2.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(left, top, ar, Math.PI * 0.15, Math.PI * 1.05);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(left - ar - 2.1, top + 0.8);
+    ctx.lineTo(left - ar + 1.9, top + 0.6);
+    ctx.lineTo(left - ar - 0.5, top - 2.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+}
+
+function makeCornerRotateZone(x, y, offsetX, offsetY, baseDeg) {
+    return new Control({
+        x,
+        y,
+        offsetX,
+        offsetY,
+        sizeX: 22,
+        sizeY: 22,
+        touchSizeX: 28,
+        touchSizeY: 28,
+        actionHandler: controlsUtils.rotationWithSnapping,
+        actionName: 'rotate',
+        cursorStyleHandler: (_, __, fabricObject) =>
+            makeRotateCursor((fabricObject?.getTotalAngle?.() || 0) + baseDeg),
+        render: () => {},
+    });
+}
+
+function buildStyledControlSet(baseControls = {}) {
+    const styled = {
+        // Put outer-corner rotation hit zones first so Fabric's reverse scan prioritizes corner resize on top of corners
+        rot_tl: makeCornerRotateZone(-0.5, -0.5, -16, -16, -45),
+        rot_tr: makeCornerRotateZone(0.5, -0.5, 16, -16, 45),
+        rot_br: makeCornerRotateZone(0.5, 0.5, 16, 16, 135),
+        rot_bl: makeCornerRotateZone(-0.5, 0.5, -16, 16, -135),
+        ...baseControls,
+    };
+
+    ['tl', 'tr', 'bl', 'br'].forEach((k) => {
+        if (styled[k]) {
+            styled[k].render = renderCircleCornerControl;
+            styled[k].sizeX = 14;
+            styled[k].sizeY = 14;
+            styled[k].touchSizeX = 22;
+            styled[k].touchSizeY = 22;
+        }
+    });
+    ['ml', 'mr'].forEach((k) => {
+        if (styled[k]) {
+            styled[k].render = renderPillEdgeControl(true);
+            styled[k].sizeX = 10;
+            styled[k].sizeY = 20;
+        }
+    });
+    ['mt', 'mb'].forEach((k) => {
+        if (styled[k]) {
+            styled[k].render = renderPillEdgeControl(false);
+            styled[k].sizeX = 20;
+            styled[k].sizeY = 10;
+        }
+    });
+    if (styled.mtr) {
+        styled.mtr.withConnection = false;
+        styled.mtr.x = 0;
+        styled.mtr.y = 0.5;
+        styled.mtr.offsetY = 28;
+        styled.mtr.sizeX = 26;
+        styled.mtr.sizeY = 26;
+        styled.mtr.touchSizeX = 34;
+        styled.mtr.touchSizeY = 34;
+        styled.mtr.render = renderCanvaRotateButton;
+        styled.mtr.cursorStyleHandler = (_, control, fabricObject) =>
+            makeRotateCursor((fabricObject?.getTotalAngle?.() || 0) + (control.y > 0 ? 180 : 0));
+    }
+    return styled;
+}
+
+export function installCanvaFabricControls() {
+    const themeDefaults = {
+        borderColor: '#7c3aed',
+        borderScaleFactor: 1.75,
+        borderOpacityWhenMoving: 0.45,
+        cornerColor: '#ffffff',
+        cornerStrokeColor: '#7c3aed',
+        cornerStyle: 'circle',
+        cornerSize: 11,
+        transparentCorners: false,
+        padding: 0,
+    };
+    Object.assign(FabricObject.ownDefaults, themeDefaults);
+    Object.assign(InteractiveFabricObject.ownDefaults, themeDefaults);
+    if (Textbox.ownDefaults) {
+        Object.assign(Textbox.ownDefaults, themeDefaults);
+    }
+
+    if (!InteractiveFabricObject._origCreateControls) {
+        InteractiveFabricObject._origCreateControls = InteractiveFabricObject.createControls;
+    }
+    if (!Textbox._origCreateControls) {
+        Textbox._origCreateControls = Textbox.createControls;
+    }
+
+    InteractiveFabricObject.createControls = function () {
+        const res = InteractiveFabricObject._origCreateControls.call(this);
+        return { controls: buildStyledControlSet(res?.controls || {}) };
+    };
+    Textbox.createControls = function () {
+        const res = Textbox._origCreateControls.call(this);
+        return { controls: buildStyledControlSet(res?.controls || {}) };
+    };
+}
+
+export function syncRotationHandlePlacement(canvas, toolbarPlacement = 'above') {
+    if (!canvas) return;
+    const active = canvas.getActiveObject?.();
+    if (!active || !active.controls?.mtr) return;
+    const wantScreenTop = toolbarPlacement === 'below';
+    const angleRad = ((active.getTotalAngle?.() || 0) * Math.PI) / 180;
+    const upsideDown = Math.cos(angleRad) < 0;
+    const putAtLocalTop = wantScreenTop ? !upsideDown : upsideDown;
+    const nextY = putAtLocalTop ? -0.5 : 0.5;
+    const nextOffsetY = putAtLocalTop ? -28 : 28;
+    const mtr = active.controls.mtr;
+    if (mtr.y !== nextY || mtr.offsetY !== nextOffsetY) {
+        mtr.y = nextY;
+        mtr.offsetY = nextOffsetY;
+        active.setCoords?.();
+        canvas.requestRenderAll?.();
+    }
 }

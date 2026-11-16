@@ -5,6 +5,8 @@ import {
     FabricImage,
     Shadow,
     PencilBrush,
+    Path,
+    Line,
     Group,
     ActiveSelection,
     Point,
@@ -21,11 +23,23 @@ import EditorContextBar from '../components/editor/EditorContextBar';
 import EditorLeftDrawer from '../components/editor/EditorLeftDrawer';
 import EditorStage from '../components/editor/EditorStage';
 import EditorHomeView from '../components/editor/EditorHomeView';
+import ArtboardModal from '../components/editor/ArtboardModal';
 import StudioSelect from '../components/ui/StudioSelect';
+import {
+    createArtboardRecord,
+    normalizeArtboardsForPage,
+    getArtboardWorkspaceBounds,
+    computeNextArtboardPosition,
+    findArtboardContainingPoint,
+    makeArtboardBackgroundFill,
+} from '../components/editor/artboardHelpers';
 import {
     CUSTOM_PROPS,
     uid,
     saveProjectToIdb,
+    writePendingProjectDraftSync,
+    readPendingProjectDraftSync,
+    clearPendingProjectDraftSync,
     loadProjectFromIdb,
     listSavedProjectsFromIdb,
     getSavedProjectFromIdb,
@@ -45,8 +59,11 @@ import {
     attachSnappingGuides,
     extractPaletteFromCanvas,
     renderPageOffscreen,
+    renderArtboardOffscreen,
+    exportArtboardsAsZip,
     exportPagesAsZip,
     generateThumbnailDataUrl,
+    generateArtboardThumbnails,
     normalizeFabricLayerMetadata,
     assignFreshLayerIds,
     loadImageLayer,
@@ -59,7 +76,14 @@ import {
     parseShadowMeta,
     parseGlowMeta,
     applyEffectsToObject,
+    installCanvaFabricControls,
+    syncRotationHandlePlacement,
+    PASTEBOARD_PAD,
+    OUTSIDE_CANVAS_MODES,
+    applyPasteboardOverlayEffect,
 } from '../components/editor/editorHelpers';
+
+installCanvaFabricControls();
 
 function analyzeLayerSelection(layersTree = [], selectedIds = []) {
     if (!selectedIds?.length) {
@@ -90,11 +114,97 @@ function analyzeLayerSelection(layersTree = [], selectedIds = []) {
     return { canGroup, canUngroup };
 }
 
+function isLayerSelectionLockedForEraser(layersTree = [], selectedIds = []) {
+    if (!selectedIds?.length || !layersTree?.length) return false;
+    const selectedSet = new Set(selectedIds);
+    let unlockedVisibleLeaves = 0;
+    let lockedLeaves = 0;
+
+    const countSubtree = (node, ancLocked) => {
+        const effLocked = ancLocked || Boolean(node.locked);
+        if (node.visible === false) return;
+        if (node.children?.length) {
+            node.children.forEach((ch) => countSubtree(ch, effLocked));
+        } else if (effLocked) {
+            lockedLeaves += 1;
+        } else {
+            unlockedVisibleLeaves += 1;
+        }
+    };
+
+    const walk = (nodes, ancLocked = false) => {
+        for (const node of nodes) {
+            const effLocked = ancLocked || Boolean(node.locked);
+            if (selectedSet.has(node.layerId)) {
+                countSubtree(node, ancLocked);
+            } else if (node.children?.length) {
+                walk(node.children, effLocked);
+            }
+        }
+    };
+    walk(layersTree, false);
+    return unlockedVisibleLeaves === 0 && lockedLeaves > 0;
+}
+
 function getParentGroupOf(obj) {
     if (!obj) return null;
     if (obj.parent && obj.parent.type !== 'activeselection') return obj.parent;
     if (obj.group && obj.group.type !== 'activeselection') return obj.group;
     return null;
+}
+
+function isObjectEffectivelyLocked(obj) {
+    if (!obj) return false;
+    if (obj.type === 'activeselection') {
+        const members = obj.getObjects?.() || [];
+        return members.some((m) => isObjectEffectivelyLocked(m));
+    }
+    let cur = obj;
+    while (cur) {
+        if (cur.lockedLayer) return true;
+        cur = getParentGroupOf(cur);
+    }
+    return false;
+}
+
+function applyEffectiveLockFlags(obj, nextLock, { preserveOwnLockedFlag = false } = {}) {
+    if (!obj) return;
+    const isLocked = Boolean(nextLock);
+    const props = {
+        lockMovementX: isLocked,
+        lockMovementY: isLocked,
+        lockScalingX: isLocked,
+        lockScalingY: isLocked,
+        lockRotation: isLocked,
+        lockSkewingX: isLocked,
+        lockSkewingY: isLocked,
+        hasControls: !isLocked,
+    };
+    if (!preserveOwnLockedFlag) {
+        props.lockedLayer = isLocked;
+    }
+    const objType = (obj.type || '').toLowerCase();
+    if (objType === 'textbox' || objType === 'i-text' || objType === 'text') {
+        props.editable = !isLocked;
+    }
+    if (isLocked) {
+        props.hoverCursor = 'not-allowed';
+        props.moveCursor = 'not-allowed';
+    } else {
+        delete obj.hoverCursor;
+        delete obj.moveCursor;
+    }
+    obj.set(props);
+}
+
+function rehydrateLockTree(collection, inheritedLocked = false) {
+    for (const o of collection || []) {
+        const effLocked = inheritedLocked || Boolean(o.lockedLayer);
+        applyEffectiveLockFlags(o, effLocked, { preserveOwnLockedFlag: true });
+        if ((o.type || '').toLowerCase() === 'group' && typeof o.getObjects === 'function') {
+            rehydrateLockTree(o.getObjects(), effLocked);
+        }
+    }
 }
 
 function dirtyObjectAndAncestors(obj) {
@@ -174,23 +284,27 @@ function selectObjectsOnCanvas(canvas, objs = []) {
     canvas.renderAll();
 }
 
-const EMPTY_PAGE = (w = 1080, h = 1080, transparent = true) => ({
-    id: uid('page'),
-    name: 'Page 1',
-    width: w,
-    height: h,
-    presetLabel: `${w}×${h}`,
-    background: transparent ? null : '#ffffff',
-    bgMeta: {
-        mode: transparent ? 'transparent' : 'solid',
-        color: '#ffffff',
-        gradientType: 'linear',
-        gradientAngle: 135,
-        gradientFrom: '#1d4ed8',
-        gradientTo: '#7c3aed',
-    },
-    fabricJson: { version: '6.0.0', objects: [], ...(transparent ? {} : { background: '#ffffff' }) },
-});
+const EMPTY_PAGE = (w = 1080, h = 1080, transparent = true) => {
+    const initialAb = createArtboardRecord({
+        name: 'Artboard 1',
+        x: 0,
+        y: 0,
+        width: w,
+        height: h,
+        transparent,
+    });
+    return {
+        id: uid('page'),
+        name: 'Page 1',
+        width: w,
+        height: h,
+        presetLabel: `${w}×${h}`,
+        background: transparent ? null : '#ffffff',
+        bgMeta: { ...initialAb.bgMeta },
+        artboards: [initialAb],
+        fabricJson: { version: '6.0.0', objects: [], ...(transparent ? {} : { background: '#ffffff' }) },
+    };
+};
 
 export default function ImageEditor({
     editorSettings = {},
@@ -248,6 +362,15 @@ export default function ImageEditor({
     );
     const [pages, setPages] = useState(() => [EMPTY_PAGE(defaultW, defaultH, defaultTrans)]);
     const [activePageIdx, setActivePageIdx] = useState(0);
+    const [artboards, setArtboards] = useState(() => [
+        createArtboardRecord({ name: 'Artboard 1', x: 0, y: 0, width: defaultW, height: defaultH, transparent: defaultTrans }),
+    ]);
+    const artboardsRef = useRef(artboards);
+    artboardsRef.current = artboards;
+    const [activeArtboardId, setActiveArtboardId] = useState(() => artboards[0]?.id || 'artboard-1');
+    const activeArtboardIdRef = useRef(activeArtboardId);
+    activeArtboardIdRef.current = activeArtboardId;
+    const [artboardModal, setArtboardModal] = useState(null);
     const [canvasWidth, setCanvasWidth] = useState(defaultW);
     const [canvasHeight, setCanvasHeight] = useState(defaultH);
     const [bgMeta, setBgMeta] = useState(() => EMPTY_PAGE(defaultW, defaultH, defaultTrans).bgMeta);
@@ -255,6 +378,11 @@ export default function ImageEditor({
     const [zoom, setZoom] = useState(0.6);
     const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
     const [activeTool, setActiveTool] = useState('select');
+    const activeToolRef = useRef(activeTool);
+    activeToolRef.current = activeTool;
+    const floatingPlacementRef = useRef('above');
+    const addTextAtPointFnRef = useRef(null);
+    const [lineConfig, setLineConfig] = useState({ stroke: '#1e293b', strokeWidth: 4, style: 'solid' });
     const [activeTab, setActiveTab] = useState(initialTemplate || adminTemplate ? 'templates' : 'assets');
     const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -317,7 +445,32 @@ export default function ImageEditor({
     const [removingBg, setRemovingBg] = useState(false);
     const [removingUploadId, setRemovingUploadId] = useState(null);
     const [extractedPalette, setExtractedPalette] = useState([]);
-    const [brushConfig, setBrushConfig] = useState({ kind: 'pencil', color: '#ffffff', width: 8, opacity: 1 });
+    const [brushConfig, setBrushConfig] = useState(() => {
+        const fallback = { kind: 'pencil', color: '#2563eb', width: 8, opacity: 1 };
+        try {
+            const raw = window.localStorage?.getItem('png101:editor:drawToolConfig:v1');
+            if (!raw) return fallback;
+            const parsed = JSON.parse(raw);
+            const validKinds = ['pencil', 'marker', 'highlighter'];
+            const kind = validKinds.includes(parsed?.kind) ? parsed.kind : fallback.kind;
+            const color = typeof parsed?.color === 'string' && parsed.color.trim() ? parsed.color : fallback.color;
+            const width = Number.isFinite(Number(parsed?.width)) ? Math.min(80, Math.max(1, Number(parsed.width))) : fallback.width;
+            const opacity = Number.isFinite(Number(parsed?.opacity)) ? Math.min(1, Math.max(0.05, Number(parsed.opacity))) : fallback.opacity;
+            return { kind, color, width, opacity };
+        } catch {
+            return fallback;
+        }
+    });
+    useEffect(() => {
+        try {
+            window.localStorage?.setItem('png101:editor:drawToolConfig:v1', JSON.stringify(brushConfig));
+        } catch {
+            // ignore storage quota / privacy mode errors
+        }
+    }, [brushConfig]);
+    const [penConfig, setPenConfig] = useState({ fill: '#3b82f6', stroke: '#1e293b', strokeWidth: 3 });
+    const [eraserConfig, setEraserConfig] = useState({ size: 28 });
+    const eraserSessionRef = useRef(null);
     const [saveState, setSaveState] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
     const [showSaveText, setShowSaveText] = useState(false);
     const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -531,19 +684,50 @@ export default function ImageEditor({
         }).catch(() => {});
     }, []);
 
-    const fitZoomToViewport = useCallback((w = logicalWRef.current, h = logicalHRef.current) => {
-        const vp = viewportRef.current;
-        if (!vp) return;
-        const padW = Math.max(240, vp.clientWidth - 96);
-        const padH = Math.max(200, vp.clientHeight - 72);
-        const fitted = Math.min(padW / Math.max(1, w), padH / Math.max(1, h), 1.2);
-        const clamped = Math.max(0.15, Math.min(2, Number(fitted.toFixed(2))));
-        setZoom(clamped);
-        setPanOffset({ x: 0, y: 0 });
-    }, []);
+    const getActiveArtboard = useCallback(() => {
+        const list = artboardsRef.current || [];
+        return (
+            list.find((a) => a.id === activeArtboardIdRef.current) ||
+            list[0] || {
+                id: 'artboard-1',
+                name: 'Artboard 1',
+                x: 0,
+                y: 0,
+                width: logicalWRef.current || defaultW,
+                height: logicalHRef.current || defaultH,
+                visible: true,
+                locked: false,
+                bgMeta: latestBgMetaRef.current,
+            }
+        );
+    }, [defaultW, defaultH]);
 
-    const syncLayersState = useCallback((canvas) => {
+    const fitZoomToViewport = useCallback(
+        (w = null, h = null) => {
+            const vp = viewportRef.current;
+            if (!vp) return;
+            const bounds =
+                w && h
+                    ? { totalW: w, totalH: h }
+                    : getArtboardWorkspaceBounds(artboardsRef.current, logicalWRef.current, logicalHRef.current);
+            const padW = Math.max(240, vp.clientWidth - 96);
+            const padH = Math.max(200, vp.clientHeight - 96);
+            const fitted = Math.min(padW / Math.max(1, bounds.totalW), padH / Math.max(1, bounds.totalH), 1.2);
+            const clamped = Math.max(0.15, Math.min(2, Number(fitted.toFixed(2))));
+            setZoom(clamped);
+            setPanOffset({ x: 0, y: 0 });
+        },
+        []
+    );
+
+    const syncLayersState = useCallback((canvas, overrideArtboards = null) => {
         if (!canvas) return;
+        const abs = Array.isArray(overrideArtboards) && overrideArtboards.length > 0
+            ? overrideArtboards
+            : artboardsRef.current;
+        const defaultAbId = abs[0]?.id || 'artboard-1';
+        const validAbIds = new Set(abs.map((a) => a.id));
+
         const mapLayer = (o, parentGroupId = null) => {
             normalizeFabricLayerMetadata(o);
             const t = (o.type || 'layer').toLowerCase();
@@ -554,6 +738,7 @@ export default function ImageEditor({
             return {
                 layerId: o.layerId,
                 layerName: o.layerName || (isGroup ? 'Group' : o.type || 'Layer'),
+                layerRole: o.layerRole || null,
                 type: t,
                 visible: o.visible !== false,
                 locked: Boolean(o.lockedLayer),
@@ -561,8 +746,38 @@ export default function ImageEditor({
                 children,
             };
         };
+
         const objs = canvas.getObjects() || [];
-        const nextLayers = [...objs].reverse().map((o) => mapLayer(o, null));
+        const byArtboard = new Map(abs.map((a) => [a.id, []]));
+        objs.forEach((o) => {
+            normalizeFabricLayerMetadata(o);
+            let ownerId = o.artboardId;
+            if (!ownerId || !validAbIds.has(ownerId)) {
+                ownerId = defaultAbId;
+                o.set('artboardId', ownerId);
+            }
+            const bucket = byArtboard.get(ownerId);
+            if (bucket) {
+                bucket.push(o);
+            } else {
+                byArtboard.get(defaultAbId)?.push(o);
+            }
+        });
+
+        const nextLayers = abs.map((ab) => {
+            const abObjs = byArtboard.get(ab.id) || [];
+            return {
+                layerId: ab.id,
+                layerName: ab.name || 'Artboard',
+                type: 'artboard',
+                width: ab.width,
+                height: ab.height,
+                visible: ab.visible !== false,
+                locked: Boolean(ab.locked),
+                parentGroupId: null,
+                children: [...abObjs].reverse().map((child) => mapLayer(child, ab.id)),
+            };
+        });
         setLayers(nextLayers);
     }, []);
 
@@ -589,11 +804,17 @@ export default function ImageEditor({
             textLeafs.find((ch) => typeof ch.fill === 'string')?.fill ||
             leafObjects.find((ch) => typeof ch.fill === 'string')?.fill;
 
+        const selectionKey =
+            objType === 'activeselection'
+                ? `multi:${(obj.getObjects?.() || []).map((c) => c.layerId).filter(Boolean).sort().join(',')}`
+                : obj.layerId || obj.type;
+
         return {
             type: obj.type,
             layerId: obj.layerId,
+            selectionKey,
             layerName: obj.layerName,
-            lockedLayer: Boolean(obj.lockedLayer),
+            lockedLayer: isObjectEffectivelyLocked(obj),
             fill: obj.fill ?? multiFillFallback,
             stroke: obj.stroke,
             strokeWidth: obj.strokeWidth,
@@ -632,12 +853,22 @@ export default function ImageEditor({
         if (!obj || typeof obj.getBoundingRect !== 'function') return null;
         const b = obj.getBoundingRect();
         if (!b || !Number.isFinite(b.left) || !Number.isFinite(b.top)) return null;
-        return { left: b.left, top: b.top, width: b.width, height: b.height };
+        const bounds = getArtboardWorkspaceBounds(artboardsRef.current, logicalWRef.current, logicalHRef.current);
+        return {
+            left: b.left - bounds.minX,
+            top: b.top - bounds.minY,
+            width: b.width,
+            height: b.height,
+        };
     }, []);
 
-    const pushHistorySnapshot = useCallback((canvas) => {
+    const pushHistorySnapshot = useCallback((canvas, overrideArtboards = null, overrideActiveAbId = null) => {
         if (!canvas || isRestoringRef.current) return;
-        const snap = serializeCanvasSafely(canvas, CUSTOM_PROPS);
+        const snap = {
+            fabricJson: serializeCanvasSafely(canvas, CUSTOM_PROPS),
+            artboards: JSON.parse(JSON.stringify(overrideArtboards || artboardsRef.current || [])),
+            activeArtboardId: overrideActiveAbId || activeArtboardIdRef.current,
+        };
         const clipped = historyRef.current.slice(0, historyIndexRef.current + 1);
         const next = [...clipped, snap].slice(-50);
         const nextIdx = next.length - 1;
@@ -647,19 +878,94 @@ export default function ImageEditor({
         setHistoryIndex(nextIdx);
     }, []);
 
-    // Sync canvas zoom dimensions whenever zoom or logical canvas size changes
+    const enableOutsidePasteboard = editorSettings.enableOutsideCanvasPasteboard !== false;
+    const allowedOutsideModeIds = (() => {
+        const allIds = OUTSIDE_CANVAS_MODES.map((m) => m.id);
+        const rawAllowed = Array.isArray(editorSettings.allowedOutsideCanvasModes)
+            ? editorSettings.allowedOutsideCanvasModes.filter((id) => allIds.includes(id))
+            : [];
+        const base = rawAllowed.length ? rawAllowed : allIds;
+        const adminDefault = allIds.includes(editorSettings.defaultOutsideCanvasMode)
+            ? editorSettings.defaultOutsideCanvasMode
+            : 'grayscale-dim';
+        if (!base.includes(adminDefault)) {
+            return allIds.filter((id) => base.includes(id) || id === adminDefault);
+        }
+        return base;
+    })();
+    const adminDefaultOutsideMode = OUTSIDE_CANVAS_MODES.some((m) => m.id === editorSettings.defaultOutsideCanvasMode)
+        ? editorSettings.defaultOutsideCanvasMode
+        : 'grayscale-dim';
+    const allowOutsideUserOverride = enableOutsidePasteboard && editorSettings.allowOutsideCanvasUserOverride !== false;
+    const outsideCanvasOpacityRatio = Math.min(
+        1,
+        Math.max(0.1, (Number(editorSettings.outsideCanvasOpacity) || 50) / 100)
+    );
+    const outsideCanvasOpacityRef = useRef(outsideCanvasOpacityRatio);
+    outsideCanvasOpacityRef.current = outsideCanvasOpacityRatio;
+    const pasteboardPad = enableOutsidePasteboard
+        ? Math.min(1600, Math.max(160, Number(editorSettings.outsideCanvasPadding) || PASTEBOARD_PAD))
+        : 120;
+
+    const [outsideCanvasMode, setOutsideCanvasMode] = useState(() => {
+        if (!enableOutsidePasteboard) return 'hidden';
+        if (!allowOutsideUserOverride) return adminDefaultOutsideMode;
+        try {
+            const raw = window.localStorage?.getItem('png101:editor:outsideCanvasMode:v1');
+            return allowedOutsideModeIds.includes(raw) ? raw : adminDefaultOutsideMode;
+        } catch {
+            return adminDefaultOutsideMode;
+        }
+    });
+    const effectiveOutsideCanvasMode = enableOutsidePasteboard
+        ? (allowOutsideUserOverride
+            ? (allowedOutsideModeIds.includes(outsideCanvasMode) ? outsideCanvasMode : adminDefaultOutsideMode)
+            : adminDefaultOutsideMode)
+        : 'hidden';
+    const outsideCanvasModeRef = useRef(effectiveOutsideCanvasMode);
+    outsideCanvasModeRef.current = effectiveOutsideCanvasMode;
+    const pasteboardScratchRef = useRef(null);
+    const handleChangeOutsideCanvasMode = useCallback((nextMode) => {
+        if (!allowOutsideUserOverride || !allowedOutsideModeIds.includes(nextMode)) return;
+        setOutsideCanvasMode(nextMode);
+        try {
+            window.localStorage?.setItem('png101:editor:outsideCanvasMode:v1', nextMode);
+        } catch {
+            // ignore
+        }
+    }, [allowOutsideUserOverride, allowedOutsideModeIds]);
+    useEffect(() => {
+        fabricRef.current?.requestRenderAll?.();
+    }, [effectiveOutsideCanvasMode, outsideCanvasOpacityRatio]);
+
+    const syncCanvasViewport = useCallback(
+        (canvas, _w = null, _h = null, z = zoom, overrideArtboards = null) => {
+            if (!canvas) return;
+            const bounds = getArtboardWorkspaceBounds(
+                overrideArtboards || artboardsRef.current,
+                Number(_w) || logicalWRef.current || defaultW,
+                Number(_h) || logicalHRef.current || defaultH
+            );
+            const safeZ = Math.max(0.05, Number(z) || 1);
+            const pad = pasteboardPad;
+            canvas.setViewportTransform([safeZ, 0, 0, safeZ, pad - bounds.minX * safeZ, pad - bounds.minY * safeZ]);
+            canvas.setDimensions({
+                width: Math.max(1, Math.round(bounds.totalW * safeZ)) + pad * 2,
+                height: Math.max(1, Math.round(bounds.totalH * safeZ)) + pad * 2,
+            });
+        },
+        [pasteboardPad, zoom, defaultW, defaultH]
+    );
+
+    // Sync canvas zoom dimensions whenever zoom or artboards change
     useEffect(() => {
         const canvas = fabricRef.current;
         if (!canvas) return;
         logicalWRef.current = canvasWidth;
         logicalHRef.current = canvasHeight;
-        canvas.setZoom(zoom);
-        canvas.setDimensions({
-            width: Math.max(1, Math.round(canvasWidth * zoom)),
-            height: Math.max(1, Math.round(canvasHeight * zoom)),
-        });
+        syncCanvasViewport(canvas, canvasWidth, canvasHeight, zoom, artboards);
         canvas.renderAll();
-    }, [zoom, canvasWidth, canvasHeight]);
+    }, [zoom, canvasWidth, canvasHeight, artboards, syncCanvasViewport]);
 
     const runCloudSave = useCallback(async (payload) => {
         if (isSavingRef.current) return false;
@@ -694,21 +1000,24 @@ export default function ImageEditor({
         return ok;
     }, []);
 
-    // Keep current page synced inside pages state + mark design dirty for interval autosave
-    const persistActivePageSnapshot = useCallback(() => {
+    // Keep current page & artboards synced inside pages state + mark design dirty for interval autosave
+    const persistActivePageSnapshot = useCallback((overrideArtboards = null) => {
         const canvas = fabricRef.current;
         if (!canvas || isRestoringRef.current) return null;
         const json = serializeCanvasSafely(canvas, CUSTOM_PROPS);
+        const absSnapshot = JSON.parse(JSON.stringify(overrideArtboards || artboardsRef.current || []));
+        const primaryAb = absSnapshot[0] || { width: canvasWidth, height: canvasHeight, bgMeta };
         let updatedPages = null;
         setPages((prev) => {
             updatedPages = prev.map((p, idx) =>
                 idx === activePageIdx
                     ? {
                         ...p,
-                        width: canvasWidth,
-                        height: canvasHeight,
-                        bgMeta,
-                        background: bgMeta.mode === 'solid' ? bgMeta.color : null,
+                        width: primaryAb.width || canvasWidth,
+                        height: primaryAb.height || canvasHeight,
+                        bgMeta: primaryAb.bgMeta || bgMeta,
+                        background: (primaryAb.bgMeta || bgMeta)?.mode === 'solid' ? (primaryAb.bgMeta || bgMeta).color : null,
+                        artboards: absSnapshot,
                         fabricJson: json,
                     }
                     : p
@@ -735,28 +1044,48 @@ export default function ImageEditor({
             const json = canvas ? serializeCanvasSafely(canvas, CUSTOM_PROPS) : null;
             const basePages = latestPagesRef.current || pages;
             const pageIdx = latestPageIdxRef.current ?? activePageIdx;
-            const currentBg = latestBgMetaRef.current || bgMeta;
+            const absSnapshot = JSON.parse(JSON.stringify(artboardsRef.current || []));
+            const activeAb = getActiveArtboard();
+            const currentBg = activeAb?.bgMeta || latestBgMetaRef.current || bgMeta;
+            const primaryAb = absSnapshot[0] || activeAb;
             const snapshotPages = json
                 ? basePages.map((p, idx) =>
                     idx === pageIdx
                         ? {
                             ...p,
-                            width: logicalWRef.current,
-                            height: logicalHRef.current,
-                            bgMeta: currentBg,
-                            background: currentBg.mode === 'solid' ? currentBg.color : null,
+                            width: primaryAb?.width || logicalWRef.current,
+                            height: primaryAb?.height || logicalHRef.current,
+                            bgMeta: primaryAb?.bgMeta || currentBg,
+                            background: (primaryAb?.bgMeta || currentBg)?.mode === 'solid' ? (primaryAb?.bgMeta || currentBg).color : null,
+                            artboards: absSnapshot,
                             fabricJson: json,
                         }
                         : p
                 )
                 : basePages;
-            const thumbnail = canvas ? captureLightweightThumbnail(canvas) : null;
+            const artboardPreviews =
+                canvas && absSnapshot.length > 1
+                    ? generateArtboardThumbnails(canvas, absSnapshot)
+                    : [];
+            const thumbnail =
+                artboardPreviews[0]?.thumbnail ||
+                (canvas
+                    ? captureLightweightThumbnail(
+                          canvas,
+                          primaryAb?.width || logicalWRef.current,
+                          primaryAb?.height || logicalHRef.current,
+                          primaryAb?.x || 0,
+                          primaryAb?.y || 0
+                      )
+                    : null);
             return {
                 id: activeProjectIdRef.current,
                 title: overrideTitle ?? latestTitleRef.current ?? projectTitle,
-                width: snapshotPages[pageIdx]?.width || logicalWRef.current,
-                height: snapshotPages[pageIdx]?.height || logicalHRef.current,
+                width: primaryAb?.width || snapshotPages[pageIdx]?.width || logicalWRef.current,
+                height: primaryAb?.height || snapshotPages[pageIdx]?.height || logicalHRef.current,
                 pageCount: snapshotPages.length,
+                artboardCount: absSnapshot.length || 1,
+                artboardPreviews,
                 activePageIdx: pageIdx,
                 pages: snapshotPages,
                 thumbnail,
@@ -764,7 +1093,7 @@ export default function ImageEditor({
                 savedAt: Date.now(),
             };
         },
-        [activePageIdx, bgMeta, pages, projectTitle]
+        [activePageIdx, bgMeta, pages, projectTitle, getActiveArtboard]
     );
 
     const handleManualSave = useCallback(async () => {
@@ -796,14 +1125,22 @@ export default function ImageEditor({
         if (!canvas || !page) return;
         isRestoringRef.current = true;
         try {
-            const w = Number(page.width) || defaultW;
-            const h = Number(page.height) || defaultH;
+            const normalizedAbs = normalizeArtboardsForPage(page, defaultW, defaultH, defaultTrans);
+            const primaryAb = normalizedAbs[0];
+            const w = Number(primaryAb?.width) || defaultW;
+            const h = Number(primaryAb?.height) || defaultH;
+
+            setArtboards(normalizedAbs);
+            artboardsRef.current = normalizedAbs;
+            setActiveArtboardId(primaryAb.id);
+            activeArtboardIdRef.current = primaryAb.id;
+
             logicalWRef.current = w;
             logicalHRef.current = h;
             setCanvasWidth(w);
             setCanvasHeight(h);
 
-            const nextBgMeta = page.bgMeta || {
+            const nextBgMeta = primaryAb.bgMeta || page.bgMeta || {
                 mode: page.background ? 'solid' : 'transparent',
                 color: page.background || '#ffffff',
                 gradientType: 'linear',
@@ -815,90 +1152,141 @@ export default function ImageEditor({
             latestBgMetaRef.current = nextBgMeta;
 
             const jsonCopy = JSON.parse(JSON.stringify(page.fabricJson || { version: '6.0.0', objects: [] }));
-            // Ensure objects without explicit origin default to top-left (matching template coordinates)
+            // Ensure objects without explicit origin default to top-left & belong to an artboard
+            const validAbIds = new Set(normalizedAbs.map((ab) => ab.id));
             const fontFamilies = new Set();
             (jsonCopy.objects || []).forEach((o) => {
                 if (!o.originX) o.originX = 'left';
                 if (!o.originY) o.originY = 'top';
+                if (!o.artboardId || !validAbIds.has(o.artboardId)) {
+                    o.artboardId = primaryAb.id;
+                }
                 if (o.fontFamily) fontFamilies.add(o.fontFamily);
             });
             await Promise.all([...fontFamilies].map((f) => ensureFontLoaded(f)));
 
             await canvas.loadFromJSON(jsonCopy);
 
-            // Re-apply gradient bg if bgMeta says gradient
-            if (nextBgMeta.mode === 'gradient') {
-                canvas.backgroundColor = makeCanvasBackgroundGradient(w, h, {
-                    type: nextBgMeta.gradientType,
-                    angle: nextBgMeta.gradientAngle,
-                    from: nextBgMeta.gradientFrom,
-                    to: nextBgMeta.gradientTo,
-                });
-            } else if (nextBgMeta.mode === 'solid') {
-                canvas.backgroundColor = nextBgMeta.color || '#ffffff';
-            } else if (page.background) {
-                canvas.backgroundColor = page.background;
-            } else if (!jsonCopy.background) {
-                canvas.backgroundColor = null;
-            }
+            // Live _renderBackground paints each artboard's solid/gradient bg cleanly;
+            // only keep canvas.backgroundColor null so it doesn't bleed across gaps between artboards.
+            canvas.backgroundColor = null;
 
             // Re-apply locked flags recursively & ensure groups start non-interactive
-            const normalizeTree = (col) => {
+            const normalizeTree = (col, fallbackAbId = primaryAb.id) => {
                 (col || []).forEach((o) => {
                     normalizeFabricLayerMetadata(o);
-                    if (o.lockedLayer) {
-                        o.set({ lockMovementX: true, lockMovementY: true, lockScalingX: true, lockScalingY: true, lockRotation: true, hasControls: false });
+                    if (!o.artboardId || !validAbIds.has(o.artboardId)) {
+                        o.set('artboardId', fallbackAbId);
+                    }
+                    if (Array.isArray(o.eraserPaths) && o.eraserPaths.length > 0) {
+                        o.set('dirty', true);
                     }
                     if ((o.type || '').toLowerCase() === 'group' && typeof o.getObjects === 'function') {
-                        normalizeTree(o.getObjects());
+                        normalizeTree(o.getObjects(), o.artboardId || fallbackAbId);
                     }
                 });
             };
             normalizeTree(canvas.getObjects());
+            rehydrateLockTree(canvas.getObjects());
             syncGroupInteractivity(canvas, []);
 
             canvas.discardActiveObject();
-            canvas.setZoom(zoom);
-            canvas.setDimensions({ width: Math.round(w * zoom), height: Math.round(h * zoom) });
+            syncCanvasViewport(canvas, w, h, zoom, normalizedAbs);
             canvas.renderAll();
 
-            syncLayersState(canvas);
+            syncLayersState(canvas, normalizedAbs);
             setSelectedObject(null);
             setSelectionMeta(null);
             setSelectionBounds(null);
             setActiveLayerIds([]);
 
             if (resetHistory) {
-                const initSnap = serializeCanvasSafely(canvas, CUSTOM_PROPS);
+                const initSnap = {
+                    fabricJson: serializeCanvasSafely(canvas, CUSTOM_PROPS),
+                    artboards: JSON.parse(JSON.stringify(normalizedAbs)),
+                    activeArtboardId: primaryAb.id,
+                };
                 historyRef.current = [initSnap];
                 historyIndexRef.current = 0;
                 setHistory([initSnap]);
                 setHistoryIndex(0);
             }
-            fitZoomToViewport(w, h);
+            const bounds = getArtboardWorkspaceBounds(normalizedAbs, w, h);
+            fitZoomToViewport(bounds.totalW, bounds.totalH);
         } finally {
             isRestoringRef.current = false;
         }
-    }, [defaultW, defaultH, zoom, syncLayersState, fitZoomToViewport]);
+    }, [defaultW, defaultH, defaultTrans, zoom, syncLayersState, fitZoomToViewport]);
 
     const insertAssetOnCanvas = useCallback(async (asset, dropCoords = null) => {
         const canvas = fabricRef.current;
         if (!canvas || !asset?.url) return;
         try {
+            const abs = artboardsRef.current || [];
+            const targetAb =
+                (dropCoords
+                    ? findArtboardContainingPoint(abs, dropCoords.x, dropCoords.y)
+                    : null) || getActiveArtboard();
+            const ax = Number(targetAb?.x) || 0;
+            const ay = Number(targetAb?.y) || 0;
+            const w = Number(targetAb?.width) || logicalWRef.current;
+            const h = Number(targetAb?.height) || logicalHRef.current;
+
             const img = await loadImageLayer(asset.url, { name: asset.name, assetId: asset.id });
-            const w = logicalWRef.current;
-            const h = logicalHRef.current;
             const maxDim = Math.min(w, h) * 0.52;
             const scale = Math.min(maxDim / Math.max(1, img.width || 400), maxDim / Math.max(1, img.height || 400), 1.5);
             img.set({
                 scaleX: scale,
                 scaleY: scale,
-                left: dropCoords?.x ?? w / 2,
-                top: dropCoords?.y ?? h / 2,
+                left: dropCoords?.x ?? ax + w / 2,
+                top: dropCoords?.y ?? ay + h / 2,
+                artboardId: targetAb?.id || activeArtboardIdRef.current || 'ab_1',
             });
             canvas.add(img);
             canvas.setActiveObject(img);
-            canvas.renderAll();
+
+            if (dropCoords?.fromDrag) {
+                const startScale = scale * 0.78;
+                const startTilt = Math.max(-14, Math.min(14, Number(dropCoords.tilt) || 0));
+                let animScale = startScale;
+                let velScale = 0;
+                let animAngle = startTilt;
+                let velAngle = 0;
+                let frames = 0;
+                img.set({ scaleX: animScale, scaleY: animScale, angle: animAngle });
+                img.setCoords();
+                canvas.renderAll();
+
+                const stepLanding = () => {
+                    if (!fabricRef.current || !img.canvas) return;
+                    frames += 1;
+                    velScale = (velScale + (scale - animScale) * 0.28) * 0.68;
+                    animScale += velScale;
+                    velAngle = (velAngle + (0 - animAngle) * 0.28) * 0.68;
+                    animAngle += velAngle;
+
+                    const done =
+                        frames >= 28 ||
+                        (Math.abs(scale - animScale) < scale * 0.004 &&
+                            Math.abs(velScale) < scale * 0.004 &&
+                            Math.abs(animAngle) < 0.2);
+
+                    if (done) {
+                        img.set({ scaleX: scale, scaleY: scale, angle: 0 });
+                        img.setCoords();
+                        setSelectionBounds(readSelectionBounds(img));
+                        canvas.requestRenderAll?.();
+                        return;
+                    }
+                    img.set({ scaleX: animScale, scaleY: animScale, angle: animAngle });
+                    img.setCoords();
+                    canvas.requestRenderAll?.();
+                    requestAnimationFrame(stepLanding);
+                };
+                requestAnimationFrame(stepLanding);
+            } else {
+                canvas.renderAll();
+            }
 
             if (asset.id) {
                 fetch('/api/editor/track', {
@@ -930,23 +1318,134 @@ export default function ImageEditor({
         const startW = Number(initPage?.width) || defaultW;
         const startH = Number(initPage?.height) || defaultH;
 
+        installCanvaFabricControls();
         const canvas = new Canvas(canvasElRef.current, {
-            width: startW,
-            height: startH,
+            width: startW + pasteboardPad * 2,
+            height: startH + pasteboardPad * 2,
             preserveObjectStacking: true,
             selection: true,
             backgroundColor: defaultTrans ? null : '#ffffff',
         });
         fabricRef.current = canvas;
+        syncCanvasViewport(canvas, startW, startH, zoom);
+
+        const origRenderBg = canvas._renderBackground.bind(canvas);
+        canvas._renderBackground = (ctx) => {
+            const v = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+            const abs = artboardsRef.current?.length
+                ? artboardsRef.current
+                : [{ id: 'ab_1', x: 0, y: 0, width: logicalWRef.current, height: logicalHRef.current, visible: true, bgMeta: latestBgMetaRef.current }];
+
+            abs.forEach((ab, idx) => {
+                if (ab.visible === false) return;
+                const fill = makeArtboardBackgroundFill(ab, 0, 0);
+                if (fill) {
+                    ctx.save();
+                    ctx.transform(v[0] || 1, v[1] || 0, v[2] || 0, v[3] || 1, v[4] || 0, v[5] || 0);
+                    ctx.fillStyle = fill;
+                    ctx.fillRect(Number(ab.x) || 0, Number(ab.y) || 0, Number(ab.width) || 1, Number(ab.height) || 1);
+                    ctx.restore();
+                }
+                if (idx === 0 && canvas.backgroundImage) {
+                    const artX = (Number(ab.x) || 0) * (v[0] || 1) + (v[4] || 0);
+                    const artY = (Number(ab.y) || 0) * (v[3] || 1) + (v[5] || 0);
+                    const artW = (Number(ab.width) || 1) * (v[0] || 1);
+                    const artH = (Number(ab.height) || 1) * (v[3] || 1);
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(artX, artY, artW, artH);
+                    ctx.clip();
+                    origRenderBg(ctx);
+                    ctx.restore();
+                }
+            });
+        };
+
+        canvas.on('after:render', ({ ctx }) => {
+            if (ctx === canvas.getContext() && !canvas.__suppressPasteboardEffect) {
+                const abs = artboardsRef.current?.length
+                    ? artboardsRef.current
+                    : [{ x: 0, y: 0, width: logicalWRef.current, height: logicalHRef.current, visible: true }];
+                applyPasteboardOverlayEffect(
+                    canvas,
+                    abs,
+                    outsideCanvasModeRef.current,
+                    pasteboardScratchRef,
+                    outsideCanvasOpacityRef.current
+                );
+            }
+        });
+
+        const syncActiveArtboardMeta = (targetAbId) => {
+            if (!targetAbId || targetAbId === activeArtboardIdRef.current) return;
+            const foundAb = (artboardsRef.current || []).find((a) => a.id === targetAbId);
+            if (!foundAb) return;
+            activeArtboardIdRef.current = foundAb.id;
+            setActiveArtboardId(foundAb.id);
+            logicalWRef.current = foundAb.width;
+            logicalHRef.current = foundAb.height;
+            setCanvasWidth(foundAb.width);
+            setCanvasHeight(foundAb.height);
+            if (foundAb.bgMeta) {
+                latestBgMetaRef.current = foundAb.bgMeta;
+                setBgMeta(foundAb.bgMeta);
+            }
+        };
 
         const updateSelection = () => {
             const active = canvas.getActiveObject();
+            if (active?.type === 'activeselection') {
+                const hasLocked = (active.getObjects?.() || []).some(isObjectEffectivelyLocked);
+                applyEffectiveLockFlags(active, hasLocked, { preserveOwnLockedFlag: true });
+            } else if (active) {
+                applyEffectiveLockFlags(active, isObjectEffectivelyLocked(active), { preserveOwnLockedFlag: true });
+            }
             setSelectedObject(active || null);
             setSelectionMeta(readSelectionMeta(active));
             setSelectionBounds(readSelectionBounds(active));
             const actives = canvas.getActiveObjects() || [];
             setActiveLayerIds(actives.map((o) => o.layerId).filter(Boolean));
+            const selectedAbId = actives.find((o) => o?.artboardId)?.artboardId;
+            if (selectedAbId) {
+                syncActiveArtboardMeta(selectedAbId);
+            }
             syncGroupInteractivity(canvas, actives);
+            syncRotationHandlePlacement(canvas, floatingPlacementRef.current);
+        };
+
+        const handleObjectAdded = (opt) => {
+            const target = opt?.target;
+            if (!isRestoringRef.current && target) {
+                const abs = artboardsRef.current || [];
+                const validIds = new Set(abs.map((a) => a.id));
+                if (!target.artboardId || !validIds.has(target.artboardId)) {
+                    const center = typeof target.getCenterPoint === 'function' ? target.getCenterPoint() : null;
+                    const containingAb = center ? findArtboardContainingPoint(abs, center.x, center.y) : null;
+                    const assignAbId = containingAb?.id || activeArtboardIdRef.current || abs[0]?.id || 'ab_1';
+                    target.set('artboardId', assignAbId);
+                }
+            }
+            handleMutation();
+        };
+
+        const handleObjectModified = (opt) => {
+            const target = opt?.target;
+            if (!isRestoringRef.current && target && typeof target.getCenterPoint === 'function') {
+                const abs = artboardsRef.current || [];
+                if (abs.length > 1) {
+                    const center = target.getCenterPoint();
+                    const containingAb = findArtboardContainingPoint(abs, center.x, center.y);
+                    if (containingAb) {
+                        if (target.type === 'activeselection' && typeof target.getObjects === 'function') {
+                            target.getObjects().forEach((child) => child.set('artboardId', containingAb.id));
+                        } else if (target.artboardId !== containingAb.id) {
+                            target.set('artboardId', containingAb.id);
+                        }
+                        syncActiveArtboardMeta(containingAb.id);
+                    }
+                }
+            }
+            handleMutation();
         };
 
         const handleMutation = () => {
@@ -962,6 +1461,7 @@ export default function ImageEditor({
         const handleTransformEnd = () => {
             setIsTransforming(false);
             setSelectionBounds(readSelectionBounds(canvas.getActiveObject()));
+            syncRotationHandlePlacement(canvas, floatingPlacementRef.current);
         };
 
         canvas.on('selection:created', updateSelection);
@@ -970,12 +1470,66 @@ export default function ImageEditor({
             setIsTransforming(false);
             updateSelection();
         });
+        canvas.on('mouse:down', (opt) => {
+            const tgt = opt?.target;
+            if (tgt && isObjectEffectivelyLocked(tgt)) {
+                canvas.setCursor('not-allowed');
+            }
+            if (activeToolRef.current === 'text' && opt?.e?.button === 0) {
+                const activeObj = canvas.getActiveObject();
+                if (activeObj?.isEditing && tgt === activeObj) {
+                    return;
+                }
+                if (tgt && isObjectEffectivelyLocked(tgt)) {
+                    canvas.setActiveObject(tgt);
+                    canvas.setCursor('not-allowed');
+                    canvas.requestRenderAll?.();
+                    toast.info('Unlock this layer first to interact with it');
+                    return;
+                }
+                if (tgt && (tgt.type || '').toLowerCase().includes('text')) {
+                    if (!tgt.isEditing) {
+                        tgt.enterEditing(opt.e);
+                        tgt.setCursorByClick?.(opt.e);
+                        canvas.requestRenderAll?.();
+                    }
+                    return;
+                }
+                const scenePt = canvas.getScenePoint(opt.e);
+                addTextAtPointFnRef.current?.(scenePt.x, scenePt.y);
+            }
+        });
+        canvas.on('mouse:dblclick', (opt) => {
+            const tgt = opt?.target;
+            if (!tgt || !(tgt.type || '').toLowerCase().includes('text')) return;
+            if (isObjectEffectivelyLocked(tgt)) {
+                canvas.setCursor('not-allowed');
+                toast.info('Unlock this text layer first to edit it');
+                return;
+            }
+            requestAnimationFrame(() => {
+                if (!tgt.isEditing) {
+                    tgt.enterEditing();
+                }
+                tgt.selectAll?.();
+                canvas.requestRenderAll?.();
+            });
+        });
+        canvas.on('mouse:move', (opt) => {
+            const activeTransformTarget = canvas._currentTransform?.target;
+            const hoverTarget = activeTransformTarget || opt?.target;
+            if (hoverTarget && isObjectEffectivelyLocked(hoverTarget)) {
+                canvas.setCursor('not-allowed');
+            } else if (activeToolRef.current === 'text' && !activeTransformTarget) {
+                canvas.setCursor('text');
+            }
+        });
         canvas.on('object:moving', handleTransformStart);
         canvas.on('object:scaling', handleTransformStart);
         canvas.on('object:rotating', handleTransformStart);
         canvas.on('mouse:up', handleTransformEnd);
-        canvas.on('object:added', handleMutation);
-        canvas.on('object:modified', handleMutation);
+        canvas.on('object:added', handleObjectAdded);
+        canvas.on('object:modified', handleObjectModified);
         canvas.on('object:removed', handleMutation);
         canvas.on('text:changed', () => {
             updateSelection();
@@ -1023,21 +1577,30 @@ export default function ImageEditor({
                 await insertAssetOnCanvas(initialAsset);
             } else if (initialProjectQueryId) {
                 const savedById = await getSavedProjectFromIdb(initialProjectQueryId);
-                if (savedById && Array.isArray(savedById.pages) && savedById.pages.length > 0) {
-                    const idx = Math.min(savedById.activePageIdx || 0, savedById.pages.length - 1);
-                    setActiveProjectId(savedById.id);
-                    activeProjectIdRef.current = savedById.id;
-                    setProjectTitle(savedById.title || 'Untitled Design');
-                    latestTitleRef.current = savedById.title || 'Untitled Design';
-                    setPages(savedById.pages);
-                    latestPagesRef.current = savedById.pages;
+                const pendingDraft = readPendingProjectDraftSync(initialProjectQueryId);
+                const recoveredFromDraft =
+                    Boolean(pendingDraft) &&
+                    (!savedById || (Number(pendingDraft.updatedAt) || 0) >= (Number(savedById.updatedAt) || 0));
+                const resolvedProject = recoveredFromDraft ? pendingDraft : savedById;
+                if (resolvedProject && Array.isArray(resolvedProject.pages) && resolvedProject.pages.length > 0) {
+                    const idx = Math.min(resolvedProject.activePageIdx || 0, resolvedProject.pages.length - 1);
+                    setActiveProjectId(resolvedProject.id);
+                    activeProjectIdRef.current = resolvedProject.id;
+                    setProjectTitle(resolvedProject.title || 'Untitled Design');
+                    latestTitleRef.current = resolvedProject.title || 'Untitled Design';
+                    setPages(resolvedProject.pages);
+                    latestPagesRef.current = resolvedProject.pages;
                     setActivePageIdx(idx);
                     latestPageIdxRef.current = idx;
-                    await loadPageIntoCanvas(savedById.pages[idx], true);
+                    await loadPageIntoCanvas(resolvedProject.pages[idx], true);
+                    if (recoveredFromDraft && !adminTemplateMode) {
+                        const synced = await saveProjectToIdb(buildCurrentProjectPayload(resolvedProject.title));
+                        if (synced) clearPendingProjectDraftSync(resolvedProject.id);
+                    }
                     isDirtyRef.current = false;
                     setHasUnsavedChanges(false);
-                    setSaveState('idle');
-                    setShowSaveText(false);
+                    setSaveState(recoveredFromDraft ? 'saved' : 'idle');
+                    setShowSaveText(recoveredFromDraft);
                 } else {
                     const fallback = await loadProjectFromIdb();
                     if (fallback && fallback.id === initialProjectQueryId && Array.isArray(fallback.pages) && fallback.pages.length > 0) {
@@ -1073,22 +1636,45 @@ export default function ImageEditor({
         if (!canvas) return;
         const drawing = activeTool === 'draw';
         canvas.isDrawingMode = drawing;
+        canvas.selection = activeTool === 'select';
+        if (activeTool === 'text') {
+            canvas.defaultCursor = 'text';
+            canvas.hoverCursor = 'text';
+            canvas.setCursor('text');
+        } else {
+            canvas.defaultCursor = 'default';
+            canvas.hoverCursor = 'move';
+        }
+        if (activeTool === 'pen') {
+            if (canvas.getActiveObject()) {
+                canvas.discardActiveObject();
+                canvas.requestRenderAll?.();
+            }
+        }
         if (drawing) {
-            const brush = new PencilBrush(canvas);
-            let hex = brushConfig.color || '#ffffff';
+            const hex = (brushConfig.color || '#2563eb').replace('#', '');
+            const normHex = hex.length === 3
+                ? hex.split('').map((ch) => ch + ch).join('')
+                : hex.padEnd(6, '0').slice(0, 6);
+            const r = parseInt(normHex.slice(0, 2), 16) || 0;
+            const g = parseInt(normHex.slice(2, 4), 16) || 0;
+            const b = parseInt(normHex.slice(4, 6), 16) || 0;
+            const rawWidth = Math.max(1, Number(brushConfig.width) || 8);
+            const rawOpacity = Math.max(0, Math.min(1, Number(brushConfig.opacity ?? 1)));
+
+            let brush;
             if (brushConfig.kind === 'highlighter') {
-                // translucent rgba
-                const r = parseInt(hex.slice(1, 3), 16) || 255;
-                const g = parseInt(hex.slice(3, 5), 16) || 230;
-                const b = parseInt(hex.slice(5, 7), 16) || 0;
-                brush.color = `rgba(${r}, ${g}, ${b}, 0.35)`;
-                brush.width = Math.max(16, brushConfig.width * 2);
+                brush = new PencilBrush(canvas);
+                brush.color = `rgba(${r}, ${g}, ${b}, ${Number((rawOpacity * 0.35).toFixed(3))})`;
+                brush.width = Math.max(16, rawWidth * 2);
             } else if (brushConfig.kind === 'marker') {
-                brush.color = hex;
-                brush.width = Math.max(10, brushConfig.width * 1.4);
+                brush = new PencilBrush(canvas);
+                brush.color = `rgba(${r}, ${g}, ${b}, ${rawOpacity})`;
+                brush.width = Math.max(10, rawWidth * 1.4);
             } else {
-                brush.color = hex;
-                brush.width = brushConfig.width;
+                brush = new PencilBrush(canvas);
+                brush.color = `rgba(${r}, ${g}, ${b}, ${rawOpacity})`;
+                brush.width = rawWidth;
             }
             canvas.freeDrawingBrush = brush;
         }
@@ -1100,10 +1686,50 @@ export default function ImageEditor({
         if (!canvas || !snap) return;
         isRestoringRef.current = true;
         try {
-            await canvas.loadFromJSON(JSON.parse(JSON.stringify(snap)));
+            const jsonPayload = snap.fabricJson ? snap.fabricJson : snap;
+            const nextArtboards = Array.isArray(snap.artboards) && snap.artboards.length
+                ? JSON.parse(JSON.stringify(snap.artboards))
+                : artboardsRef.current;
+            const nextActiveAbId = snap.activeArtboardId && nextArtboards.some((a) => a.id === snap.activeArtboardId)
+                ? snap.activeArtboardId
+                : nextArtboards[0]?.id || activeArtboardIdRef.current;
+
+            if (Array.isArray(nextArtboards) && nextArtboards.length) {
+                setArtboards(nextArtboards);
+                artboardsRef.current = nextArtboards;
+                setActiveArtboardId(nextActiveAbId);
+                activeArtboardIdRef.current = nextActiveAbId;
+                const activeAb = nextArtboards.find((a) => a.id === nextActiveAbId) || nextArtboards[0];
+                if (activeAb) {
+                    logicalWRef.current = activeAb.width;
+                    logicalHRef.current = activeAb.height;
+                    setCanvasWidth(activeAb.width);
+                    setCanvasHeight(activeAb.height);
+                    if (activeAb.bgMeta) {
+                        latestBgMetaRef.current = activeAb.bgMeta;
+                        setBgMeta(activeAb.bgMeta);
+                    }
+                }
+            }
+
+            await canvas.loadFromJSON(JSON.parse(JSON.stringify(jsonPayload)));
+            canvas.backgroundColor = null;
+            const dirtyErasables = (col) => {
+                (col || []).forEach((o) => {
+                    if (Array.isArray(o.eraserPaths) && o.eraserPaths.length > 0) {
+                        o.set('dirty', true);
+                    }
+                    if ((o.type || '').toLowerCase() === 'group' && typeof o.getObjects === 'function') {
+                        dirtyErasables(o.getObjects());
+                    }
+                });
+            };
+            dirtyErasables(canvas.getObjects());
+            rehydrateLockTree(canvas.getObjects());
             syncGroupInteractivity(canvas, []);
+            syncCanvasViewport(canvas, logicalWRef.current, logicalHRef.current, zoom, nextArtboards);
             canvas.renderAll();
-            syncLayersState(canvas);
+            syncLayersState(canvas, nextArtboards);
             setSelectedObject(null);
             setSelectionMeta(null);
             setSelectionBounds(null);
@@ -1111,7 +1737,7 @@ export default function ImageEditor({
         } finally {
             isRestoringRef.current = false;
         }
-    }, [syncLayersState]);
+    }, [syncLayersState, syncCanvasViewport, zoom]);
 
     const handleUndo = useCallback(async () => {
         if (historyIndexRef.current <= 0) return;
@@ -1147,6 +1773,7 @@ export default function ImageEditor({
         try {
             canvas.discardActiveObject();
             for (const { obj: o, parentGroup } of resolved) {
+                const wasLocked = isObjectEffectivelyLocked(o);
                 const cloned = await o.clone(CUSTOM_PROPS);
                 assignFreshLayerIds(cloned);
                 const offset = hasNested ? 18 : 28;
@@ -1154,7 +1781,9 @@ export default function ImageEditor({
                     left: (o.left || 0) + offset,
                     top: (o.top || 0) + offset,
                     layerName: `${o.layerName || 'Layer'} Copy`,
+                    lockedLayer: wasLocked,
                 });
+                rehydrateLockTree([cloned], wasLocked);
                 if (parentGroup) {
                     parentGroup.add(cloned);
                     dirtyObjectAndAncestors(parentGroup);
@@ -1179,20 +1808,27 @@ export default function ImageEditor({
         const canvas = fabricRef.current;
         if (!canvas) return;
         const actives = canvas.getActiveObjects() || [];
-        const hasNestedActive = actives.some((o) => Boolean(getParentGroupOf(o)));
+        const lockedActives = actives.filter((o) => isObjectEffectivelyLocked(o));
+        if (lockedActives.length > 0 && lockedActives.length === actives.length) {
+            toast.info('Unlock the layer first to delete it');
+            return;
+        }
+        const unlockedActives = actives.filter((o) => !isObjectEffectivelyLocked(o));
+        if (!unlockedActives.length && !activeLayerIds.length) return;
+        const hasNestedActive = unlockedActives.some((o) => Boolean(getParentGroupOf(o)));
         const nestedSelected = activeLayerIds
             .map((id) => findObjectWithParent(id))
-            .filter((r) => r && r.parentGroup);
+            .filter((r) => r && r.parentGroup && !isObjectEffectivelyLocked(r.obj));
         if (hasNestedActive || nestedSelected.length > 0) {
-            const ids = activeLayerIds.length
-                ? activeLayerIds
-                : actives.map((o) => o.layerId).filter(Boolean);
+            const ids = unlockedActives.length
+                ? unlockedActives.map((o) => o.layerId).filter(Boolean)
+                : nestedSelected.map((r) => r.obj.layerId).filter(Boolean);
             handleDeleteLayerIds(ids);
             return;
         }
-        if (!actives.length) return;
+        if (!unlockedActives.length) return;
         canvas.discardActiveObject();
-        actives.forEach((o) => canvas.remove(o));
+        unlockedActives.forEach((o) => canvas.remove(o));
         canvas.renderAll();
     }, [activeLayerIds]);
 
@@ -1256,15 +1892,21 @@ export default function ImageEditor({
         const offset = (((clipboardPasteCountRef.current - 1) % 6) + 1) * 24;
         const pasted = [];
         isRestoringRef.current = true;
+        const activeAb = getActiveArtboard();
+        const abs = artboardsRef.current || [];
         try {
             canvas.discardActiveObject();
             for (const src of clipboard) {
                 const cloned = await src.clone(CUSTOM_PROPS);
                 assignFreshLayerIds(cloned);
+                const srcAb = abs.find((a) => a.id === src.artboardId);
+                const abDx = srcAb && activeAb && srcAb.id !== activeAb.id ? (Number(activeAb.x) || 0) - (Number(srcAb.x) || 0) : 0;
+                const abDy = srcAb && activeAb && srcAb.id !== activeAb.id ? (Number(activeAb.y) || 0) - (Number(srcAb.y) || 0) : 0;
                 cloned.set({
-                    left: (src.left || 0) + offset,
-                    top: (src.top || 0) + offset,
+                    left: (src.left || 0) + offset + abDx,
+                    top: (src.top || 0) + offset + abDy,
                     layerName: `${src.layerName || 'Layer'} Copy`,
+                    artboardId: activeAb?.id || src.artboardId || 'ab_1',
                 });
                 canvas.add(cloned);
                 canvas.bringObjectToFront(cloned);
@@ -1282,17 +1924,80 @@ export default function ImageEditor({
         }
     }, [syncLayersState, pushHistorySnapshot]);
 
-    // Global Keyboard Shortcuts + Browser Unsaved Reload/Close Guard
+    // Global Keyboard Shortcuts + Immediate Flush on Browser Refresh/Close (no native browser alert)
     useEffect(() => {
+        const flushUnsavedDraft = () => {
+            if (bypassUnsavedGuardRef.current) return;
+            if (!isProjectOpen || !isDirtyRef.current || isRestoringRef.current) return;
+            if (adminTemplateMode || collectionHeroMode) return;
+
+            const canvas = fabricRef.current;
+            const json = canvas ? serializeCanvasSafely(canvas, CUSTOM_PROPS) : null;
+            const basePages = latestPagesRef.current || [];
+            const pageIdx = latestPageIdxRef.current ?? 0;
+            const absSnapshot = JSON.parse(JSON.stringify(artboardsRef.current || []));
+            const primaryAb = absSnapshot[0];
+            const currentBg = primaryAb?.bgMeta || latestBgMetaRef.current;
+            const snapshotPages = json
+                ? basePages.map((p, idx) =>
+                      idx === pageIdx
+                          ? {
+                                ...p,
+                                width: primaryAb?.width || logicalWRef.current,
+                                height: primaryAb?.height || logicalHRef.current,
+                                bgMeta: currentBg,
+                                background: currentBg?.mode === 'solid' ? currentBg.color : null,
+                                artboards: absSnapshot,
+                                fabricJson: json,
+                            }
+                          : p
+                  )
+                : basePages;
+            if (!snapshotPages.length) return;
+
+            const projectId = activeProjectIdRef.current;
+            const draftPayload = {
+                id: projectId,
+                title: latestTitleRef.current || 'Untitled Design',
+                width: snapshotPages[pageIdx]?.width || logicalWRef.current,
+                height: snapshotPages[pageIdx]?.height || logicalHRef.current,
+                pageCount: snapshotPages.length,
+                artboardCount: absSnapshot.length || 1,
+                artboardPreviews: [],
+                activePageIdx: pageIdx,
+                pages: snapshotPages,
+                updatedAt: Date.now(),
+                savedAt: Date.now(),
+            };
+
+            syncProjectUrl(projectId);
+            writePendingProjectDraftSync(draftPayload);
+            saveProjectToIdb(draftPayload);
+            isDirtyRef.current = false;
+        };
+
         const handleBeforeUnload = (e) => {
             if (bypassUnsavedGuardRef.current) return;
             if (!isProjectOpen || !isDirtyRef.current) return;
-            e.preventDefault();
-            e.returnValue = '';
+            if (adminTemplateMode || collectionHeroMode) {
+                e.preventDefault();
+                e.returnValue = '';
+                return;
+            }
+            flushUnsavedDraft();
         };
+
+        const handlePageHide = () => {
+            flushUnsavedDraft();
+        };
+
         window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [isProjectOpen]);
+        window.addEventListener('pagehide', handlePageHide);
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            window.removeEventListener('pagehide', handlePageHide);
+        };
+    }, [isProjectOpen, adminTemplateMode, collectionHeroMode, syncProjectUrl]);
 
     useEffect(() => {
         if (typeof router?.on !== 'function') return undefined;
@@ -1402,18 +2107,23 @@ export default function ImageEditor({
             } else if (!mod) {
                 if (keyLower === 'v') setActiveTool('select');
                 if (keyLower === 'h') setActiveTool('pan');
+                if (keyLower === 'p') setActiveTool((prev) => (prev === 'pen' ? 'select' : 'pen'));
+                if (keyLower === 'e') setActiveTool((prev) => (prev === 'eraser' ? 'select' : 'eraser'));
                 if (keyLower === 'b' && editorSettings.enableFreehandDraw !== false) {
-                    setActiveTool('draw');
-                    setActiveTab('draw');
-                    setDrawerOpen(true);
+                    setActiveTool((prev) => (prev === 'draw' ? 'select' : 'draw'));
                 }
                 if (keyLower === 't') {
-                    setActiveTab('text');
-                    setDrawerOpen(true);
+                    setActiveTool((prev) => (prev === 'text' ? 'select' : 'text'));
+                }
+                if (keyLower === 'u') {
+                    setActiveTool((prev) => (prev === 'shapes' ? 'select' : 'shapes'));
                 }
                 if (keyLower === 'l' && !e.altKey && !e.repeat) {
                     e.preventDefault();
                     setLayersOpen((prev) => !prev);
+                }
+                if (e.key === 'Escape' && activeToolRef.current !== 'select' && activeToolRef.current !== 'pen') {
+                    setActiveTool('select');
                 }
             }
         };
@@ -1433,16 +2143,42 @@ export default function ImageEditor({
     ]);
 
     // Canvas Mutators
-    const handleResizeCanvas = (w, h, presetLabel = null) => {
+    const handleResizeCanvas = (w, h, presetLabel = null, targetArtboardId = null) => {
         const nextW = Math.max(32, Math.min(maxWidth, Number(w) || defaultW));
         const nextH = Math.max(32, Math.min(maxHeight, Number(h) || defaultH));
-        logicalWRef.current = nextW;
-        logicalHRef.current = nextH;
-        setCanvasWidth(nextW);
-        setCanvasHeight(nextH);
-        fitZoomToViewport(nextW, nextH);
-        setPages((prev) => prev.map((p, idx) => (idx === activePageIdx ? { ...p, width: nextW, height: nextH, presetLabel: presetLabel || p.presetLabel } : p)));
-        toast.success(`Canvas resized to ${nextW}×${nextH} px`);
+        const abs = artboardsRef.current || [];
+        const targetId = targetArtboardId || activeArtboardIdRef.current || abs[0]?.id;
+        const nextAbs = abs.map((ab) => (ab.id === targetId ? { ...ab, width: nextW, height: nextH } : ab));
+        artboardsRef.current = nextAbs;
+        setArtboards(nextAbs);
+        if (!targetArtboardId || targetArtboardId === activeArtboardIdRef.current) {
+            logicalWRef.current = nextW;
+            logicalHRef.current = nextH;
+            setCanvasWidth(nextW);
+            setCanvasHeight(nextH);
+        }
+        const bounds = getArtboardWorkspaceBounds(nextAbs, nextW, nextH);
+        fitZoomToViewport(bounds.totalW, bounds.totalH);
+        const primaryAb = nextAbs[0];
+        setPages((prev) =>
+            prev.map((p, idx) =>
+                idx === activePageIdx
+                    ? {
+                        ...p,
+                        width: primaryAb?.width || nextW,
+                        height: primaryAb?.height || nextH,
+                        presetLabel: presetLabel || p.presetLabel,
+                        artboards: nextAbs,
+                    }
+                    : p
+            )
+        );
+        const canvas = fabricRef.current;
+        if (canvas) {
+            pushHistorySnapshot(canvas, nextAbs, targetId);
+            persistActivePageSnapshot(nextAbs);
+        }
+        toast.success(`Artboard resized to ${nextW}×${nextH} px`);
     };
 
     const handleUpdateProp = async (prop, val, commit = true) => {
@@ -1602,6 +2338,10 @@ export default function ImageEditor({
         const canvas = fabricRef.current;
         const active = canvas?.getActiveObject();
         if (!canvas || !active) return;
+        if (isObjectEffectivelyLocked(active)) {
+            toast.info('Unlock the layer first');
+            return;
+        }
         if (axis === 'x') active.set('flipX', !active.flipX);
         if (axis === 'y') active.set('flipY', !active.flipY);
         dirtyObjectAndAncestors(active);
@@ -1614,17 +2354,25 @@ export default function ImageEditor({
         const canvas = fabricRef.current;
         const active = canvas?.getActiveObject();
         if (!canvas || !active) return;
-        const w = logicalWRef.current;
-        const h = logicalHRef.current;
+        if (isObjectEffectivelyLocked(active)) {
+            toast.info('Unlock the layer first');
+            return;
+        }
+        const targetAb =
+            (artboardsRef.current || []).find((ab) => ab.id === active.artboardId) || getActiveArtboard();
+        const ax = Number(targetAb?.x) || 0;
+        const ay = Number(targetAb?.y) || 0;
+        const w = Number(targetAb?.width) || logicalWRef.current;
+        const h = Number(targetAb?.height) || logicalHRef.current;
         const rect = active.getBoundingRect();
         let dx = 0;
         let dy = 0;
-        if (dir === 'left') dx = -rect.left;
-        if (dir === 'right') dx = w - (rect.left + rect.width);
-        if (dir === 'center-h') dx = w / 2 - (rect.left + rect.width / 2);
-        if (dir === 'top') dy = -rect.top;
-        if (dir === 'bottom') dy = h - (rect.top + rect.height);
-        if (dir === 'center-v') dy = h / 2 - (rect.top + rect.height / 2);
+        if (dir === 'left') dx = ax - rect.left;
+        if (dir === 'right') dx = ax + w - (rect.left + rect.width);
+        if (dir === 'center-h') dx = ax + w / 2 - (rect.left + rect.width / 2);
+        if (dir === 'top') dy = ay - rect.top;
+        if (dir === 'bottom') dy = ay + h - (rect.top + rect.height);
+        if (dir === 'center-v') dy = ay + h / 2 - (rect.top + rect.height / 2);
         const pos = active.getXY();
         active.setXY(new Point(pos.x + dx, pos.y + dy));
         active.setCoords();
@@ -1689,27 +2437,15 @@ export default function ImageEditor({
         const targets = active.type === 'activeselection' ? active.getObjects() || [] : [active];
         const nextLock = !targets.every((o) => Boolean(o.lockedLayer));
         targets.forEach((o) => {
-            o.set({
-                lockedLayer: nextLock,
-                lockMovementX: nextLock,
-                lockMovementY: nextLock,
-                lockScalingX: nextLock,
-                lockScalingY: nextLock,
-                lockRotation: nextLock,
-                hasControls: !nextLock,
-            });
+            applyEffectiveLockFlags(o, nextLock);
+            if ((o.type || '').toLowerCase() === 'group' && typeof o.getObjects === 'function') {
+                rehydrateLockTree(o.getObjects(), nextLock);
+            }
         });
         if (active.type === 'activeselection') {
-            active.set({
-                lockedLayer: nextLock,
-                lockMovementX: nextLock,
-                lockMovementY: nextLock,
-                lockScalingX: nextLock,
-                lockScalingY: nextLock,
-                lockRotation: nextLock,
-                hasControls: !nextLock,
-            });
+            applyEffectiveLockFlags(active, nextLock, { preserveOwnLockedFlag: true });
         }
+        canvas.setCursor(nextLock ? 'not-allowed' : 'move');
         dirtyObjectAndAncestors(active);
         canvas.renderAll();
         syncLayersState(canvas);
@@ -1722,11 +2458,15 @@ export default function ImageEditor({
         const canvas = fabricRef.current;
         const active = canvas?.getActiveObject();
         if (!canvas || !active) return;
-        const w = logicalWRef.current;
-        const h = logicalHRef.current;
+        const targetAb =
+            (artboardsRef.current || []).find((ab) => ab.id === active.artboardId) || getActiveArtboard();
+        const ax = Number(targetAb?.x) || 0;
+        const ay = Number(targetAb?.y) || 0;
+        const w = Number(targetAb?.width) || logicalWRef.current;
+        const h = Number(targetAb?.height) || logicalHRef.current;
         const scale = Math.min(w / Math.max(1, active.width || w), h / Math.max(1, active.height || h)) * 0.9;
         active.set({ scaleX: scale, scaleY: scale, angle: 0 });
-        active.setXY(new Point(w / 2, h / 2), 'center', 'center');
+        active.setXY(new Point(ax + w / 2, ay + h / 2), 'center', 'center');
         active.setCoords();
         active.fire('modified');
         dirtyObjectAndAncestors(active);
@@ -1798,7 +2538,11 @@ export default function ImageEditor({
         const canvas = fabricRef.current;
         if (!canvas) return;
         setActiveTool('select');
-        const obj = createElementObject(kind, logicalWRef.current / 2, logicalHRef.current / 2);
+        const activeAb = getActiveArtboard();
+        const cx = (Number(activeAb?.x) || 0) + (Number(activeAb?.width) || logicalWRef.current) / 2;
+        const cy = (Number(activeAb?.y) || 0) + (Number(activeAb?.height) || logicalHRef.current) / 2;
+        const obj = createElementObject(kind, cx, cy);
+        obj.set('artboardId', activeAb?.id || activeArtboardIdRef.current || 'ab_1');
         canvas.add(obj);
         canvas.setActiveObject(obj);
         canvas.renderAll();
@@ -1808,26 +2552,102 @@ export default function ImageEditor({
         const canvas = fabricRef.current;
         if (!canvas) return;
         setActiveTool('select');
+        const activeAb = getActiveArtboard();
+        const ax = Number(activeAb?.x) || 0;
+        const ay = Number(activeAb?.y) || 0;
+        const aw = Number(activeAb?.width) || logicalWRef.current;
+        const ah = Number(activeAb?.height) || logicalHRef.current;
         const family = opts.fontFamily || fonts[0]?.family || 'Inter';
         await ensureFontLoaded(family);
         const tb = createTextboxLayer(opts.text || 'Double click to edit', {
             ...opts,
             fontFamily: family,
-            left: logicalWRef.current / 2,
-            top: logicalHRef.current / 2,
-            width: Math.min(820, logicalWRef.current * 0.72),
+            left: opts.left ?? ax + aw / 2,
+            top: opts.top ?? ay + ah / 2,
+            width: opts.width ?? Math.min(820, aw * 0.72),
+            artboardId: opts.artboardId || activeAb?.id || activeArtboardIdRef.current || 'ab_1',
         });
         canvas.add(tb);
         canvas.setActiveObject(tb);
         canvas.renderAll();
+        if (opts.autoEdit) {
+            requestAnimationFrame(() => {
+                tb.enterEditing();
+                tb.selectAll?.();
+                canvas.requestRenderAll?.();
+            });
+        }
     };
+
+    const handleAddTextAtPoint = async (sceneX, sceneY) => {
+        const abs = artboardsRef.current || [];
+        const targetAb = findArtboardContainingPoint(abs, sceneX, sceneY) || getActiveArtboard();
+        const ax = Number(targetAb?.x) || 0;
+        const ay = Number(targetAb?.y) || 0;
+        const aw = Number(targetAb?.width) || logicalWRef.current;
+        const ah = Number(targetAb?.height) || logicalHRef.current;
+        const w = Math.max(220, Math.min(540, aw * 0.52));
+        const clampedX = Math.max(ax + w / 2 + 12, Math.min(ax + aw - w / 2 - 12, sceneX));
+        const clampedY = Math.max(ay + 40, Math.min(ay + ah - 40, sceneY));
+        await handleAddText({
+            text: 'New Text',
+            fontSize: 56,
+            fontWeight: '700',
+            left: clampedX,
+            top: clampedY,
+            width: w,
+            artboardId: targetAb?.id,
+            autoEdit: true,
+        });
+    };
+    addTextAtPointFnRef.current = handleAddTextAtPoint;
+
+    const handleCommitLine = useCallback(({ x1, y1, x2, y2, stroke = '#1e293b', strokeWidth = 4, style = 'solid' }) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        if (Math.hypot(dx, dy) < 4) return;
+        const cx = (x1 + x2) / 2;
+        const cy = (y1 + y2) / 2;
+        const targetAb = findArtboardContainingPoint(artboardsRef.current || [], cx, cy) || getActiveArtboard();
+        const sw = Math.max(1, Number(strokeWidth) || 4);
+        const dashArray =
+            style === 'dashed'
+                ? [Math.max(8, sw * 3), Math.max(6, sw * 2)]
+                : style === 'dotted'
+                ? [sw, Math.max(4, sw * 1.8)]
+                : null;
+        const lineObj = new Line([-dx / 2, -dy / 2, dx / 2, dy / 2], {
+            layerId: uid('layer'),
+            layerName: 'Line',
+            artboardId: targetAb?.id || activeArtboardIdRef.current || 'ab_1',
+            originX: 'center',
+            originY: 'center',
+            left: cx,
+            top: cy,
+            stroke,
+            strokeWidth: sw,
+            strokeDashArray: dashArray,
+            strokeLineCap: 'round',
+        });
+        canvas.add(lineObj);
+        canvas.setActiveObject(lineObj);
+        canvas.renderAll();
+        setActiveTool('select');
+    }, [getActiveArtboard]);
 
     const handleAddTextPairing = async (pair) => {
         const canvas = fabricRef.current;
         if (!canvas || !pair) return;
         setActiveTool('select');
-        const cx = logicalWRef.current / 2;
-        const cy = logicalHRef.current / 2;
+        const activeAb = getActiveArtboard();
+        const ax = Number(activeAb?.x) || 0;
+        const ay = Number(activeAb?.y) || 0;
+        const aw = Number(activeAb?.width) || logicalWRef.current;
+        const ah = Number(activeAb?.height) || logicalHRef.current;
+        const cx = ax + aw / 2;
+        const cy = ay + ah / 2;
         await Promise.all(pair.items.map((it) => ensureFontLoaded(it.fontFamily)));
         const created = pair.items.map((it) =>
             createTextboxLayer(it.text, {
@@ -1837,13 +2657,203 @@ export default function ImageEditor({
                 fill: it.fill,
                 left: cx,
                 top: cy + (it.dy || 0),
-                width: Math.min(880, logicalWRef.current * 0.78),
+                width: Math.min(880, aw * 0.78),
+                artboardId: activeAb?.id || activeArtboardIdRef.current || 'ab_1',
             })
         );
         created.forEach((tb) => canvas.add(tb));
         canvas.setActiveObject(new ActiveSelection(created, { canvas }));
         canvas.renderAll();
     };
+
+    const handleCommitPenPath = useCallback(
+        ({ d, closed, fill, stroke, strokeWidth }) => {
+            const canvas = fabricRef.current;
+            if (!canvas || !d) return;
+            const vecPath = new Path(d, {
+                layerId: uid('layer'),
+                layerName: closed ? 'Vector Shape' : 'Vector Path',
+                fill: closed ? (fill || '#3b82f6') : 'transparent',
+                stroke: stroke || '#1e293b',
+                strokeWidth: Math.max(0, Number(strokeWidth ?? 3)),
+                strokeLineCap: 'round',
+                strokeLineJoin: 'round',
+                objectCaching: true,
+            });
+            const center = vecPath.getCenterPoint?.();
+            const targetAb = center
+                ? findArtboardContainingPoint(artboardsRef.current || [], center.x, center.y)
+                : null;
+            vecPath.set('artboardId', targetAb?.id || activeArtboardIdRef.current || 'ab_1');
+            canvas.add(vecPath);
+            canvas.setActiveObject(vecPath);
+            canvas.renderAll();
+            setActiveTool('select');
+        },
+        []
+    );
+
+    const inspectSelectionForEraser = useCallback(
+        (canvas) => {
+            if (!canvas) {
+                return { leaves: [], hasSelection: false, hasLockedTarget: false, hasHiddenTarget: false };
+            }
+            const selectedRoots = [];
+            const activeObjs = canvas.getActiveObjects?.() || [];
+            if (activeObjs.length > 0) {
+                selectedRoots.push(...activeObjs);
+            } else if (activeLayerIds.length > 0) {
+                const selectedIdSet = new Set(activeLayerIds);
+                const findByIds = (collection) => {
+                    for (const node of collection || []) {
+                        if (node.layerId && selectedIdSet.has(node.layerId)) {
+                            selectedRoots.push(node);
+                        } else if ((node.type || '').toLowerCase() === 'group' && typeof node.getObjects === 'function') {
+                            findByIds(node.getObjects());
+                        }
+                    }
+                };
+                findByIds(canvas.getObjects());
+            }
+
+            if (!selectedRoots.length) {
+                return { leaves: [], hasSelection: false, hasLockedTarget: false, hasHiddenTarget: false };
+            }
+
+            const leaves = [];
+            const seen = new Set();
+            let hasLockedTarget = false;
+            let hasHiddenTarget = false;
+
+            const walk = (collection, inheritedLocked = false) => {
+                for (const obj of collection || []) {
+                    if (!obj) continue;
+                    const effLocked = inheritedLocked || isObjectEffectivelyLocked(obj);
+                    if (obj.visible === false) {
+                        hasHiddenTarget = true;
+                        continue;
+                    }
+                    if ((obj.type || '').toLowerCase() === 'group' && typeof obj.getObjects === 'function') {
+                        walk(obj.getObjects(), effLocked);
+                    } else if (effLocked) {
+                        hasLockedTarget = true;
+                    } else if (!seen.has(obj)) {
+                        seen.add(obj);
+                        leaves.push(obj);
+                    }
+                }
+            };
+            walk(selectedRoots, false);
+            return { leaves, hasSelection: true, hasLockedTarget, hasHiddenTarget };
+        },
+        [activeLayerIds]
+    );
+
+    const applyEraserAtPoint = useCallback(
+        (sceneX, sceneY) => {
+            const canvas = fabricRef.current;
+            const session = eraserSessionRef.current;
+            if (!canvas || !session) return;
+
+            const r = Math.max(2, Number(eraserConfig.size || 28) / 2);
+            const leaves = session.targets || inspectSelectionForEraser(canvas).leaves;
+            if (!leaves.length) return;
+
+            let anyDirty = false;
+            for (const obj of leaves) {
+                const rect = obj.getBoundingRect?.();
+                if (!rect) continue;
+                if (
+                    sceneX + r < rect.left ||
+                    sceneX - r > rect.left + rect.width ||
+                    sceneY + r < rect.top ||
+                    sceneY - r > rect.top + rect.height
+                ) {
+                    continue;
+                }
+                const matrix = obj.calcTransformMatrix();
+                const inv = util.invertTransform(matrix);
+                const localPt = new Point(sceneX, sceneY).transform(inv);
+                const dec = util.qrDecompose(matrix);
+                const sf = Math.max(0.08, Math.min(Math.abs(dec.scaleX || 1), Math.abs(dec.scaleY || 1)));
+                const localWidth = Math.max(1, (r * 2) / sf);
+
+                let strokeEntry = session.strokeMap.get(obj);
+                if (!strokeEntry) {
+                    strokeEntry = {
+                        id: uid('er'),
+                        width: Number(localWidth.toFixed(2)),
+                        points: [{ x: Number(localPt.x.toFixed(2)), y: Number(localPt.y.toFixed(2)) }],
+                    };
+                    session.strokeMap.set(obj, strokeEntry);
+                    const nextPaths = [...(Array.isArray(obj.eraserPaths) ? obj.eraserPaths : []), strokeEntry];
+                    obj.set('eraserPaths', nextPaths);
+                    session.modified = true;
+                    anyDirty = true;
+                } else {
+                    const last = strokeEntry.points[strokeEntry.points.length - 1];
+                    const dist = Math.hypot(localPt.x - last.x, localPt.y - last.y);
+                    if (dist >= Math.max(1.2, localWidth * 0.1)) {
+                        strokeEntry.points.push({
+                            x: Number(localPt.x.toFixed(2)),
+                            y: Number(localPt.y.toFixed(2)),
+                        });
+                        session.modified = true;
+                        anyDirty = true;
+                    }
+                }
+                obj.set('dirty', true);
+                dirtyObjectAndAncestors(obj);
+            }
+
+            if (anyDirty) {
+                canvas.requestRenderAll?.();
+            }
+        },
+        [eraserConfig.size, inspectSelectionForEraser]
+    );
+
+    const handleEraseStart = useCallback(
+        (sceneX, sceneY) => {
+            const canvas = fabricRef.current;
+            const { leaves, hasSelection, hasLockedTarget, hasHiddenTarget } = inspectSelectionForEraser(canvas);
+            if (!hasSelection) {
+                eraserSessionRef.current = null;
+                toast.info('Select a layer first to erase from it');
+                return;
+            }
+            if (!leaves.length) {
+                eraserSessionRef.current = null;
+                if (hasLockedTarget) {
+                    toast.warning('This layer is locked — unlock it first to erase from it');
+                } else if (hasHiddenTarget) {
+                    toast.info('Selected layer is hidden — unhide it first to erase');
+                }
+                return;
+            }
+            eraserSessionRef.current = { strokeMap: new Map(), modified: false, targets: leaves };
+            applyEraserAtPoint(sceneX, sceneY);
+        },
+        [applyEraserAtPoint, inspectSelectionForEraser]
+    );
+
+    const handleEraseMove = useCallback(
+        (sceneX, sceneY) => {
+            applyEraserAtPoint(sceneX, sceneY);
+        },
+        [applyEraserAtPoint]
+    );
+
+    const handleEraseEnd = useCallback(() => {
+        const canvas = fabricRef.current;
+        const session = eraserSessionRef.current;
+        eraserSessionRef.current = null;
+        if (canvas && session?.modified) {
+            canvas.renderAll();
+            pushHistorySnapshot(canvas);
+            persistFnRef.current?.();
+        }
+    }, [pushHistorySnapshot]);
 
     const handleUploadFiles = (fileList) => {
         Array.from(fileList).forEach((file) => {
@@ -1861,25 +2871,26 @@ export default function ImageEditor({
     const handleUpdateBackground = (nextBgMeta) => {
         const canvas = fabricRef.current;
         if (!canvas) return;
+        const activeAb = getActiveArtboard();
         setBgMeta(nextBgMeta);
-        if (nextBgMeta.mode === 'transparent') {
-            canvas.backgroundColor = null;
-            canvas.backgroundImage = null;
-        } else if (nextBgMeta.mode === 'solid') {
-            canvas.backgroundImage = null;
-            canvas.backgroundColor = nextBgMeta.color || '#ffffff';
-        } else if (nextBgMeta.mode === 'gradient') {
-            canvas.backgroundImage = null;
-            canvas.backgroundColor = makeCanvasBackgroundGradient(logicalWRef.current, logicalHRef.current, {
-                type: nextBgMeta.gradientType,
-                angle: nextBgMeta.gradientAngle,
-                from: nextBgMeta.gradientFrom,
-                to: nextBgMeta.gradientTo,
-            });
-        }
+        latestBgMetaRef.current = nextBgMeta;
+        canvas.backgroundImage = null;
+        canvas.backgroundColor = null;
+        const nextAbs = (artboardsRef.current || []).map((ab) =>
+            ab.id === activeAb?.id
+                ? {
+                      ...ab,
+                      bgMeta: nextBgMeta,
+                      background: nextBgMeta.mode === 'solid' ? nextBgMeta.color : null,
+                      transparent: nextBgMeta.mode === 'transparent',
+                  }
+                : ab
+        );
+        artboardsRef.current = nextAbs;
+        setArtboards(nextAbs);
         canvas.renderAll();
-        pushHistorySnapshot(canvas);
-        persistActivePageSnapshot();
+        pushHistorySnapshot(canvas, nextAbs, activeAb?.id);
+        persistActivePageSnapshot(nextAbs);
     };
 
     const handleUploadBgImage = (file) => {
@@ -1887,21 +2898,34 @@ export default function ImageEditor({
         if (!canvas || !file) return;
         const reader = new FileReader();
         reader.onload = async () => {
+            const activeAb = getActiveArtboard();
+            const ax = Number(activeAb?.x) || 0;
+            const ay = Number(activeAb?.y) || 0;
+            const aw = Number(activeAb?.width) || logicalWRef.current;
+            const ah = Number(activeAb?.height) || logicalHRef.current;
             const img = await FabricImage.fromURL(reader.result, { crossOrigin: 'anonymous' });
-            const scale = Math.max(logicalWRef.current / Math.max(1, img.width), logicalHRef.current / Math.max(1, img.height));
+            const scale = Math.max(aw / Math.max(1, img.width), ah / Math.max(1, img.height));
             img.set({
                 scaleX: scale,
                 scaleY: scale,
                 originX: 'center',
                 originY: 'center',
-                left: logicalWRef.current / 2,
-                top: logicalHRef.current / 2,
+                left: ax + aw / 2,
+                top: ay + ah / 2,
             });
             canvas.backgroundImage = img;
+            canvas.backgroundColor = null;
+            const nextBg = { ...(activeAb?.bgMeta || latestBgMetaRef.current), mode: 'image' };
+            setBgMeta(nextBg);
+            latestBgMetaRef.current = nextBg;
+            const nextAbs = (artboardsRef.current || []).map((ab) =>
+                ab.id === activeAb?.id ? { ...ab, bgMeta: nextBg } : ab
+            );
+            artboardsRef.current = nextAbs;
+            setArtboards(nextAbs);
             canvas.renderAll();
-            setBgMeta((prev) => ({ ...prev, mode: 'image' }));
-            pushHistorySnapshot(canvas);
-            persistActivePageSnapshot();
+            pushHistorySnapshot(canvas, nextAbs, activeAb?.id);
+            persistActivePageSnapshot(nextAbs);
         };
         reader.readAsDataURL(file);
     };
@@ -1979,11 +3003,380 @@ export default function ImageEditor({
         return rows;
     };
 
+    const findArtboardById = useCallback(
+        (abId) => (artboardsRef.current || []).find((a) => a.id === abId) || null,
+        []
+    );
+
+    const activateArtboardMeta = useCallback((ab, nextAbs = null) => {
+        if (!ab) return;
+        if (Array.isArray(nextAbs)) {
+            artboardsRef.current = nextAbs;
+            setArtboards(nextAbs);
+        }
+        activeArtboardIdRef.current = ab.id;
+        setActiveArtboardId(ab.id);
+        logicalWRef.current = ab.width;
+        logicalHRef.current = ab.height;
+        setCanvasWidth(ab.width);
+        setCanvasHeight(ab.height);
+        if (ab.bgMeta) {
+            latestBgMetaRef.current = ab.bgMeta;
+            setBgMeta(ab.bgMeta);
+        }
+    }, []);
+
+    const handleSelectArtboard = useCallback(
+        (abId, { discardCanvasSelection = false } = {}) => {
+            const ab = findArtboardById(abId);
+            if (!ab) return;
+            activateArtboardMeta(ab);
+            const canvas = fabricRef.current;
+            if (canvas && discardCanvasSelection) {
+                canvas.discardActiveObject();
+                syncGroupInteractivity(canvas, []);
+                canvas.requestRenderAll?.();
+                setSelectedObject(null);
+                setSelectionMeta(null);
+                setSelectionBounds(null);
+                setActiveLayerIds([ab.id]);
+            }
+        },
+        [findArtboardById, activateArtboardMeta]
+    );
+
+    const handleFocusArtboard = useCallback(
+        (abId) => {
+            const abs = artboardsRef.current || [];
+            const ab = abs.find((a) => a.id === abId);
+            if (!ab) return;
+            activateArtboardMeta(ab);
+            const canvas = fabricRef.current;
+            if (canvas) {
+                canvas.discardActiveObject();
+                syncGroupInteractivity(canvas, []);
+                canvas.requestRenderAll?.();
+                setSelectedObject(null);
+                setSelectionMeta(null);
+                setSelectionBounds(null);
+                setActiveLayerIds([ab.id]);
+            }
+            const vp = viewportRef.current;
+            if (vp) {
+                const bounds = getArtboardWorkspaceBounds(abs, ab.width, ab.height);
+                const padW = Math.max(220, vp.clientWidth - 110);
+                const padH = Math.max(180, vp.clientHeight - 110);
+                const targetZoom = Math.max(
+                    0.2,
+                    Math.min(1.5, Number(Math.min(padW / Math.max(1, ab.width), padH / Math.max(1, ab.height), 1).toFixed(2)))
+                );
+                const relCx = (Number(ab.x) || 0) + (Number(ab.width) || 1) / 2 - (bounds.minX + bounds.totalW / 2);
+                const relCy = (Number(ab.y) || 0) + (Number(ab.height) || 1) / 2 - (bounds.minY + bounds.totalH / 2);
+                setZoom(targetZoom);
+                setPanOffset({
+                    x: Math.round(-relCx * targetZoom),
+                    y: Math.round(-relCy * targetZoom),
+                });
+            }
+        },
+        [activateArtboardMeta]
+    );
+
+    const handleOpenNewArtboardModal = useCallback(() => {
+        const activeAb = getActiveArtboard();
+        setArtboardModal({ mode: 'create', artboard: activeAb });
+    }, [getActiveArtboard]);
+
+    const handleResizeArtboardModal = useCallback(
+        (abId) => {
+            const target = findArtboardById(abId) || getActiveArtboard();
+            if (!target) return;
+            setArtboardModal({ mode: 'edit', artboard: target });
+        },
+        [findArtboardById, getActiveArtboard]
+    );
+
+    const handleArtboardModalSubmit = useCallback(
+        ({ name, width, height, bgMode }) => {
+            const canvas = fabricRef.current;
+            if (!canvas || !artboardModal) return;
+            const safeW = Math.max(32, Math.min(maxWidth, Number(width) || defaultW));
+            const safeH = Math.max(32, Math.min(maxHeight, Number(height) || defaultH));
+            const abs = artboardsRef.current || [];
+
+            if (artboardModal.mode === 'edit' && artboardModal.artboard) {
+                const targetId = artboardModal.artboard.id;
+                const nextAbs = abs.map((ab) => {
+                    if (ab.id !== targetId) return ab;
+                    let nextBg = ab.bgMeta || latestBgMetaRef.current;
+                    if (bgMode === 'transparent') {
+                        nextBg = { ...nextBg, mode: 'transparent' };
+                    } else if (bgMode === 'white') {
+                        nextBg = { ...nextBg, mode: 'solid', color: '#ffffff' };
+                    }
+                    return {
+                        ...ab,
+                        name: name || ab.name,
+                        width: safeW,
+                        height: safeH,
+                        bgMeta: nextBg,
+                        background: nextBg?.mode === 'solid' ? nextBg.color : null,
+                        transparent: nextBg?.mode === 'transparent',
+                    };
+                });
+                const updated = nextAbs.find((a) => a.id === targetId);
+                activateArtboardMeta(updated, nextAbs);
+                syncCanvasViewport(canvas, updated.width, updated.height, zoom, nextAbs);
+                canvas.renderAll();
+                syncLayersState(canvas, nextAbs);
+                const bounds = getArtboardWorkspaceBounds(nextAbs, updated.width, updated.height);
+                fitZoomToViewport(bounds.totalW, bounds.totalH);
+                pushHistorySnapshot(canvas, nextAbs, updated.id);
+                persistActivePageSnapshot(nextAbs);
+                setArtboardModal(null);
+                toast.success(`Updated "${updated.name}" (${updated.width}×${updated.height})`);
+                return;
+            }
+
+            const anchorAb = getActiveArtboard();
+            const pos = computeNextArtboardPosition(abs, safeW, safeH, anchorAb);
+            const baseBg = anchorAb?.bgMeta || latestBgMetaRef.current || {
+                mode: defaultTrans ? 'transparent' : 'solid',
+                color: '#ffffff',
+                gradientType: 'linear',
+                gradientAngle: 135,
+                gradientFrom: '#1d4ed8',
+                gradientTo: '#7c3aed',
+            };
+            const nextBg =
+                bgMode === 'transparent'
+                    ? { ...baseBg, mode: 'transparent' }
+                    : bgMode === 'white'
+                    ? { ...baseBg, mode: 'solid', color: '#ffffff' }
+                    : JSON.parse(JSON.stringify(baseBg));
+
+            const newAb = createArtboardRecord({
+                id: uid('artboard'),
+                name: name || `Artboard ${abs.length + 1}`,
+                x: pos.x,
+                y: pos.y,
+                width: safeW,
+                height: safeH,
+                bgMeta: nextBg,
+                background: nextBg.mode === 'solid' ? nextBg.color : null,
+                transparent: nextBg.mode === 'transparent',
+            });
+            const nextAbs = [...abs, newAb];
+            activateArtboardMeta(newAb, nextAbs);
+            syncCanvasViewport(canvas, newAb.width, newAb.height, zoom, nextAbs);
+            canvas.discardActiveObject();
+            canvas.renderAll();
+            syncLayersState(canvas, nextAbs);
+            setActiveLayerIds([newAb.id]);
+            const bounds = getArtboardWorkspaceBounds(nextAbs, newAb.width, newAb.height);
+            fitZoomToViewport(bounds.totalW, bounds.totalH);
+            pushHistorySnapshot(canvas, nextAbs, newAb.id);
+            persistActivePageSnapshot(nextAbs);
+            setArtboardModal(null);
+            toast.success(`Added "${newAb.name}" (${newAb.width}×${newAb.height})`);
+        },
+        [
+            artboardModal,
+            maxWidth,
+            maxHeight,
+            defaultW,
+            defaultH,
+            defaultTrans,
+            activateArtboardMeta,
+            syncCanvasViewport,
+            zoom,
+            syncLayersState,
+            fitZoomToViewport,
+            pushHistorySnapshot,
+            persistActivePageSnapshot,
+            getActiveArtboard,
+        ]
+    );
+
+    const handleDuplicateArtboard = useCallback(
+        async (abId) => {
+            const canvas = fabricRef.current;
+            const abs = artboardsRef.current || [];
+            const srcAb = abs.find((a) => a.id === abId) || getActiveArtboard();
+            if (!canvas || !srcAb) return;
+
+            const pos = computeNextArtboardPosition(abs, srcAb.width, srcAb.height, srcAb);
+            const dx = pos.x - (Number(srcAb.x) || 0);
+            const dy = pos.y - (Number(srcAb.y) || 0);
+            const newAb = createArtboardRecord({
+                ...JSON.parse(JSON.stringify(srcAb)),
+                id: uid('artboard'),
+                name: `${srcAb.name} Copy`,
+                x: pos.x,
+                y: pos.y,
+                locked: false,
+            });
+            const insertIdx = abs.findIndex((a) => a.id === srcAb.id);
+            const nextAbs =
+                insertIdx >= 0
+                    ? [...abs.slice(0, insertIdx + 1), newAb, ...abs.slice(insertIdx + 1)]
+                    : [...abs, newAb];
+
+            const srcObjs = (canvas.getObjects() || []).filter((o) => o.artboardId === srcAb.id);
+            const assignArtboardTree = (obj, nextId) => {
+                obj.set('artboardId', nextId);
+                if ((obj.type || '').toLowerCase() === 'group' && typeof obj.getObjects === 'function') {
+                    obj.getObjects().forEach((c) => assignArtboardTree(c, nextId));
+                }
+            };
+
+            isRestoringRef.current = true;
+            try {
+                canvas.discardActiveObject();
+                for (const srcObj of srcObjs) {
+                    const cloned = await srcObj.clone(CUSTOM_PROPS);
+                    assignFreshLayerIds(cloned);
+                    assignArtboardTree(cloned, newAb.id);
+                    cloned.set({
+                        left: (Number(srcObj.left) || 0) + dx,
+                        top: (Number(srcObj.top) || 0) + dy,
+                    });
+                    rehydrateLockTree([cloned], Boolean(srcObj.lockedLayer));
+                    canvas.add(cloned);
+                }
+            } finally {
+                isRestoringRef.current = false;
+            }
+
+            activateArtboardMeta(newAb, nextAbs);
+            syncCanvasViewport(canvas, newAb.width, newAb.height, zoom, nextAbs);
+            canvas.renderAll();
+            syncLayersState(canvas, nextAbs);
+            setActiveLayerIds([newAb.id]);
+            const bounds = getArtboardWorkspaceBounds(nextAbs, newAb.width, newAb.height);
+            fitZoomToViewport(bounds.totalW, bounds.totalH);
+            pushHistorySnapshot(canvas, nextAbs, newAb.id);
+            persistActivePageSnapshot(nextAbs);
+            toast.success(`Duplicated "${srcAb.name}"`);
+        },
+        [
+            getActiveArtboard,
+            activateArtboardMeta,
+            syncCanvasViewport,
+            zoom,
+            syncLayersState,
+            fitZoomToViewport,
+            pushHistorySnapshot,
+            persistActivePageSnapshot,
+        ]
+    );
+
+    const handleReorderArtboard = useCallback(
+        (abId, destinationIndex) => {
+            const canvas = fabricRef.current;
+            const abs = artboardsRef.current || [];
+            const fromIdx = abs.findIndex((a) => a.id === abId);
+            if (fromIdx < 0 || abs.length < 2) return;
+            const nextAbs = [...abs];
+            const [moved] = nextAbs.splice(fromIdx, 1);
+            const clamped = Math.max(0, Math.min(nextAbs.length, Number(destinationIndex) || 0));
+            nextAbs.splice(clamped, 0, moved);
+            artboardsRef.current = nextAbs;
+            setArtboards(nextAbs);
+            if (canvas) {
+                syncLayersState(canvas, nextAbs);
+                pushHistorySnapshot(canvas, nextAbs, activeArtboardIdRef.current);
+                persistActivePageSnapshot(nextAbs);
+            }
+        },
+        [syncLayersState, pushHistorySnapshot, persistActivePageSnapshot]
+    );
+
+    const handleDeleteArtboard = useCallback(
+        (abId) => {
+            const canvas = fabricRef.current;
+            const abs = artboardsRef.current || [];
+            if (!canvas || abs.length <= 1) {
+                toast.info('At least one artboard is required');
+                return;
+            }
+            const target = abs.find((a) => a.id === abId);
+            if (!target) return;
+            if (target.locked) {
+                toast.info('Unlock this artboard before deleting it');
+                return;
+            }
+            const nextAbs = abs.filter((a) => a.id !== abId);
+            const nextActive = nextAbs[0];
+
+            isRestoringRef.current = true;
+            try {
+                canvas.discardActiveObject();
+                const doomed = (canvas.getObjects() || []).filter((o) => o.artboardId === abId);
+                doomed.forEach((o) => canvas.remove(o));
+            } finally {
+                isRestoringRef.current = false;
+            }
+
+            activateArtboardMeta(nextActive, nextAbs);
+            syncCanvasViewport(canvas, nextActive.width, nextActive.height, zoom, nextAbs);
+            canvas.renderAll();
+            syncLayersState(canvas, nextAbs);
+            setSelectedObject(null);
+            setSelectionMeta(null);
+            setSelectionBounds(null);
+            setActiveLayerIds([nextActive.id]);
+            const bounds = getArtboardWorkspaceBounds(nextAbs, nextActive.width, nextActive.height);
+            fitZoomToViewport(bounds.totalW, bounds.totalH);
+            pushHistorySnapshot(canvas, nextAbs, nextActive.id);
+            persistActivePageSnapshot(nextAbs);
+            toast.success(`Removed "${target.name}"`);
+        },
+        [
+            activateArtboardMeta,
+            syncCanvasViewport,
+            zoom,
+            syncLayersState,
+            fitZoomToViewport,
+            pushHistorySnapshot,
+            persistActivePageSnapshot,
+        ]
+    );
+
+    const handleCreateEmptyLayer = useCallback(
+        (targetAbId = null) => {
+            const canvas = fabricRef.current;
+            if (!canvas) return;
+            const targetAb = (targetAbId ? findArtboardById(targetAbId) : null) || getActiveArtboard();
+            const existingNamedCount = (canvas.getObjects() || []).filter(
+                (o) => o.artboardId === targetAb.id && o.layerRole === 'layer'
+            ).length;
+            const layerGroup = new Group([], {
+                left: (Number(targetAb.x) || 0) + (Number(targetAb.width) || logicalWRef.current) / 2,
+                top: (Number(targetAb.y) || 0) + (Number(targetAb.height) || logicalHRef.current) / 2,
+                originX: 'center',
+                originY: 'center',
+                layerId: uid('layer'),
+                layerName: `Layer ${existingNamedCount + 1}`,
+                layerRole: 'layer',
+                isPersistentGroup: true,
+                artboardId: targetAb.id,
+            });
+            canvas.add(layerGroup);
+            canvas.setActiveObject(layerGroup);
+            canvas.renderAll();
+            syncLayersState(canvas);
+            pushHistorySnapshot(canvas);
+            persistActivePageSnapshot();
+        },
+        [findArtboardById, getActiveArtboard, syncLayersState, pushHistorySnapshot, persistActivePageSnapshot]
+    );
+
     const cleanupEmptyAncestorGroups = (canvas, startGroup) => {
         let cur = startGroup;
         while (cur) {
             const parent = cur.parent || cur.group || null;
-            if (cur.size() === 0) {
+            if (cur.size() === 0 && !cur.isPersistentGroup) {
                 if (parent) {
                     parent.remove(cur);
                 } else {
@@ -1999,8 +3392,15 @@ export default function ImageEditor({
 
     const handleSelectLayer = (layerId, { toggle = false, range = false, orderedIds = null } = {}) => {
         const canvas = fabricRef.current;
+        if (!canvas || !layerId) return;
+
+        if (findArtboardById(layerId)) {
+            handleSelectArtboard(layerId, { discardCanvasSelection: true });
+            return;
+        }
+
         const clicked = findObjectWithParent(layerId);
-        if (!canvas || !clicked) return;
+        if (!clicked) return;
 
         let nextIds = [];
         if (range) {
@@ -2044,9 +3444,25 @@ export default function ImageEditor({
 
     const handleRenameLayer = (layerId, nextName) => {
         const canvas = fabricRef.current;
-        const found = findObjectWithParent(layerId);
         const trimmed = String(nextName || '').trim();
-        if (!canvas || !found || !trimmed || found.obj.layerName === trimmed) return;
+        if (!canvas || !trimmed) return;
+
+        const targetAb = findArtboardById(layerId);
+        if (targetAb) {
+            if (targetAb.name === trimmed) return;
+            const nextAbs = (artboardsRef.current || []).map((ab) =>
+                ab.id === layerId ? { ...ab, name: trimmed } : ab
+            );
+            artboardsRef.current = nextAbs;
+            setArtboards(nextAbs);
+            syncLayersState(canvas, nextAbs);
+            pushHistorySnapshot(canvas, nextAbs, activeArtboardIdRef.current);
+            persistFnRef.current?.(nextAbs);
+            return;
+        }
+
+        const found = findObjectWithParent(layerId);
+        if (!found || found.obj.layerName === trimmed) return;
         found.obj.set('layerName', trimmed);
         if (found.parentGroup) dirtyAncestorChain(found.parentGroup);
         syncLayersState(canvas);
@@ -2060,8 +3476,31 @@ export default function ImageEditor({
 
     const handleToggleLayerVisible = (layerId) => {
         const canvas = fabricRef.current;
+        if (!canvas) return;
+
+        const targetAb = findArtboardById(layerId);
+        if (targetAb) {
+            const nextVisible = targetAb.visible === false;
+            const nextAbs = (artboardsRef.current || []).map((ab) =>
+                ab.id === layerId ? { ...ab, visible: nextVisible } : ab
+            );
+            artboardsRef.current = nextAbs;
+            setArtboards(nextAbs);
+            (canvas.getObjects() || []).forEach((o) => {
+                if (o.artboardId === layerId) {
+                    o.set('visible', nextVisible);
+                    o.set('dirty', true);
+                }
+            });
+            canvas.renderAll();
+            syncLayersState(canvas, nextAbs);
+            pushHistorySnapshot(canvas, nextAbs, activeArtboardIdRef.current);
+            persistFnRef.current?.(nextAbs);
+            return;
+        }
+
         const found = findObjectWithParent(layerId);
-        if (!canvas || !found) return;
+        if (!found) return;
         found.obj.set('visible', found.obj.visible === false);
         if (found.parentGroup) dirtyAncestorChain(found.parentGroup);
         canvas.renderAll();
@@ -2088,26 +3527,56 @@ export default function ImageEditor({
     };
 
     const applyLockToObject = (obj, nextLock) => {
-        obj.set({
-            lockedLayer: nextLock,
-            lockMovementX: nextLock,
-            lockMovementY: nextLock,
-            lockScalingX: nextLock,
-            lockScalingY: nextLock,
-            lockRotation: nextLock,
-            hasControls: !nextLock,
-        });
+        applyEffectiveLockFlags(obj, nextLock);
+        if ((obj.type || '').toLowerCase() === 'group' && typeof obj.getObjects === 'function') {
+            rehydrateLockTree(obj.getObjects(), nextLock);
+        }
+    };
+
+    const refreshActiveLockState = (canvas) => {
+        const active = canvas.getActiveObject();
+        if (active?.type === 'activeselection') {
+            const hasLocked = (active.getObjects?.() || []).some(isObjectEffectivelyLocked);
+            applyEffectiveLockFlags(active, hasLocked, { preserveOwnLockedFlag: true });
+        } else if (active) {
+            applyEffectiveLockFlags(active, isObjectEffectivelyLocked(active), { preserveOwnLockedFlag: true });
+        }
+        return active;
     };
 
     const handleToggleLayerLock = (layerId) => {
         const canvas = fabricRef.current;
+        if (!canvas) return;
+
+        const targetAb = findArtboardById(layerId);
+        if (targetAb) {
+            const nextLock = !targetAb.locked;
+            const nextAbs = (artboardsRef.current || []).map((ab) =>
+                ab.id === layerId ? { ...ab, locked: nextLock } : ab
+            );
+            artboardsRef.current = nextAbs;
+            setArtboards(nextAbs);
+            (canvas.getObjects() || []).forEach((o) => {
+                if (o.artboardId === layerId) {
+                    applyLockToObject(o, nextLock);
+                }
+            });
+            const active = refreshActiveLockState(canvas);
+            canvas.renderAll();
+            syncLayersState(canvas, nextAbs);
+            if (active) setSelectionMeta(readSelectionMeta(active));
+            pushHistorySnapshot(canvas, nextAbs, activeArtboardIdRef.current);
+            persistFnRef.current?.(nextAbs);
+            return;
+        }
+
         const found = findObjectWithParent(layerId);
-        if (!canvas || !found) return;
+        if (!found) return;
         applyLockToObject(found.obj, !found.obj.lockedLayer);
         if (found.parentGroup) dirtyAncestorChain(found.parentGroup);
+        const active = refreshActiveLockState(canvas);
         canvas.renderAll();
         syncLayersState(canvas);
-        const active = canvas.getActiveObject();
         if (active) setSelectionMeta(readSelectionMeta(active));
         pushHistorySnapshot(canvas);
         persistFnRef.current?.();
@@ -2124,9 +3593,9 @@ export default function ImageEditor({
             applyLockToObject(obj, nextLock);
             if (parentGroup) dirtyAncestorChain(parentGroup);
         });
+        const active = refreshActiveLockState(canvas);
         canvas.renderAll();
         syncLayersState(canvas);
-        const active = canvas.getActiveObject();
         if (active) setSelectionMeta(readSelectionMeta(active));
         pushHistorySnapshot(canvas);
         persistFnRef.current?.();
@@ -2162,13 +3631,16 @@ export default function ImageEditor({
         try {
             canvas.discardActiveObject();
             for (const { obj, parentGroup } of resolved) {
+                const wasLocked = isObjectEffectivelyLocked(obj);
                 const cloned = await obj.clone(CUSTOM_PROPS);
                 assignFreshLayerIds(cloned);
                 cloned.set({
                     left: (obj.left || 0) + 18,
                     top: (obj.top || 0) + 18,
                     layerName: `${obj.layerName || 'Layer'} Copy`,
+                    lockedLayer: wasLocked,
                 });
+                rehydrateLockTree([cloned], wasLocked);
                 if (parentGroup) {
                     parentGroup.add(cloned);
                     dirtyAncestorChain(parentGroup);
@@ -2195,6 +3667,32 @@ export default function ImageEditor({
         const canvas = fabricRef.current;
         if (!canvas || !layerIds?.length) return;
 
+        if (layerIds.length === 1 && findArtboardById(layerIds[0])) {
+            handleReorderArtboard(layerIds[0], destinationIndex);
+            return;
+        }
+
+        const destArtboard = destinationParentGroupId ? findArtboardById(destinationParentGroupId) : null;
+        const destGroupObj = !destArtboard && destinationParentGroupId
+            ? findObjectWithParent(destinationParentGroupId)?.obj
+            : null;
+        if (destinationParentGroupId && !destArtboard && (!destGroupObj || (destGroupObj.type || '').toLowerCase() !== 'group')) {
+            return;
+        }
+
+        const targetArtboard =
+            destArtboard ||
+            (destGroupObj?.artboardId ? findArtboardById(destGroupObj.artboardId) : null) ||
+            getActiveArtboard();
+
+        const setArtboardRecursive = (node, abId) => {
+            if (!node) return;
+            node.set('artboardId', abId);
+            if ((node.type || '').toLowerCase() === 'group' && typeof node.getObjects === 'function') {
+                node.getObjects().forEach((c) => setArtboardRecursive(c, abId));
+            }
+        };
+
         const treeOrder = flattenCanvasTreePanelOrder().map((r) => r.obj.layerId);
         const rawResolved = pruneSelectedResolved(
             layerIds.map(findObjectWithParent).filter(Boolean)
@@ -2203,13 +3701,6 @@ export default function ImageEditor({
 
         rawResolved.sort((a, b) => treeOrder.indexOf(a.obj.layerId) - treeOrder.indexOf(b.obj.layerId));
 
-        const destGroupObj = destinationParentGroupId
-            ? findObjectWithParent(destinationParentGroupId)?.obj
-            : null;
-        if (destinationParentGroupId && (!destGroupObj || (destGroupObj.type || '').toLowerCase() !== 'group')) {
-            return;
-        }
-
         const movable = rawResolved.filter(({ obj }) => {
             if (!destGroupObj) return true;
             if (obj === destGroupObj) return false;
@@ -2217,14 +3708,18 @@ export default function ImageEditor({
         });
         if (!movable.length) return;
 
-        // Fast path: single-item same-container reorder
+        // Fast path: single-item same-container reorder inside the same Group or same Artboard root
         if (movable.length === 1) {
             const { obj, parentGroup: sourceGroup } = movable[0];
-            if (!sourceGroup && !destGroupObj) {
+            if (!sourceGroup && !destGroupObj && (!destArtboard || obj.artboardId === destArtboard.id)) {
                 const objs = canvas.getObjects() || [];
-                if (objs.length < 2) return;
-                const clampedPanelIdx = Math.max(0, Math.min(objs.length - 1, destinationIndex));
-                const targetCanvasIdx = objs.length - 1 - clampedPanelIdx;
+                const targetAbId = destArtboard?.id || obj.artboardId || targetArtboard?.id;
+                const scopedCanvasIndices = objs
+                    .map((item, idx) => (item.artboardId === targetAbId ? idx : -1))
+                    .filter((idx) => idx >= 0);
+                if (scopedCanvasIndices.length < 2) return;
+                const clampedPanelIdx = Math.max(0, Math.min(scopedCanvasIndices.length - 1, destinationIndex));
+                const targetCanvasIdx = scopedCanvasIndices[scopedCanvasIndices.length - 1 - clampedPanelIdx];
                 if (!canvas.moveObjectTo(obj, targetCanvasIdx)) return;
                 canvas.renderAll();
                 syncLayersState(canvas);
@@ -2252,16 +3747,34 @@ export default function ImageEditor({
         const movedObjs = [];
         try {
             canvas.discardActiveObject();
-            const initialRootReverse = [...(canvas.getObjects() || [])].reverse();
+            const initialScopedReverse = [...(canvas.getObjects() || [])]
+                .filter((o) => !targetArtboard || o.artboardId === targetArtboard.id)
+                .reverse();
             const removedRootBeforeDestCount = movable.filter(
-                (m) => !m.parentGroup && initialRootReverse.indexOf(m.obj) < destinationIndex
+                (m) => !m.parentGroup && initialScopedReverse.indexOf(m.obj) < destinationIndex
             ).length;
             const emptiedRootGroupsBeforeDest = new Set();
 
             for (const { obj, parentGroup } of movable) {
+                const srcAbId = obj.artboardId || parentGroup?.artboardId;
+                const srcAb = srcAbId ? findArtboardById(srcAbId) : null;
+                if (targetArtboard && srcAb && srcAb.id !== targetArtboard.id) {
+                    const dx = (Number(targetArtboard.x) || 0) - (Number(srcAb.x) || 0);
+                    const dy = (Number(targetArtboard.y) || 0) - (Number(srcAb.y) || 0);
+                    if (!parentGroup) {
+                        obj.set({
+                            left: (Number(obj.left) || 0) + dx,
+                            top: (Number(obj.top) || 0) + dy,
+                        });
+                    }
+                }
+                if (targetArtboard) {
+                    setArtboardRecursive(obj, targetArtboard.id);
+                }
+
                 if (parentGroup) {
                     const rootAnc = findRootAncestor(parentGroup);
-                    const rootIdxBefore = initialRootReverse.indexOf(rootAnc);
+                    const rootIdxBefore = initialScopedReverse.indexOf(rootAnc);
                     parentGroup.remove(obj);
                     cleanupEmptyAncestorGroups(canvas, parentGroup);
                     if (
@@ -2298,8 +3811,11 @@ export default function ImageEditor({
                     const { obj } = movable[i];
                     canvas.add(obj);
                     const objs = canvas.getObjects() || [];
-                    const panelSlot = Math.max(0, Math.min(objs.length - 1, adjustedStartPanelIdx + i));
-                    const targetCanvasIdx = objs.length - 1 - panelSlot;
+                    const scopedIndices = objs
+                        .map((item, idx) => (item.artboardId === targetArtboard?.id ? idx : -1))
+                        .filter((idx) => idx >= 0);
+                    const panelSlot = Math.max(0, Math.min(scopedIndices.length - 1, adjustedStartPanelIdx + i));
+                    const targetCanvasIdx = scopedIndices[scopedIndices.length - 1 - panelSlot] ?? objs.length - 1;
                     canvas.moveObjectTo(obj, targetCanvasIdx);
                     movedIds.push(obj.layerId);
                     movedObjs.push(obj);
@@ -2310,6 +3826,9 @@ export default function ImageEditor({
             isRestoringRef.current = false;
         }
 
+        if (targetArtboard) {
+            activateArtboardMeta(targetArtboard);
+        }
         canvas.renderAll();
         syncLayersState(canvas);
         const active = canvas.getActiveObject();
@@ -2330,9 +3849,10 @@ export default function ImageEditor({
     };
 
     const handleReorderLayer = (layerId, targetPanelIndex) => {
+        const found = findObjectWithParent(layerId);
         handleMoveLayersBatch({
             layerIds: [layerId],
-            destinationParentGroupId: null,
+            destinationParentGroupId: found?.parentGroup?.layerId || found?.obj?.artboardId || activeArtboardIdRef.current,
             destinationIndex: targetPanelIndex,
         });
     };
@@ -2340,15 +3860,33 @@ export default function ImageEditor({
     const handleDeleteLayerIds = (layerIds = []) => {
         const canvas = fabricRef.current;
         if (!canvas || !layerIds.length) return;
+
+        const artboardTargets = layerIds.filter((id) => Boolean(findArtboardById(id)));
+        const elementTargets = layerIds.filter((id) => !findArtboardById(id));
+
+        if (artboardTargets.length) {
+            artboardTargets.forEach((abId) => handleDeleteArtboard(abId));
+        }
+        if (!elementTargets.length) return;
+
         const resolved = pruneSelectedResolved(
-            layerIds.map(findObjectWithParent).filter(Boolean)
+            elementTargets.map(findObjectWithParent).filter(Boolean)
         );
         if (!resolved.length) return;
+
+        const deletable = resolved.filter((r) => !isObjectEffectivelyLocked(r.obj));
+        if (!deletable.length) {
+            toast.info('Unlock the layer first to delete it');
+            return;
+        }
+        if (deletable.length < resolved.length) {
+            toast.info('Locked layers were skipped — unlock them to delete');
+        }
 
         isRestoringRef.current = true;
         try {
             canvas.discardActiveObject();
-            for (const { obj, parentGroup } of resolved) {
+            for (const { obj, parentGroup } of deletable) {
                 if (parentGroup) {
                     parentGroup.remove(obj);
                     cleanupEmptyAncestorGroups(canvas, parentGroup);
@@ -2375,6 +3913,44 @@ export default function ImageEditor({
         handleDeleteLayerIds([layerId]);
     };
 
+    const handleCreateGroupLayer = (targetAbId = null) => {
+        const canvas = fabricRef.current;
+        if (!canvas) return;
+
+        let resolved = pruneSelectedResolved(
+            activeLayerIds.map(findObjectWithParent).filter(Boolean)
+        );
+        if (resolved.length < 2) {
+            const active = canvas.getActiveObject();
+            if (active?.type === 'activeselection') {
+                resolved = (active.getObjects() || []).map((o) => ({ obj: o, parentGroup: getParentGroupOf(o) }));
+            }
+        }
+
+        if (resolved.length >= 2) {
+            handleGroupSelected();
+            return;
+        }
+
+        const targetAb = (targetAbId ? findArtboardById(targetAbId) : null) || getActiveArtboard();
+        const emptyGrp = new Group([], {
+            left: (Number(targetAb.x) || 0) + (Number(targetAb.width) || logicalWRef.current) / 2,
+            top: (Number(targetAb.y) || 0) + (Number(targetAb.height) || logicalHRef.current) / 2,
+            originX: 'center',
+            originY: 'center',
+            layerId: uid('layer'),
+            layerName: 'Group',
+            isPersistentGroup: true,
+            artboardId: targetAb.id,
+        });
+        canvas.add(emptyGrp);
+        canvas.setActiveObject(emptyGrp);
+        canvas.renderAll();
+        syncLayersState(canvas);
+        pushHistorySnapshot(canvas);
+        persistActivePageSnapshot();
+    };
+
     const handleGroupSelected = () => {
         const canvas = fabricRef.current;
         if (!canvas) return;
@@ -2391,6 +3967,7 @@ export default function ImageEditor({
         if (resolved.length < 2) return;
 
         const targetParent = resolved[0].parentGroup || null;
+        const targetAbId = targetParent?.artboardId || resolved[0].obj.artboardId || activeArtboardIdRef.current || 'ab_1';
         let insertCanvasIdx = 0;
         const parentCollection = targetParent ? targetParent.getObjects() : canvas.getObjects();
         const matchingIndices = resolved
@@ -2413,10 +3990,11 @@ export default function ImageEditor({
                 } else {
                     canvas.remove(obj);
                 }
+                obj.set('artboardId', targetAbId);
                 objsToGroup.push(obj);
             }
 
-            newGrp = new Group(objsToGroup, { layerId: uid('layer'), layerName: 'Group' });
+            newGrp = new Group(objsToGroup, { layerId: uid('layer'), layerName: 'Group', artboardId: targetAbId });
             if (targetParent) {
                 insertCanvasIdx = Math.max(0, Math.min(targetParent.size(), lowestIndexInParent));
                 targetParent.insertAt(insertCanvasIdx, newGrp);
@@ -2515,14 +4093,18 @@ export default function ImageEditor({
         const canvas = fabricRef.current;
         if (!canvas) return pages;
         const json = serializeCanvasSafely(canvas, CUSTOM_PROPS);
+        const absSnapshot = JSON.parse(JSON.stringify(artboardsRef.current || []));
+        const primaryAb = absSnapshot[0];
+        const primaryBg = primaryAb?.bgMeta || bgMeta;
         return pages.map((p, i) =>
             i === activePageIdx
                 ? {
                     ...p,
-                    width: canvasWidth,
-                    height: canvasHeight,
-                    bgMeta,
-                    background: bgMeta.mode === 'solid' ? bgMeta.color : null,
+                    width: primaryAb?.width || canvasWidth,
+                    height: primaryAb?.height || canvasHeight,
+                    bgMeta: primaryBg,
+                    background: primaryBg?.mode === 'solid' ? primaryBg.color : null,
+                    artboards: absSnapshot,
                     fabricJson: json,
                 }
                 : p
@@ -2633,6 +4215,7 @@ export default function ImageEditor({
                 setUnsavedSaving(false);
             }
         }
+        clearPendingProjectDraftSync(activeProjectIdRef.current);
         bypassUnsavedGuardRef.current = true;
         isDirtyRef.current = false;
         setHasUnsavedChanges(false);
@@ -2878,7 +4461,42 @@ export default function ImageEditor({
         setExporting(true);
         const toastId = toast.loading('Rendering high-resolution export...');
         try {
-            if (opts.scope === 'all' && snapshotPages.length > 1) {
+            const activePage = snapshotPages[activePageIdx];
+            const pageAbs = normalizeArtboardsForPage(activePage, canvasWidth, canvasHeight, defaultTrans);
+
+            if (opts.scope === 'all' && pageAbs.length > 1) {
+                const selectedIds = Array.isArray(opts.selectedArtboardIds) && opts.selectedArtboardIds.length
+                    ? new Set(opts.selectedArtboardIds)
+                    : null;
+                const exportAbs = selectedIds ? pageAbs.filter((ab) => selectedIds.has(ab.id)) : pageAbs;
+                if (exportAbs.length === 1) {
+                    const targetAb = exportAbs[0];
+                    const blob = await renderArtboardOffscreen(
+                        targetAb,
+                        activePage.fabricJson,
+                        opts,
+                        pageAbs[0]?.id === targetAb.id
+                    );
+                    const ext = opts.format === 'jpeg' ? 'jpg' : opts.format;
+                    const abSlug = (targetAb.name || 'artboard').toLowerCase().replace(/[^a-z0-9-_]+/g, '-');
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${safeName}-${abSlug}.${ext}`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast.success(`Downloaded "${targetAb.name}" (${ext.toUpperCase()})!`, { id: toastId });
+                } else {
+                    const zipBlob = await exportArtboardsAsZip(exportAbs, activePage.fabricJson, safeName, opts);
+                    const url = URL.createObjectURL(zipBlob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${safeName}-artboards.zip`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast.success(`Exported ${exportAbs.length} artboards as ZIP!`, { id: toastId });
+                }
+            } else if (opts.scope === 'all' && snapshotPages.length > 1) {
                 const zipBlob = await exportPagesAsZip(snapshotPages, safeName, opts);
                 const url = URL.createObjectURL(zipBlob);
                 const a = document.createElement('a');
@@ -2888,8 +4506,13 @@ export default function ImageEditor({
                 URL.revokeObjectURL(url);
                 toast.success(`Exported ${snapshotPages.length} pages as ZIP!`, { id: toastId });
             } else {
-                const activePage = snapshotPages[activePageIdx];
-                const blob = await renderPageOffscreen(activePage, opts);
+                const activeAb = pageAbs.find((ab) => ab.id === activeArtboardIdRef.current) || pageAbs[0];
+                const blob = await renderArtboardOffscreen(
+                    activeAb,
+                    activePage.fabricJson,
+                    opts,
+                    pageAbs[0]?.id === activeAb.id
+                );
                 const ext = opts.format === 'jpeg' ? 'jpg' : opts.format;
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -3044,6 +4667,7 @@ export default function ImageEditor({
     const { canGroup: treeCanGroup, canUngroup: treeCanUngroup } = analyzeLayerSelection(layers, activeLayerIds);
     const resolvedCanGroup = selectionMeta?.type === 'activeselection' || treeCanGroup;
     const resolvedCanUngroup = selectionMeta?.type === 'group' || treeCanUngroup;
+    const eraserSelectionLocked = isLayerSelectionLockedForEraser(layers, activeLayerIds);
 
     return (
         <div
@@ -3088,12 +4712,19 @@ export default function ImageEditor({
                 snapPrefs={snapPrefs}
                 onToggleSnapPref={handleToggleSnapPref}
                 onUpdateSnapPrefs={handleUpdateSnapPrefs}
+                outsideCanvasMode={effectiveOutsideCanvasMode}
+                onChangeOutsideCanvasMode={handleChangeOutsideCanvasMode}
+                enableOutsideCanvasPasteboard={enableOutsidePasteboard}
+                allowOutsideCanvasOverride={allowOutsideUserOverride}
+                allowedOutsideCanvasModes={allowedOutsideModeIds}
                 layersOpen={layersOpen}
                 onToggleLayers={() => setLayersOpen((o) => !o)}
                 allowedFormats={editorSettings.allowedExportFormats}
                 defaultQuality={editorSettings.defaultExportQuality}
                 enableSvgExport={editorSettings.enableSvgExport}
                 pageCount={pages.length}
+                artboards={artboards}
+                activeArtboardName={getActiveArtboard()?.name || 'Artboard 1'}
                 onExport={handleExport}
                 exporting={exporting}
                 adminTemplateMode={adminTemplateMode}
@@ -3154,7 +4785,7 @@ export default function ImageEditor({
                     onApplyTemplate={handleApplyTemplate}
                     catalogCategories={catalogCategories}
                     catalogCollections={catalogCollections}
-                    onInsertAsset={(asset) => insertAssetOnCanvas(asset)}
+                    onInsertAsset={(asset, dropCoords = null) => insertAssetOnCanvas(asset, dropCoords)}
                     onAddElement={handleAddElement}
                     onApplyFrame={handleApplyFrame}
                     selectedIsImage={selectionMeta?.type?.toLowerCase() === 'image'}
@@ -3172,11 +4803,6 @@ export default function ImageEditor({
                     onUploadBgImage={handleUploadBgImage}
                     extractedPalette={extractedPalette}
                     onExtractPalette={handleExtractPalette}
-                    enableFreehandDraw={editorSettings.enableFreehandDraw}
-                    isDrawingMode={activeTool === 'draw'}
-                    onToggleDrawingMode={(next) => setActiveTool(next ? 'draw' : 'select')}
-                    brushConfig={brushConfig}
-                    onChangeBrushConfig={setBrushConfig}
                     layers={layers}
                     layersOpen={layersOpen}
                     onToggleLayers={setLayersOpen}
@@ -3203,15 +4829,28 @@ export default function ImageEditor({
                     onPanChange={setPanOffset}
                     activeTool={activeTool}
                     onSelectTool={(t) => {
-                        setActiveTool(t);
-                        if (t === 'text') {
-                            handleAddText({ text: 'New Heading', fontSize: 72, fontWeight: '800' });
-                        } else if (t === 'draw') {
-                            setActiveTab('draw');
-                            setDrawerOpen(true);
+                        if (['draw', 'pen', 'eraser', 'text', 'shapes', 'line'].includes(t)) {
+                            setActiveTool((prev) => (prev === t ? 'select' : t));
+                            return;
                         }
+                        setActiveTool(t);
                     }}
+                    onAddElement={handleAddElement}
+                    lineConfig={lineConfig}
+                    onChangeLineConfig={setLineConfig}
+                    onCommitLine={handleCommitLine}
                     enableFreehandDraw={editorSettings.enableFreehandDraw}
+                    brushConfig={brushConfig}
+                    onChangeBrushConfig={setBrushConfig}
+                    penConfig={penConfig}
+                    onChangePenConfig={setPenConfig}
+                    onCommitPenPath={handleCommitPenPath}
+                    eraserConfig={eraserConfig}
+                    eraserSelectionLocked={eraserSelectionLocked}
+                    onChangeEraserConfig={setEraserConfig}
+                    onEraseStart={handleEraseStart}
+                    onEraseMove={handleEraseMove}
+                    onEraseEnd={handleEraseEnd}
                     showGrid={showGrid}
                     onToggleGrid={() => setShowGrid((g) => !g)}
                     showSafeMargins={showSafeMargins}
@@ -3220,9 +4859,10 @@ export default function ImageEditor({
                     snapPrefs={snapPrefs}
                     onToggleSnapPref={handleToggleSnapPref}
                     isTransparentBg={bgMeta.mode === 'transparent'}
+                    pasteboardPad={pasteboardPad}
                     onDropAssetOrFile={(payload) => {
                         if (payload.type === 'asset') {
-                            insertAssetOnCanvas(payload.asset);
+                            insertAssetOnCanvas(payload.asset, payload.dropCoords || null);
                         } else if (payload.type === 'files') {
                             handleUploadFiles(payload.files);
                         }
@@ -3250,6 +4890,13 @@ export default function ImageEditor({
                     onDelete={handleDeleteSelected}
                     onZOrder={handleZOrder}
                     onContextMenuSelectTarget={handleContextMenuSelectTarget}
+                    onFloatingToolbarPlacementChange={(nextPlacement) => {
+                        const resolved = nextPlacement || 'above';
+                        if (floatingPlacementRef.current !== resolved) {
+                            floatingPlacementRef.current = resolved;
+                        }
+                        syncRotationHandlePlacement(fabricRef.current, resolved);
+                    }}
                     onFlip={handleFlip}
                     onToggleLock={handleToggleLock}
                     layers={layers}
@@ -3270,6 +4917,17 @@ export default function ImageEditor({
                     onDeleteLayerIds={handleDeleteLayerIds}
                     canGroup={resolvedCanGroup}
                     canUngroup={resolvedCanUngroup}
+                    artboards={artboards}
+                    activeArtboardId={activeArtboardId}
+                    onSelectArtboard={handleSelectArtboard}
+                    onFocusArtboard={handleFocusArtboard}
+                    onOpenNewArtboardModal={handleOpenNewArtboardModal}
+                    onResizeArtboard={handleResizeArtboardModal}
+                    onDuplicateArtboard={handleDuplicateArtboard}
+                    onDeleteArtboard={handleDeleteArtboard}
+                    onReorderArtboard={handleReorderArtboard}
+                    onCreateGroupLayer={handleCreateGroupLayer}
+                    onCreateEmptyLayer={handleCreateEmptyLayer}
                     pages={pages}
                     activePageIdx={activePageIdx}
                     maxPages={maxPages}
@@ -3528,6 +5186,30 @@ export default function ImageEditor({
                     </div>
                 </div>
             )}
+
+            <ArtboardModal
+                open={Boolean(artboardModal)}
+                mode={artboardModal?.mode || 'create'}
+                initialName={
+                    artboardModal?.mode === 'edit'
+                        ? artboardModal?.artboard?.name || 'Artboard'
+                        : `Artboard ${artboards.length + 1}`
+                }
+                initialWidth={artboardModal?.artboard?.width || canvasWidth}
+                initialHeight={artboardModal?.artboard?.height || canvasHeight}
+                initialBgMode={
+                    artboardModal?.mode === 'edit'
+                        ? artboardModal?.artboard?.bgMeta?.mode === 'transparent'
+                            ? 'transparent'
+                            : 'match'
+                        : 'match'
+                }
+                presets={canvasPresets}
+                maxWidth={maxWidth}
+                maxHeight={maxHeight}
+                onClose={() => setArtboardModal(null)}
+                onSubmit={handleArtboardModalSubmit}
+            />
 
             <EditorConfirmDialog
                 open={confirmDialog.open}

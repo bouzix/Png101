@@ -4,6 +4,15 @@ import { Settings, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import AdminLayout from '../../../Layouts/AdminLayout';
 import { GlassCard } from '../../../components/ui/GlassCard';
+import { OUTSIDE_CANVAS_MODES } from '../../../components/editor/outsideCanvasModes';
+
+const ALL_OUTSIDE_MODE_IDS = OUTSIDE_CANVAS_MODES.map((m) => m.id);
+const PASTEBOARD_PADDING_PRESETS = [
+    { label: 'Compact (320px)', value: 320 },
+    { label: 'Standard (640px)', value: 640 },
+    { label: 'Wide (960px)', value: 960 },
+    { label: 'Extra Wide (1280px)', value: 1280 },
+];
 
 export default function EditorSettingsAdmin({ initialSettings = {} }) {
     const [form, setForm] = useState(initialSettings);
@@ -17,6 +26,43 @@ export default function EditorSettingsAdmin({ initialSettings = {} }) {
             const exists = list.includes(fmt);
             const next = exists ? list.filter((f) => f !== fmt) : [...list, fmt];
             return { ...prev, allowedExportFormats: next.length ? next : ['png'] };
+        });
+    };
+
+    const selectDefaultOutsideMode = (modeId) => {
+        setForm((prev) => {
+            const currentAllowed = Array.isArray(prev.allowedOutsideCanvasModes)
+                ? prev.allowedOutsideCanvasModes
+                : ALL_OUTSIDE_MODE_IDS;
+            const nextAllowed = currentAllowed.includes(modeId)
+                ? currentAllowed
+                : ALL_OUTSIDE_MODE_IDS.filter((id) => currentAllowed.includes(id) || id === modeId);
+            return {
+                ...prev,
+                defaultOutsideCanvasMode: modeId,
+                allowedOutsideCanvasModes: nextAllowed,
+            };
+        });
+    };
+
+    const toggleAllowedOutsideMode = (modeId) => {
+        setForm((prev) => {
+            const defMode = prev.defaultOutsideCanvasMode || 'grayscale-dim';
+            if (modeId === defMode) {
+                return prev;
+            }
+            const currentAllowed = Array.isArray(prev.allowedOutsideCanvasModes)
+                ? prev.allowedOutsideCanvasModes
+                : ALL_OUTSIDE_MODE_IDS;
+            const exists = currentAllowed.includes(modeId);
+            const rawNext = exists
+                ? currentAllowed.filter((id) => id !== modeId)
+                : [...currentAllowed, modeId];
+            const orderedNext = ALL_OUTSIDE_MODE_IDS.filter((id) => rawNext.includes(id));
+            return {
+                ...prev,
+                allowedOutsideCanvasModes: orderedNext.length ? orderedNext : [defMode],
+            };
         });
     };
 
@@ -175,6 +221,198 @@ export default function EditorSettingsAdmin({ initialSettings = {} }) {
                                 onChange={(e) => setForm((p) => ({ ...p, defaultExportQuality: Number(e.target.value) }))}
                                 className="w-full accent-blue-600 cursor-pointer"
                             />
+                        </div>
+                    </div>
+                </GlassCard>
+
+                {/* Outside Canvas & Inspiration Pasteboard */}
+                <GlassCard data-testid="admin-outside-canvas-card" className="p-5 space-y-5 shadow-none">
+                    <div className="flex items-center justify-between gap-2">
+                        <div>
+                            <h2 className="text-sm font-bold text-foreground">Outside Canvas &amp; Inspiration Pasteboard</h2>
+                            <p className="text-[11px] text-foreground/55">
+                                Control the default appearance, user override permissions, dimming opacity, and workspace size around the artboard.
+                            </p>
+                        </div>
+                        <span
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                                form.enableOutsideCanvasPasteboard !== false
+                                    ? 'bg-violet-500/15 text-violet-500'
+                                    : 'bg-slate-500/15 text-slate-400'
+                            }`}
+                        >
+                            {form.enableOutsideCanvasPasteboard !== false ? 'Pasteboard Active' : 'Clipped to Artboard'}
+                        </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {[
+                            {
+                                key: 'enableOutsideCanvasPasteboard',
+                                label: 'Enable Off-Canvas Inspiration Board',
+                                desc: 'Allow keeping and grabbing objects placed outside the canvas (excluded from exports).',
+                            },
+                            {
+                                key: 'allowOutsideCanvasUserOverride',
+                                label: 'Allow Users to Switch Effect in Preferences',
+                                desc: 'Let visitors pick their own outside-canvas view mode (when off, Outside Canvas is hidden from their Preferences menu).',
+                            },
+                        ].map((item) => {
+                            const checked = form[item.key] !== false;
+                            return (
+                                <button
+                                    key={item.key}
+                                    type="button"
+                                    data-testid={`admin-toggle-${item.key}`}
+                                    onClick={() => setForm((p) => ({ ...p, [item.key]: !(p[item.key] !== false) }))}
+                                    aria-pressed={checked}
+                                    className="text-left flex items-start justify-between gap-4 p-3.5 rounded-xl bg-foreground/[0.025] hover:bg-foreground/[0.04] border border-card-border cursor-pointer transition-colors"
+                                >
+                                    <div>
+                                        <div className="text-xs font-bold text-foreground">{item.label}</div>
+                                        <div className="text-[11px] text-foreground/55 mt-0.5">{item.desc}</div>
+                                    </div>
+                                    <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors mt-0.5 ${checked ? 'bg-blue-600' : 'bg-slate-400/40 dark:bg-slate-700'}`}>
+                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${checked ? 'translate-x-4' : 'translate-x-0'}`} />
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <div className={form.enableOutsideCanvasPasteboard === false ? 'opacity-50 pointer-events-none space-y-5' : 'space-y-5'}>
+                        <div>
+                            <label className="block text-xs font-bold text-foreground/80 mb-2">
+                                Default Outside-Canvas Effect
+                            </label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+                                {OUTSIDE_CANVAS_MODES.map((m) => {
+                                    const active = (form.defaultOutsideCanvasMode || 'grayscale-dim') === m.id;
+                                    return (
+                                        <button
+                                            key={m.id}
+                                            type="button"
+                                            data-testid={`admin-default-outside-${m.id}`}
+                                            aria-pressed={active}
+                                            onClick={() => selectDefaultOutsideMode(m.id)}
+                                            className={`text-left p-3 rounded-xl border transition-all cursor-pointer ${
+                                                active
+                                                    ? 'bg-violet-600/15 border-violet-500 text-foreground shadow-sm'
+                                                    : 'bg-foreground/[0.02] border-card-border text-foreground/75 hover:bg-foreground/[0.05]'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-xs font-bold">{m.label}</span>
+                                                {active && (
+                                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-violet-600 text-white">
+                                                        Default
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-[11px] text-foreground/55 mt-1">{m.desc}</div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                                <label className="block text-xs font-bold text-foreground/80">
+                                    Allowed User Effects in Studio Preferences
+                                </label>
+                                <span className="text-[11px] text-foreground/50">Default mode stays enabled</span>
+                            </div>
+                            <div className="inline-flex flex-wrap items-center gap-1.5 p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                {OUTSIDE_CANVAS_MODES.map((m) => {
+                                    const allowedList = Array.isArray(form.allowedOutsideCanvasModes)
+                                        ? form.allowedOutsideCanvasModes
+                                        : ALL_OUTSIDE_MODE_IDS;
+                                    const active = allowedList.includes(m.id);
+                                    const isDefault = (form.defaultOutsideCanvasMode || 'grayscale-dim') === m.id;
+                                    return (
+                                        <button
+                                            key={m.id}
+                                            type="button"
+                                            data-testid={`admin-allowed-outside-${m.id}`}
+                                            aria-pressed={active}
+                                            onClick={() => toggleAllowedOutsideMode(m.id)}
+                                            title={isDefault ? 'Default mode must remain allowed' : `Toggle ${m.label}`}
+                                            className={`h-7 px-3 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                                                active
+                                                    ? 'bg-primary-glow text-white shadow-sm'
+                                                    : 'bg-card-bg text-foreground/60 hover:text-foreground shadow-sm'
+                                            } ${isDefault ? 'ring-1 ring-violet-400/70' : ''}`}
+                                        >
+                                            {m.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                            <div>
+                                <label className="block text-xs font-bold text-foreground/80 mb-2">
+                                    Outside-Canvas Dimming Opacity ({form.outsideCanvasOpacity ?? 50}%)
+                                </label>
+                                <input
+                                    type="range"
+                                    data-testid="admin-outside-opacity-slider"
+                                    min={10}
+                                    max={95}
+                                    step={5}
+                                    value={form.outsideCanvasOpacity ?? 50}
+                                    onChange={(e) =>
+                                        setForm((p) => ({ ...p, outsideCanvasOpacity: Number(e.target.value) }))
+                                    }
+                                    className="w-full accent-violet-600 cursor-pointer"
+                                />
+                                <p className="text-[11px] text-foreground/50 mt-1">
+                                    Controls transparency outside the canvas for Grayed Out and Faded Color modes.
+                                </p>
+                            </div>
+
+                            <div>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <label className="block text-xs font-bold text-foreground/80">
+                                        Pasteboard Workspace Margin (px)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        data-testid="admin-outside-padding-input"
+                                        min={160}
+                                        max={1600}
+                                        step={40}
+                                        value={form.outsideCanvasPadding ?? 640}
+                                        onChange={(e) =>
+                                            setForm((p) => ({ ...p, outsideCanvasPadding: Number(e.target.value) }))
+                                        }
+                                        className="w-24 px-2.5 py-1 rounded-lg bg-input-bg border border-input-border text-xs font-mono text-foreground"
+                                    />
+                                </div>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {PASTEBOARD_PADDING_PRESETS.map((preset) => {
+                                        const active = Number(form.outsideCanvasPadding ?? 640) === preset.value;
+                                        return (
+                                            <button
+                                                key={preset.value}
+                                                type="button"
+                                                onClick={() =>
+                                                    setForm((p) => ({ ...p, outsideCanvasPadding: preset.value }))
+                                                }
+                                                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border cursor-pointer transition-colors ${
+                                                    active
+                                                        ? 'bg-primary-glow/15 border-primary-glow text-foreground'
+                                                        : 'bg-foreground/[0.025] border-card-border text-foreground/65 hover:text-foreground'
+                                                }`}
+                                            >
+                                                {preset.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </GlassCard>

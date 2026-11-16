@@ -234,6 +234,26 @@ class EditorSuiteTest extends TestCase
             'enabled' => false,
         ])->assertStatus(200)->assertJsonPath('settings.enabled', false);
 
+        // Outside Canvas settings validation, clamping, and automatic default inclusion
+        $this->withSession($session)->postJson('/api/admin/editor/settings', [
+            'enableOutsideCanvasPasteboard' => true,
+            'defaultOutsideCanvasMode' => 'original',
+            'allowedOutsideCanvasModes' => ['grayscale-dim', 'dimmed'],
+            'allowOutsideCanvasUserOverride' => false,
+            'outsideCanvasOpacity' => 75,
+            'outsideCanvasPadding' => 960,
+        ])->assertStatus(200)
+            ->assertJsonPath('settings.enableOutsideCanvasPasteboard', true)
+            ->assertJsonPath('settings.defaultOutsideCanvasMode', 'original')
+            ->assertJsonPath('settings.allowOutsideCanvasUserOverride', false)
+            ->assertJsonPath('settings.outsideCanvasOpacity', 75)
+            ->assertJsonPath('settings.outsideCanvasPadding', 960);
+
+        $outsideSaved = EditorSettingsService::getSettings();
+        $this->assertContains('original', $outsideSaved['allowedOutsideCanvasModes']);
+        $this->assertSame('original', $outsideSaved['defaultOutsideCanvasMode']);
+        $this->assertSame(960, $outsideSaved['outsideCanvasPadding']);
+
         $flagsDisabled = EditorSettingsService::getPublicFlags();
         $this->assertFalse($flagsDisabled['enabled']);
         $this->assertFalse($flagsDisabled['showInPublicNav']);
@@ -326,5 +346,131 @@ class EditorSuiteTest extends TestCase
                 ->where('auth.authenticated', true)
                 ->where('auth.role', 'team_member')
             );
+    }
+
+    public function test_editor_assets_generate_transparent_webp_thumbnails_and_support_asset_types(): void
+    {
+        $tmpDir = public_path('uploads/_test_webp');
+        if (!is_dir($tmpDir)) {
+            mkdir($tmpDir, 0755, true);
+        }
+        $pngAbs = $tmpDir . '/sample-sticker.png';
+        $im = imagecreatetruecolor(600, 600);
+        imagealphablending($im, false);
+        imagesavealpha($im, true);
+        $trans = imagecolorallocatealpha($im, 0, 0, 0, 127);
+        imagefilledrectangle($im, 0, 0, 600, 600, $trans);
+        $blue = imagecolorallocatealpha($im, 37, 99, 235, 0);
+        imagefilledellipse($im, 300, 300, 400, 400, $blue);
+        imagepng($im, $pngAbs);
+        imagedestroy($im);
+
+        $pngImg = Image::create([
+            'filename' => 'sample-sticker.png',
+            'path' => '/uploads/_test_webp/sample-sticker.png',
+            'previewPath' => '/uploads/_test_webp/preview-sample-sticker.jpg',
+            'thumbPath' => null,
+            'name' => 'Sample Blue Sticker',
+            'status' => 'published',
+            'width' => 600,
+            'height' => 600,
+            'mimeType' => 'image/png',
+        ]);
+
+        $svgImg = Image::create([
+            'filename' => 'arrow-icon.svg',
+            'path' => '/uploads/_test_webp/arrow-icon.svg',
+            'name' => 'Arrow Vector Icon',
+            'status' => 'published',
+            'width' => 64,
+            'height' => 64,
+            'mimeType' => 'image/svg+xml',
+        ]);
+
+        try {
+            // PNG type excludes SVG and lazily generates a real transparent .webp thumbnail
+            $pngRes = $this->getJson('/api/editor/assets?type=png');
+            $pngRes->assertStatus(200)
+                ->assertJsonPath('total', 1)
+                ->assertJsonPath('assets.0.id', $pngImg->id);
+
+            $returnedThumb = (string) $pngRes->json('assets.0.thumbUrl');
+            $this->assertStringEndsWith('.webp', $returnedThumb);
+            $this->assertFileExists(public_path(ltrim($returnedThumb, '/')));
+            $this->assertStringNotContainsString('preview-', $returnedThumb);
+
+            // SVG type returns only SVG assets
+            $svgRes = $this->getJson('/api/editor/assets?type=svg');
+            $svgRes->assertStatus(200)
+                ->assertJsonPath('total', 1)
+                ->assertJsonPath('assets.0.id', $svgImg->id);
+
+            // Backgrounds type filters cleanly
+            $bgRes = $this->getJson('/api/editor/assets?type=backgrounds');
+            $bgRes->assertStatus(200)->assertJsonPath('total', 0);
+        } finally {
+            foreach (glob($tmpDir . '/*') ?: [] as $f) {
+                @unlink($f);
+            }
+            @rmdir($tmpDir);
+        }
+    }
+
+    public function test_admin_upload_generates_webp_thumbnail_and_public_grids_serve_webp_thumbnails(): void
+    {
+        $tmpPng = sys_get_temp_dir() . '/test_upload_' . uniqid() . '.png';
+        $im = imagecreatetruecolor(700, 700);
+        imagealphablending($im, false);
+        imagesavealpha($im, true);
+        $trans = imagecolorallocatealpha($im, 0, 0, 0, 127);
+        imagefilledrectangle($im, 0, 0, 700, 700, $trans);
+        $emerald = imagecolorallocatealpha($im, 16, 185, 129, 0);
+        imagefilledellipse($im, 350, 350, 480, 480, $emerald);
+        imagepng($im, $tmpPng);
+        imagedestroy($im);
+
+        $uploadedFile = new \Illuminate\Http\UploadedFile($tmpPng, 'emerald-circle.png', 'image/png', null, true);
+
+        $createdPaths = [];
+        try {
+            $uploadRes = $this->withSession($this->adminSession())
+                ->post('/api/upload', [
+                    'file' => $uploadedFile,
+                    'name' => 'Emerald Circle Badge',
+                    'tags' => json_encode(['badge', 'circle']),
+                ]);
+
+            $uploadRes->assertStatus(200)->assertJsonPath('success', true);
+            $imgData = $uploadRes->json('image');
+            $this->assertNotEmpty($imgData['path']);
+            $this->assertNotEmpty($imgData['thumbPath']);
+            $this->assertStringEndsWith('.webp', $imgData['thumbPath']);
+
+            $createdPaths = [
+                public_path(ltrim((string) $imgData['path'], '/')),
+                public_path(ltrim((string) $imgData['previewPath'], '/')),
+                public_path(ltrim((string) $imgData['thumbPath'], '/')),
+            ];
+            $this->assertFileExists($createdPaths[2]);
+
+            // Publish the uploaded image and confirm homepage + paginated catalog APIs serve the .webp thumbPath
+            Image::where('id', $imgData['id'])->update(['status' => 'published', 'thumbPath' => null]);
+
+            $homeRes = $this->getJson('/api/images/homepage');
+            $homeRes->assertStatus(200);
+            $latestThumb = (string) ($homeRes->json('latestImages.0.thumbPath') ?? '');
+            $this->assertStringEndsWith('.webp', $latestThumb);
+
+            $listRes = $this->getJson('/api/images?status=published&paginated=1');
+            $listRes->assertStatus(200);
+            $this->assertStringEndsWith('.webp', (string) ($listRes->json('images.0.thumbPath') ?? ''));
+        } finally {
+            @unlink($tmpPng);
+            foreach ($createdPaths as $p) {
+                if ($p && is_file($p)) {
+                    @unlink($p);
+                }
+            }
+        }
     }
 }

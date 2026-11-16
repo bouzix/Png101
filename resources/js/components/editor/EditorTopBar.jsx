@@ -32,9 +32,11 @@ import {
     Pencil,
     Loader2,
     ArrowLeft,
+    Eye,
 } from 'lucide-react';
 import ThemeToggle from '../ThemeToggle';
 import StudioSelect from '../ui/StudioSelect';
+import { OUTSIDE_CANVAS_MODES } from './editorHelpers';
 import { AnimatedPopover, useAnimatedPresence } from './useAnimatedPresence';
 import { usePopoverDrag } from './useDraggablePanel';
 
@@ -100,12 +102,19 @@ export default function EditorTopBar({
     snapPrefs,
     onToggleSnapPref,
     onUpdateSnapPrefs,
+    outsideCanvasMode = 'grayscale-dim',
+    onChangeOutsideCanvasMode,
+    enableOutsideCanvasPasteboard = true,
+    allowOutsideCanvasOverride = true,
+    allowedOutsideCanvasModes = null,
     layersOpen = false,
     onToggleLayers,
     allowedFormats = ['png', 'jpeg', 'webp', 'svg'],
     defaultQuality = 92,
     enableSvgExport = true,
     pageCount = 1,
+    artboards = [],
+    activeArtboardName = 'Artboard 1',
     onExport,
     exporting = false,
     adminTemplateMode = null,
@@ -136,6 +145,21 @@ export default function EditorTopBar({
     const [exportQuality, setExportQuality] = useState(defaultQuality);
     const [exportTransparent, setExportTransparent] = useState(true);
     const [exportScope, setExportScope] = useState('current');
+    const [selectedArtboardIds, setSelectedArtboardIds] = useState([]);
+
+    const artboardCount = Array.isArray(artboards) ? artboards.length : 0;
+    const totalMultiAssets = Math.max(pageCount, artboardCount);
+
+    useEffect(() => {
+        if (openMenu === 'export') {
+            if (artboardCount > 1 || pageCount > 1) {
+                setExportScope('all');
+                setSelectedArtboardIds(artboards.map((a) => a.id));
+            } else {
+                setExportScope('current');
+            }
+        }
+    }, [openMenu, artboardCount, pageCount, artboards]);
 
     const headerRef = useRef(null);
     const jsonImportRef = useRef(null);
@@ -256,7 +280,11 @@ export default function EditorTopBar({
             multiplier: exportFormat === 'svg' ? 1 : exportScale,
             quality: exportQuality / 100,
             transparent: exportTransparent,
-            scope: pageCount > 1 ? exportScope : 'current',
+            scope: totalMultiAssets > 1 ? exportScope : 'current',
+            selectedArtboardIds:
+                artboardCount > 1 && exportScope === 'all' && selectedArtboardIds.length > 0
+                    ? selectedArtboardIds
+                    : null,
         });
         setOpenMenu(null);
     };
@@ -435,8 +463,15 @@ export default function EditorTopBar({
                         <button
                             type="button"
                             data-testid="topbar-menu-resize"
-                            onClick={() => toggleMenu('resize')}
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${openMenu === 'resize'
+                            onClick={() => {
+                                clearHoverCloseTimer();
+                                if (openMenu === 'dimensions') {
+                                    setOpenMenu(null);
+                                    return;
+                                }
+                                toggleMenu('resize');
+                            }}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${openMenu === 'resize' || openMenu === 'dimensions'
                                 ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
                                 : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-white'
                                 }`}
@@ -482,6 +517,102 @@ export default function EditorTopBar({
                                     <span>Custom Size &amp; All Presets...</span>
                                 </span>
                             </button>
+                        </AnimatedPopover>
+
+                        {/* Custom Dimensions & All Presets Popover (opened from Resize menu) */}
+                        <AnimatedPopover
+                            ref={dimsDrag.panelRef}
+                            open={openMenu === 'dimensions'}
+                            originClass="origin-top-left"
+                            data-testid="topbar-dropdown-dimensions"
+                            style={{ transform: `translate3d(${dimsDrag.offset.x}px, ${dimsDrag.offset.y}px, 0)` }}
+                            className={`absolute left-0 top-full mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 shadow-2xl p-4 z-50 space-y-3 text-slate-900 dark:text-slate-100 ${dimsDrag.isDragging ? '!transition-none' : ''}`}
+                        >
+                            <div
+                                data-testid="topbar-dimensions-drag-handle"
+                                onPointerDown={dimsDrag.handleDragStart}
+                                className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 cursor-grab active:cursor-grabbing select-none"
+                            >
+                                <span className="inline-flex items-center gap-1.5 text-xs font-bold">
+                                    <GripHorizontal className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                    Canvas Dimensions &amp; Presets
+                                </span>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Max {maxWidth}×{maxHeight}</span>
+                            </div>
+
+                            {/* Custom W x H */}
+                            <div className="flex items-end gap-2 bg-slate-50 dark:bg-slate-950/70 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                                <div className="flex-1">
+                                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Width (px)</label>
+                                    <input
+                                        type="number"
+                                        min={32}
+                                        max={maxWidth}
+                                        value={resizeW}
+                                        onChange={(e) => handleCustomWChange(e.target.value)}
+                                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setResizeLock((l) => !l)}
+                                    className={`p-2 rounded-lg border cursor-pointer ${resizeLock ? 'bg-blue-600/15 border-blue-500 text-blue-600 dark:text-blue-400' : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                        }`}
+                                    data-tooltip="Lock aspect ratio"
+                                >
+                                    {resizeLock ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                                </button>
+                                <div className="flex-1">
+                                    <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Height (px)</label>
+                                    <input
+                                        type="number"
+                                        min={32}
+                                        max={maxHeight}
+                                        value={resizeH}
+                                        onChange={(e) => handleCustomHChange(e.target.value)}
+                                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        onResizeCanvas(resizeW, resizeH, 'Custom Size');
+                                        setOpenMenu(null);
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold cursor-pointer"
+                                >
+                                    Apply
+                                </button>
+                            </div>
+
+                            {/* Preset Search */}
+                            <input
+                                type="text"
+                                value={presetSearch}
+                                onChange={(e) => setPresetSearch(e.target.value)}
+                                placeholder="Search presets (YouTube, Story, Poster...)"
+                                className="w-full px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
+                            />
+
+                            <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
+                                {filteredPresets.map((p) => (
+                                    <button
+                                        key={p.id}
+                                        type="button"
+                                        onClick={() => {
+                                            onResizeCanvas(p.width, p.height, p.name);
+                                            setOpenMenu(null);
+                                        }}
+                                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/90 text-left cursor-pointer transition-colors"
+                                    >
+                                        <div>
+                                            <div className="text-xs font-semibold">{p.name}</div>
+                                            <div className="text-[10px] text-slate-500 dark:text-slate-400">{p.groupName}</div>
+                                        </div>
+                                        <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400">{p.width}×{p.height}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </AnimatedPopover>
                     </div>
 
@@ -735,6 +866,55 @@ export default function EditorTopBar({
                                     </div>
                                 )}
 
+                                {enableOutsideCanvasPasteboard && allowOutsideCanvasOverride && onChangeOutsideCanvasMode && (() => {
+                                    const visibleModes = Array.isArray(allowedOutsideCanvasModes) && allowedOutsideCanvasModes.length
+                                        ? OUTSIDE_CANVAS_MODES.filter((m) => allowedOutsideCanvasModes.includes(m.id))
+                                        : OUTSIDE_CANVAS_MODES;
+                                    const oddLast = visibleModes.length % 2 === 1;
+                                    return (
+                                        <div
+                                            data-testid="pref-outside-canvas-section"
+                                            className="pt-2.5 mt-2 border-t border-slate-200 dark:border-slate-800 px-2 pb-1 space-y-1.5"
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                                    <Eye className="w-3 h-3 text-violet-500" />
+                                                    <span>Outside Canvas</span>
+                                                </span>
+                                                <span className="text-[10px] text-slate-400">Not exported</span>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-1">
+                                                {visibleModes.map((m, idx) => {
+                                                    const active = outsideCanvasMode === m.id;
+                                                    const spanTwo = oddLast && idx === visibleModes.length - 1;
+                                                    return (
+                                                        <button
+                                                            key={m.id}
+                                                            type="button"
+                                                            data-testid={`pref-outside-${m.id}`}
+                                                            aria-pressed={active}
+                                                            title={m.desc}
+                                                            onClick={() => onChangeOutsideCanvasMode(m.id)}
+                                                            className={`px-2 py-1.5 rounded-lg text-left border transition-colors cursor-pointer ${
+                                                                active
+                                                                    ? 'bg-violet-600/15 border-violet-500/60 text-violet-700 dark:text-violet-300'
+                                                                    : 'bg-slate-50 dark:bg-slate-950 border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                                            } ${spanTwo ? 'col-span-2' : ''}`}
+                                                        >
+                                                            <span className="block text-[10px] font-bold leading-tight truncate">
+                                                                {m.label}
+                                                            </span>
+                                                            <span className="block text-[9px] text-slate-400 truncate">
+                                                                {m.desc}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
                                 {onChangeAutosaveInterval && (
                                     <div
                                         data-testid="pref-autosave-section"
@@ -789,116 +969,6 @@ export default function EditorTopBar({
                     />
                     <Pencil className="w-3 h-3 text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300 group-focus-within:text-blue-500 dark:group-focus-within:text-blue-400 shrink-0 transition-colors" />
                 </label>
-
-                {/* Canvas Resize Popover Button */}
-                <div className="relative">
-                    <button
-                        type="button"
-                        data-testid="topbar-size-button"
-                        onClick={() => toggleMenu('dimensions')}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
-                        data-tooltip="Resize Artboard or Choose Preset"
-                    >
-                        <Maximize2 className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" />
-                        <span>{canvasWidth}×{canvasHeight}</span>
-                        <ChevronDown className="w-3 h-3 text-slate-400" />
-                    </button>
-
-                    <AnimatedPopover
-                        ref={dimsDrag.panelRef}
-                        open={openMenu === 'dimensions'}
-                        originClass="origin-top-left"
-                        data-testid="topbar-dropdown-dimensions"
-                        style={{ transform: `translate3d(${dimsDrag.offset.x}px, ${dimsDrag.offset.y}px, 0)` }}
-                        className={`absolute left-0 top-full mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 shadow-2xl p-4 z-50 space-y-3 text-slate-900 dark:text-slate-100 ${dimsDrag.isDragging ? '!transition-none' : ''}`}
-                    >
-                        <div
-                            data-testid="topbar-dimensions-drag-handle"
-                            onPointerDown={dimsDrag.handleDragStart}
-                            className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800 cursor-grab active:cursor-grabbing select-none"
-                        >
-                            <span className="inline-flex items-center gap-1.5 text-xs font-bold">
-                                <GripHorizontal className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                Canvas Dimensions &amp; Presets
-                            </span>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Max {maxWidth}×{maxHeight}</span>
-                        </div>
-
-                        {/* Custom W x H */}
-                        <div className="flex items-end gap-2 bg-slate-50 dark:bg-slate-950/70 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
-                            <div className="flex-1">
-                                <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Width (px)</label>
-                                <input
-                                    type="number"
-                                    min={32}
-                                    max={maxWidth}
-                                    value={resizeW}
-                                    onChange={(e) => handleCustomWChange(e.target.value)}
-                                    className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
-                                />
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setResizeLock((l) => !l)}
-                                className={`p-2 rounded-lg border cursor-pointer ${resizeLock ? 'bg-blue-600/15 border-blue-500 text-blue-600 dark:text-blue-400' : 'border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                    }`}
-                                data-tooltip="Lock aspect ratio"
-                            >
-                                {resizeLock ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                            </button>
-                            <div className="flex-1">
-                                <label className="block text-[10px] text-slate-500 dark:text-slate-400 mb-1">Height (px)</label>
-                                <input
-                                    type="number"
-                                    min={32}
-                                    max={maxHeight}
-                                    value={resizeH}
-                                    onChange={(e) => handleCustomHChange(e.target.value)}
-                                    className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
-                                />
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    onResizeCanvas(resizeW, resizeH, 'Custom Size');
-                                    setOpenMenu(null);
-                                }}
-                                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold cursor-pointer"
-                            >
-                                Apply
-                            </button>
-                        </div>
-
-                        {/* Preset Search */}
-                        <input
-                            type="text"
-                            value={presetSearch}
-                            onChange={(e) => setPresetSearch(e.target.value)}
-                            placeholder="Search presets (YouTube, Story, Poster...)"
-                            className="w-full px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
-                        />
-
-                        <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
-                            {filteredPresets.map((p) => (
-                                <button
-                                    key={p.id}
-                                    type="button"
-                                    onClick={() => {
-                                        onResizeCanvas(p.width, p.height, p.name);
-                                        setOpenMenu(null);
-                                    }}
-                                    className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/90 text-left cursor-pointer transition-colors"
-                                >
-                                    <div>
-                                        <div className="text-xs font-semibold">{p.name}</div>
-                                        <div className="text-[10px] text-slate-500 dark:text-slate-400">{p.groupName}</div>
-                                    </div>
-                                    <span className="text-[11px] font-mono text-blue-600 dark:text-blue-400">{p.width}×{p.height}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </AnimatedPopover>
-                </div>
 
                 {/* Undo / Redo */}
                 <div className="flex items-center gap-1 pl-1 border-l border-slate-200 dark:border-slate-800">
@@ -1246,29 +1316,72 @@ export default function EditorTopBar({
                                     </label>
                                 )}
 
-                                {/* Page scope */}
-                                {pageCount > 1 && (
-                                    <div className="grid grid-cols-2 gap-1.5">
-                                        <button
-                                            type="button"
-                                            onClick={() => setExportScope('current')}
-                                            className={`py-2 rounded-xl text-[11px] font-bold cursor-pointer border ${exportScope === 'current'
-                                                ? 'bg-blue-600/15 text-blue-600 dark:text-blue-400 border-blue-500'
-                                                : 'bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'
-                                                }`}
-                                        >
-                                            Current Page
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setExportScope('all')}
-                                            className={`py-2 rounded-xl text-[11px] font-bold cursor-pointer border ${exportScope === 'all'
-                                                ? 'bg-blue-600/15 text-blue-600 dark:text-blue-400 border-blue-500'
-                                                : 'bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'
-                                                }`}
-                                        >
-                                            All {pageCount} Pages (.zip)
-                                        </button>
+                                {/* Multi-Artboard / Multi-Page Scope */}
+                                {totalMultiAssets > 1 && (
+                                    <div className="space-y-2">
+                                        <div className="grid grid-cols-2 gap-1.5">
+                                            <button
+                                                type="button"
+                                                data-testid="export-scope-current"
+                                                onClick={() => setExportScope('current')}
+                                                className={`py-2 px-2 rounded-xl text-[11px] font-bold cursor-pointer border truncate ${exportScope === 'current'
+                                                    ? 'bg-blue-600/15 text-blue-600 dark:text-blue-400 border-blue-500'
+                                                    : 'bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'
+                                                    }`}
+                                            >
+                                                {artboardCount > 1 ? `Current (${activeArtboardName})` : 'Current Page'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                data-testid="export-scope-all"
+                                                onClick={() => setExportScope('all')}
+                                                className={`py-2 px-2 rounded-xl text-[11px] font-bold cursor-pointer border truncate ${exportScope === 'all'
+                                                    ? 'bg-blue-600/15 text-blue-600 dark:text-blue-400 border-blue-500'
+                                                    : 'bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800'
+                                                    }`}
+                                            >
+                                                {artboardCount > 1
+                                                    ? `All ${artboardCount} Artboards (.zip)`
+                                                    : `All ${pageCount} Pages (.zip)`}
+                                            </button>
+                                        </div>
+
+                                        {artboardCount > 1 && exportScope === 'all' && (
+                                            <div
+                                                data-testid="export-artboard-checklist"
+                                                className="max-h-28 overflow-y-auto rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-2 space-y-1"
+                                            >
+                                                {artboards.map((ab) => {
+                                                    const checked = selectedArtboardIds.includes(ab.id);
+                                                    return (
+                                                        <label
+                                                            key={ab.id}
+                                                            className="flex items-center justify-between gap-2 px-1.5 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900 text-[11px] cursor-pointer"
+                                                        >
+                                                            <span className="inline-flex items-center gap-2 min-w-0">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={checked}
+                                                                    onChange={() => {
+                                                                        setSelectedArtboardIds((prev) => {
+                                                                            const next = prev.includes(ab.id)
+                                                                                ? prev.filter((id) => id !== ab.id)
+                                                                                : [...prev, ab.id];
+                                                                            return next.length > 0 ? next : prev;
+                                                                        });
+                                                                    }}
+                                                                    className="studio-checkbox"
+                                                                />
+                                                                <span className="font-semibold truncate">{ab.name}</span>
+                                                            </span>
+                                                            <span className="font-mono text-[10px] text-slate-400 shrink-0">
+                                                                {ab.width}×{ab.height}
+                                                            </span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -1283,8 +1396,10 @@ export default function EditorTopBar({
                                         <span>
                                             {exporting
                                                 ? 'Rendering...'
-                                                : pageCount > 1 && exportScope === 'all'
-                                                    ? `Download All Pages (.zip)`
+                                                : totalMultiAssets > 1 && exportScope === 'all'
+                                                    ? artboardCount > 1
+                                                        ? `Download ${selectedArtboardIds.length || artboardCount} Artboards (.zip)`
+                                                        : `Download All Pages (.zip)`
                                                     : `Download ${exportFormat.toUpperCase()}`}
                                         </span>
                                     </button>

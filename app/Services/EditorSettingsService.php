@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Schema;
 class EditorSettingsService
 {
     public const SETTING_KEY = 'editor_studio_settings_v1';
+    public const OUTSIDE_CANVAS_MODES = ['grayscale-dim', 'grayscale', 'dimmed', 'original', 'hidden'];
 
     public static function getDefaults(): array
     {
@@ -29,6 +30,12 @@ class EditorSettingsService
             'enableFreehandDraw' => true,
             'enableSvgExport' => true,
             'enableAutosave' => true,
+            'enableOutsideCanvasPasteboard' => true,
+            'defaultOutsideCanvasMode' => 'grayscale-dim',
+            'allowedOutsideCanvasModes' => self::OUTSIDE_CANVAS_MODES,
+            'allowOutsideCanvasUserOverride' => true,
+            'outsideCanvasOpacity' => 50,
+            'outsideCanvasPadding' => 640,
             'seoTitle' => 'Free Online PNG & Graphic Design Editor',
             'seoDescription' => 'Create stunning designs with transparent PNG assets, customizable templates, text styles, photo frames, and multi-format high-DPI export right in your browser.',
         ];
@@ -54,6 +61,21 @@ class EditorSettingsService
             if (!is_array($merged['allowedExportFormats']) || empty($merged['allowedExportFormats'])) {
                 $merged['allowedExportFormats'] = $defaults['allowedExportFormats'];
             }
+            if (!in_array($merged['defaultOutsideCanvasMode'] ?? '', self::OUTSIDE_CANVAS_MODES, true)) {
+                $merged['defaultOutsideCanvasMode'] = $defaults['defaultOutsideCanvasMode'];
+            }
+            $allowedOutside = is_array($merged['allowedOutsideCanvasModes'] ?? null)
+                ? array_values(array_intersect(self::OUTSIDE_CANVAS_MODES, $merged['allowedOutsideCanvasModes']))
+                : [];
+            if (empty($allowedOutside)) {
+                $allowedOutside = self::OUTSIDE_CANVAS_MODES;
+            }
+            if (!in_array($merged['defaultOutsideCanvasMode'], $allowedOutside, true)) {
+                $allowedOutside[] = $merged['defaultOutsideCanvasMode'];
+            }
+            $merged['allowedOutsideCanvasModes'] = array_values(array_intersect(self::OUTSIDE_CANVAS_MODES, $allowedOutside));
+            $merged['outsideCanvasOpacity'] = max(10, min(100, (int) ($merged['outsideCanvasOpacity'] ?? 50)));
+            $merged['outsideCanvasPadding'] = max(160, min(1600, (int) ($merged['outsideCanvasPadding'] ?? 640)));
             return $merged;
         } catch (\Throwable $e) {
             return $defaults;
@@ -69,6 +91,24 @@ class EditorSettingsService
         ));
         if (empty($allowedFormats)) {
             $allowedFormats = ['png'];
+        }
+
+        $defaultOutsideMode = isset($input['defaultOutsideCanvasMode'])
+            && in_array($input['defaultOutsideCanvasMode'], self::OUTSIDE_CANVAS_MODES, true)
+            ? $input['defaultOutsideCanvasMode']
+            : $current['defaultOutsideCanvasMode'];
+
+        $allowedOutsideModes = array_values(array_intersect(
+            self::OUTSIDE_CANVAS_MODES,
+            is_array($input['allowedOutsideCanvasModes'] ?? null)
+                ? $input['allowedOutsideCanvasModes']
+                : $current['allowedOutsideCanvasModes']
+        ));
+        if (empty($allowedOutsideModes)) {
+            $allowedOutsideModes = [$defaultOutsideMode];
+        } elseif (!in_array($defaultOutsideMode, $allowedOutsideModes, true)) {
+            $allowedOutsideModes[] = $defaultOutsideMode;
+            $allowedOutsideModes = array_values(array_intersect(self::OUTSIDE_CANVAS_MODES, $allowedOutsideModes));
         }
 
         $next = [
@@ -89,6 +129,16 @@ class EditorSettingsService
             'enableFreehandDraw' => array_key_exists('enableFreehandDraw', $input) ? (bool) $input['enableFreehandDraw'] : $current['enableFreehandDraw'],
             'enableSvgExport' => array_key_exists('enableSvgExport', $input) ? (bool) $input['enableSvgExport'] : $current['enableSvgExport'],
             'enableAutosave' => array_key_exists('enableAutosave', $input) ? (bool) $input['enableAutosave'] : $current['enableAutosave'],
+            'enableOutsideCanvasPasteboard' => array_key_exists('enableOutsideCanvasPasteboard', $input)
+                ? (bool) $input['enableOutsideCanvasPasteboard']
+                : $current['enableOutsideCanvasPasteboard'],
+            'defaultOutsideCanvasMode' => $defaultOutsideMode,
+            'allowedOutsideCanvasModes' => $allowedOutsideModes,
+            'allowOutsideCanvasUserOverride' => array_key_exists('allowOutsideCanvasUserOverride', $input)
+                ? (bool) $input['allowOutsideCanvasUserOverride']
+                : $current['allowOutsideCanvasUserOverride'],
+            'outsideCanvasOpacity' => max(10, min(100, (int) ($input['outsideCanvasOpacity'] ?? $current['outsideCanvasOpacity']))),
+            'outsideCanvasPadding' => max(160, min(1600, (int) ($input['outsideCanvasPadding'] ?? $current['outsideCanvasPadding']))),
             'seoTitle' => trim((string) ($input['seoTitle'] ?? $current['seoTitle'])),
             'seoDescription' => trim((string) ($input['seoDescription'] ?? $current['seoDescription'])),
         ];

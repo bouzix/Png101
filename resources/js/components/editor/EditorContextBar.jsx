@@ -22,7 +22,6 @@ import {
     ArrowDownToLine,
     CaseUpper,
     GripHorizontal,
-    Palette,
 } from 'lucide-react';
 import StudioColorPicker from '../tools/StudioColorPicker';
 import StudioSelect from '../ui/StudioSelect';
@@ -537,7 +536,6 @@ export default function EditorContextBar({
                         ariaLabel={`Change color of ${selectionMeta.textChildrenCount || 'selected'} text layers`}
                         title={`Text Color (${selectionMeta.textChildrenCount || 1} text${(selectionMeta.textChildrenCount || 1) > 1 ? 's' : ''})`}
                         customTooltip
-                        triggerIcon={<Palette className="w-3.5 h-3.5" />}
                     />
                 )}
                 <button

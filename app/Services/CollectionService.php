@@ -197,14 +197,14 @@ class CollectionService
 
             $coverPath = $col->coverImagePath;
             if (!$coverPath && !empty($finalImages)) {
-                $coverPath = $finalImages[0]->path;
+                $coverPath = ImageProcessingService::ensureWebpThumbnail($finalImages[0]) ?: $finalImages[0]->path;
             }
 
             $previewImages = array_map(fn($img) => [
                 'id' => $img->id,
                 'filename' => $img->filename,
                 'path' => $img->path,
-                'thumbPath' => $img->thumbPath,
+                'thumbPath' => ImageProcessingService::ensureWebpThumbnail($img),
                 'previewPath' => $img->previewPath,
                 'name' => $img->name,
                 'luminance' => $img->luminance,
@@ -321,7 +321,20 @@ class CollectionService
 
         $total = count($resolved);
         $paginated = array_slice($resolved, $skip, $limit);
-        $coverPath = $collection->coverImagePath ?: ($resolved[0]['path'] ?? null);
+        if (!empty($paginated)) {
+            $pageIds = array_values(array_filter(array_column($paginated, 'id')));
+            $pageModels = !empty($pageIds)
+                ? Image::whereIn('id', $pageIds)->get()->keyBy('id')
+                : collect();
+            foreach ($paginated as &$itemRow) {
+                $imgModel = $pageModels->get($itemRow['id'] ?? null);
+                if ($imgModel) {
+                    $itemRow['thumbPath'] = ImageProcessingService::ensureWebpThumbnail($imgModel);
+                }
+            }
+            unset($itemRow);
+        }
+        $coverPath = $collection->coverImagePath ?: ($paginated[0]['thumbPath'] ?? $resolved[0]['thumbPath'] ?? $resolved[0]['path'] ?? null);
 
         return [
             'collection' => [

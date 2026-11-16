@@ -41,8 +41,9 @@ function CollectionCard({ collection, isHero = false }) {
                                 className="relative h-full w-full rounded-lg bg-card-bg/80 backdrop-blur-sm border border-card-border/80 p-2 flex items-center justify-center overflow-hidden"
                             >
                                 <img
-                                    src={img.path}
+                                    src={img.thumbPath || img.path}
                                     alt=""
+                                    loading="lazy"
                                     className="max-h-full max-w-full object-contain pointer-events-none group-hover:scale-105 transition-transform duration-300"
                                 />
                             </div>

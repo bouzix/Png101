@@ -243,129 +243,171 @@ export default function EditorTemplatesAdmin({
                         </a>
                     </GlassCard>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                        {filtered.map((tpl) => (
-                            <GlassCard key={tpl.id} className="overflow-hidden flex flex-col shadow-none">
-                                <div className="relative h-44 bg-slate-900 border-b border-card-border flex items-center justify-center overflow-hidden group">
-                                    {tpl.thumbnailPath ? (
-                                        <img src={tpl.thumbnailPath} alt={tpl.title} className="w-full h-full object-cover" />
-                                    ) : (
-                                        <div className="text-xs text-slate-400">{tpl.width} × {tpl.height}</div>
-                                    )}
-                                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
-                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-md ${
-                                            tpl.status === 'published'
-                                                ? 'bg-emerald-500/85 text-white'
-                                                : tpl.status === 'draft'
-                                                    ? 'bg-amber-500/85 text-slate-950'
-                                                    : 'bg-slate-600/85 text-white'
-                                        }`}>
-                                            {tpl.status}
-                                        </span>
-                                        <span className="px-2 py-0.5 rounded-full bg-black/60 text-white text-[10px] font-mono backdrop-blur-md">
-                                            {tpl.width}×{tpl.height}
-                                        </span>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        disabled={busyId === tpl.id}
-                                        onClick={() => patchTemplate(tpl.id, { isFeatured: !tpl.isFeatured }, tpl.isFeatured ? 'Removed from Featured' : 'Marked as Featured')}
-                                        title={tpl.isFeatured ? 'Featured template' : 'Feature template'}
-                                        className={`absolute top-2.5 right-2.5 p-1.5 rounded-lg backdrop-blur-md cursor-pointer transition-colors ${
-                                            tpl.isFeatured ? 'bg-amber-500 text-slate-950' : 'bg-black/50 text-white/70 hover:text-white'
-                                        }`}
+                    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-5">
+                        {filtered.map((tpl) => {
+                            const ratioW = Math.max(1, Number(tpl.width) || 1);
+                            const ratioH = Math.max(1, Number(tpl.height) || 1);
+                            const clampedRatio = Math.max(0.45, Math.min(2.2, ratioW / ratioH));
+                            const statusPillColor =
+                                tpl.status === 'published'
+                                    ? 'bg-emerald-500'
+                                    : tpl.status === 'draft'
+                                        ? 'bg-amber-400'
+                                        : 'bg-slate-400';
+
+                            return (
+                                <div
+                                    key={tpl.id}
+                                    data-testid={`admin-template-card-${tpl.id}`}
+                                    className="break-inside-avoid mb-5 group"
+                                >
+                                    <div
+                                        style={{ aspectRatio: String(clampedRatio) }}
+                                        className="relative w-full rounded-2xl bg-slate-900 border border-card-border hover:border-primary-glow/60 overflow-hidden shadow-xs hover:shadow-md transition-all"
                                     >
-                                        <Star className="w-3.5 h-3.5" fill={tpl.isFeatured ? 'currentColor' : 'none'} />
-                                    </button>
-                                </div>
-
-                                <div className="p-4 flex-1 flex flex-col justify-between gap-3">
-                                    <div>
-                                        <div className="flex items-start justify-between gap-2">
-                                            <h3 className="text-sm font-bold text-foreground line-clamp-1">{tpl.title}</h3>
-                                            <span className="text-[11px] font-semibold text-blue-500 shrink-0">{tpl.usageCount} uses</span>
-                                        </div>
-                                        <div className="text-[11px] text-foreground/55 mt-0.5">
-                                            {tpl.categoryName} · {(tpl.pagesJson?.length || 1)} page{(tpl.pagesJson?.length || 1) > 1 ? 's' : ''}
-                                        </div>
-                                        {tpl.description && (
-                                            <p className="text-xs text-foreground/60 mt-1.5 line-clamp-2">{tpl.description}</p>
-                                        )}
-                                    </div>
-
-                                    <div className="pt-2 border-t border-card-border/70 flex flex-wrap items-center justify-between gap-2">
-                                        <div className="flex items-center gap-1.5">
-                                            <a
-                                                href={`/image-editor?adminTemplate=${tpl.id}`}
-                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-bold"
-                                            >
-                                                <Paintbrush className="w-3 h-3" />
-                                                <span>Edit Design</span>
-                                            </a>
-                                            <a
-                                                href={`/image-editor?template=${tpl.slug}`}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="p-1.5 rounded-lg bg-foreground/5 hover:bg-foreground/10 text-foreground/70"
-                                                title="Preview in public editor"
-                                            >
-                                                <Eye className="w-3.5 h-3.5" />
-                                            </a>
-                                        </div>
-
-                                        <div className="flex items-center gap-1">
-                                            {tpl.status !== 'published' ? (
-                                                <button
-                                                    type="button"
-                                                    disabled={busyId === tpl.id}
-                                                    onClick={() => patchTemplate(tpl.id, { status: 'published' }, 'Template published')}
-                                                    title="Publish"
-                                                    className="p-1.5 rounded-lg hover:bg-emerald-500/15 text-emerald-500 cursor-pointer"
-                                                >
-                                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                                </button>
+                                        <a
+                                            href={`/image-editor?adminTemplate=${tpl.id}`}
+                                            aria-label={`Edit template ${tpl.title}`}
+                                            className="w-full h-full block focus:outline-none"
+                                        >
+                                            {tpl.thumbnailPath ? (
+                                                <img
+                                                    src={tpl.thumbnailPath}
+                                                    alt={tpl.title}
+                                                    loading="lazy"
+                                                    className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-200"
+                                                />
                                             ) : (
+                                                <div className="w-full h-full flex items-center justify-center p-4 text-center text-xs font-medium text-slate-400">
+                                                    {tpl.title}
+                                                </div>
+                                            )}
+                                        </a>
+
+                                        {/* Top-Left Textless Status Pill */}
+                                        <span
+                                            data-testid={`admin-tpl-status-pill-${tpl.id}`}
+                                            title={`Status: ${tpl.status}`}
+                                            aria-label={`Status: ${tpl.status}`}
+                                            className={`absolute top-2.5 left-2.5 z-10 h-2.5 w-6 rounded-full shadow-sm ring-1 ring-white/40 pointer-events-none ${statusPillColor}`}
+                                        />
+
+                                        {/* Top-Right Featured Star */}
+                                        <button
+                                            type="button"
+                                            disabled={busyId === tpl.id}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                patchTemplate(
+                                                    tpl.id,
+                                                    { isFeatured: !tpl.isFeatured },
+                                                    tpl.isFeatured ? 'Removed from Featured' : 'Marked as Featured'
+                                                );
+                                            }}
+                                            title={tpl.isFeatured ? 'Featured template' : 'Feature template'}
+                                            aria-label={tpl.isFeatured ? 'Remove from featured' : 'Feature template'}
+                                            className={`absolute top-2 right-2 z-10 w-7 h-7 rounded-lg flex items-center justify-center backdrop-blur-md cursor-pointer transition-all duration-200 ${
+                                                tpl.isFeatured
+                                                    ? 'bg-amber-500 text-slate-950 opacity-100 shadow-sm'
+                                                    : 'bg-slate-950/60 text-white/80 hover:text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100'
+                                            }`}
+                                        >
+                                            <Star className="w-3.5 h-3.5" fill={tpl.isFeatured ? 'currentColor' : 'none'} />
+                                        </button>
+
+                                        {/* Bottom Inside-Card Icon Actions Dock */}
+                                        <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-all duration-200 pointer-events-auto">
+                                            <div className="inline-flex flex-wrap items-center justify-center gap-1 p-1 rounded-xl bg-slate-950/75 backdrop-blur-md border border-white/10 shadow-lg">
+                                                <a
+                                                    href={`/image-editor?adminTemplate=${tpl.id}`}
+                                                    title="Edit Design"
+                                                    aria-label="Edit Design"
+                                                    className="w-7 h-7 rounded-lg bg-blue-600 hover:bg-blue-500 text-white inline-flex items-center justify-center transition-colors"
+                                                >
+                                                    <Paintbrush className="w-3.5 h-3.5" />
+                                                </a>
+                                                <a
+                                                    href={`/image-editor?template=${tpl.slug}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    title="Preview in public editor"
+                                                    aria-label="Preview in public editor"
+                                                    className="w-7 h-7 rounded-lg hover:bg-white/15 text-white/85 hover:text-white inline-flex items-center justify-center transition-colors"
+                                                >
+                                                    <Eye className="w-3.5 h-3.5" />
+                                                </a>
+                                                {tpl.status !== 'published' ? (
+                                                    <button
+                                                        type="button"
+                                                        disabled={busyId === tpl.id}
+                                                        onClick={() => patchTemplate(tpl.id, { status: 'published' }, 'Template published')}
+                                                        title="Publish"
+                                                        aria-label="Publish template"
+                                                        className="w-7 h-7 rounded-lg hover:bg-emerald-500/25 text-emerald-400 inline-flex items-center justify-center cursor-pointer transition-colors"
+                                                    >
+                                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        disabled={busyId === tpl.id}
+                                                        onClick={() => patchTemplate(tpl.id, { status: 'draft' }, 'Moved to Draft')}
+                                                        title="Move to Draft"
+                                                        aria-label="Move template to Draft"
+                                                        className="w-7 h-7 rounded-lg hover:bg-amber-500/25 text-amber-400 inline-flex items-center justify-center cursor-pointer transition-colors"
+                                                    >
+                                                        <Clock className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
                                                 <button
                                                     type="button"
                                                     disabled={busyId === tpl.id}
-                                                    onClick={() => patchTemplate(tpl.id, { status: 'draft' }, 'Moved to Draft')}
-                                                    title="Move to Draft"
-                                                    className="p-1.5 rounded-lg hover:bg-amber-500/15 text-amber-500 cursor-pointer"
+                                                    onClick={() => handleDuplicate(tpl.id)}
+                                                    title="Duplicate"
+                                                    aria-label="Duplicate template"
+                                                    className="w-7 h-7 rounded-lg hover:bg-white/15 text-white/85 hover:text-white inline-flex items-center justify-center cursor-pointer transition-colors"
                                                 >
-                                                    <Clock className="w-3.5 h-3.5" />
+                                                    <Copy className="w-3.5 h-3.5" />
                                                 </button>
-                                            )}
-                                            <button
-                                                type="button"
-                                                disabled={busyId === tpl.id}
-                                                onClick={() => handleDuplicate(tpl.id)}
-                                                title="Duplicate"
-                                                className="p-1.5 rounded-lg hover:bg-foreground/10 text-foreground/65 cursor-pointer"
-                                            >
-                                                <Copy className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleExportJson(tpl)}
-                                                title="Export JSON"
-                                                className="p-1.5 rounded-lg hover:bg-foreground/10 text-foreground/65 cursor-pointer"
-                                            >
-                                                <Download className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                                type="button"
-                                                disabled={busyId === tpl.id}
-                                                onClick={() => handleDelete(tpl)}
-                                                title="Delete"
-                                                className="p-1.5 rounded-lg hover:bg-rose-500/15 text-rose-500 cursor-pointer"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleExportJson(tpl)}
+                                                    title="Export JSON"
+                                                    aria-label="Export template JSON"
+                                                    className="w-7 h-7 rounded-lg hover:bg-white/15 text-white/85 hover:text-white inline-flex items-center justify-center cursor-pointer transition-colors"
+                                                >
+                                                    <Download className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={busyId === tpl.id}
+                                                    onClick={() => handleDelete(tpl)}
+                                                    title="Delete"
+                                                    aria-label="Delete template"
+                                                    className="w-7 h-7 rounded-lg hover:bg-rose-500/30 text-rose-400 hover:text-rose-300 inline-flex items-center justify-center cursor-pointer transition-colors"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
+
+                                    {/* Below-card Metadata: Title & Uses Count */}
+                                    <div className="mt-2 px-0.5 flex items-center justify-between gap-2">
+                                        <a
+                                            href={`/image-editor?adminTemplate=${tpl.id}`}
+                                            className="min-w-0 text-xs font-bold text-foreground hover:text-primary-glow truncate transition-colors"
+                                        >
+                                            {tpl.title}
+                                        </a>
+                                        <span className="text-[11px] font-semibold text-blue-500 shrink-0">
+                                            {tpl.usageCount} uses
+                                        </span>
+                                    </div>
                                 </div>
-                            </GlassCard>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>

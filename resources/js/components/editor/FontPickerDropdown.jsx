@@ -15,10 +15,22 @@ export default function FontPickerDropdown({
     brandFonts = [],
     onChange,
     compact = false,
+    open: controlledOpen,
+    onOpenChange,
+    temporarilyHidden = false,
+    sessionKey = undefined,
 }) {
-    const [open, setOpen] = useState(false);
-    const { rendered, visible } = useAnimatedPresence(open, 295);
-    const drag = usePopoverDrag({ open });
+    const [internalOpen, setInternalOpen] = useState(false);
+    const isControlled = controlledOpen !== undefined;
+    const open = isControlled ? controlledOpen : internalOpen;
+    const setOpen = (next) => {
+        const resolved = typeof next === 'function' ? next(open) : next;
+        if (!isControlled) setInternalOpen(resolved);
+        onOpenChange?.(resolved);
+    };
+    const effectiveOpen = Boolean(open && !temporarilyHidden);
+    const { rendered, visible } = useAnimatedPresence(effectiveOpen, 295);
+    const drag = usePopoverDrag({ open, suspended: temporarilyHidden, sessionKey });
     const [query, setQuery] = useState('');
     const [category, setCategory] = useState('All');
     const [visibleLimit, setVisibleLimit] = useState(INITIAL_VISIBLE_LIMIT);
@@ -65,11 +77,15 @@ export default function FontPickerDropdown({
 
     // Close on outside click or Escape
     useEffect(() => {
-        if (!open) return;
+        if (!open || temporarilyHidden) return;
         const handleDown = (e) => {
-            if (rootRef.current && !rootRef.current.contains(e.target)) {
-                setOpen(false);
+            if (
+                (rootRef.current && rootRef.current.contains(e.target)) ||
+                (sessionKey !== undefined && e.target.closest?.('[data-editor-stage="true"] canvas, canvas.upper-canvas'))
+            ) {
+                return;
             }
+            setOpen(false);
         };
         const handleKey = (e) => {
             if (e.key === 'Escape') setOpen(false);
@@ -80,17 +96,17 @@ export default function FontPickerDropdown({
             window.removeEventListener('mousedown', handleDown);
             window.removeEventListener('keydown', handleKey);
         };
-    }, [open]);
+    }, [open, temporarilyHidden, sessionKey]);
 
     // Auto-focus search & reset scroll slice when opening or changing filters
     useEffect(() => {
-        if (open) {
+        if (effectiveOpen) {
             setTimeout(() => searchInputRef.current?.focus(), 20);
-        } else {
+        } else if (!open) {
             setQuery('');
             setVisibleLimit(INITIAL_VISIBLE_LIMIT);
         }
-    }, [open]);
+    }, [open, effectiveOpen]);
 
     useEffect(() => {
         setVisibleLimit(INITIAL_VISIBLE_LIMIT);

@@ -13,6 +13,7 @@ use App\Models\EditorUsageLog;
 use App\Models\Image;
 use App\Services\EditorDefaultsService;
 use App\Services\EditorSettingsService;
+use App\Services\ImageProcessingService;
 use App\Services\TeamService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -78,7 +79,7 @@ class EditorController extends Controller
                     'id' => $img->id,
                     'name' => $img->name ?: $img->filename,
                     'url' => $img->path ?: $img->previewPath,
-                    'thumbUrl' => $img->thumbPath ?: $img->previewPath ?: $img->path,
+                    'thumbUrl' => ImageProcessingService::ensureWebpThumbnail($img) ?: $img->path ?: $img->previewPath,
                     'width' => (int) ($img->width ?: 800),
                     'height' => (int) ($img->height ?: 800),
                     'tags' => is_array($img->tags) ? $img->tags : [],
@@ -166,11 +167,30 @@ class EditorController extends Controller
         $categoryId = trim((string) $request->query('categoryId', ''));
         $collectionId = trim((string) $request->query('collectionId', ''));
         $orientation = trim((string) $request->query('orientation', 'all'));
+        $assetType = strtolower(trim((string) $request->query('type', 'png')));
         $sort = trim((string) $request->query('sort', 'latest'));
         $limit = max(1, min(60, (int) $request->query('limit', 24)));
         $offset = max(0, (int) $request->query('offset', 0));
 
         $query = Image::where('status', 'published');
+
+        if ($assetType === 'svg') {
+            $query->where(function ($sq) {
+                $sq->where('mimeType', 'image/svg+xml')
+                    ->orWhereRaw("LOWER(COALESCE(path, '')) LIKE '%.svg'");
+            });
+        } elseif ($assetType === 'backgrounds') {
+            $query->where(function ($sq) {
+                $sq->whereRaw("LOWER(COALESCE(name, '')) LIKE '%background%'")
+                    ->orWhereRaw("LOWER(COALESCE(name, '')) LIKE '%backdrop%'")
+                    ->orWhereRaw("LOWER(COALESCE(name, '')) LIKE '%wallpaper%'")
+                    ->orWhereHas('categories', fn ($cq) => $cq->whereRaw("LOWER(name) LIKE '%background%'"));
+            });
+        } elseif ($assetType === 'png') {
+            $query->where(function ($sq) {
+                $sq->whereNull('mimeType')->orWhere('mimeType', '!=', 'image/svg+xml');
+            })->whereRaw("LOWER(COALESCE(path, '')) NOT LIKE '%.svg'");
+        }
 
         if ($categoryId !== '') {
             $catIds = Category::where('id', $categoryId)
@@ -459,11 +479,12 @@ class EditorController extends Controller
 
     private function formatAsset(Image $img, int $downloadsCount = 0): array
     {
+        $thumbUrl = ImageProcessingService::ensureWebpThumbnail($img);
         return [
             'id' => $img->id,
             'name' => $img->name ?: $img->filename,
             'url' => $img->path ?: $img->previewPath,
-            'thumbUrl' => $img->thumbPath ?: $img->previewPath ?: $img->path,
+            'thumbUrl' => $thumbUrl ?: $img->path ?: $img->previewPath,
             'width' => (int) ($img->width ?: 800),
             'height' => (int) ($img->height ?: 800),
             'tags' => is_array($img->tags) ? $img->tags : [],

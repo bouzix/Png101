@@ -16,6 +16,8 @@ export default function ScrubFontSizeControl({
     compact = false,
     open: controlledOpen,
     onOpenChange,
+    temporarilyHidden = false,
+    sessionKey = undefined,
 }) {
     const [internalOpen, setInternalOpen] = useState(false);
     const isControlled = controlledOpen !== undefined;
@@ -39,12 +41,16 @@ export default function ScrubFontSizeControl({
 
     const displayVal = Math.round(scrubVal ?? Number(value || 40));
     const clampedDisplay = Math.max(min, Math.min(max, displayVal));
-    const presence = useAnimatedPresence(open, 180);
-    const drag = usePopoverDrag({ open, panelRef: popRef });
+    const effectiveOpen = Boolean(open && !temporarilyHidden);
+    const presence = useAnimatedPresence(effectiveOpen, 180);
+    const drag = usePopoverDrag({ open, suspended: temporarilyHidden, sessionKey, panelRef: popRef });
+    const hasCustomOffset = drag.offset.x !== 0 || drag.offset.y !== 0;
 
     useLayoutEffect(() => {
-        if (!open || !triggerRef.current) return;
+        if (!effectiveOpen || !triggerRef.current) return;
+        if (hasCustomOffset) return;
         const updatePos = () => {
+            if (!triggerRef.current) return;
             const rect = triggerRef.current.getBoundingClientRect();
             const width = 236;
             const left = Math.max(10, Math.min(window.innerWidth - width - 10, rect.left + rect.width / 2 - width / 2));
@@ -55,16 +61,18 @@ export default function ScrubFontSizeControl({
             setPopPos({ top, left });
         };
         updatePos();
+        const raf = requestAnimationFrame(updatePos);
         window.addEventListener('resize', updatePos);
         window.addEventListener('scroll', updatePos, true);
         return () => {
+            cancelAnimationFrame(raf);
             window.removeEventListener('resize', updatePos);
             window.removeEventListener('scroll', updatePos, true);
         };
-    }, [open]);
+    }, [effectiveOpen, hasCustomOffset]);
 
     useEffect(() => {
-        if (!open) return undefined;
+        if (!open || temporarilyHidden) return undefined;
         window.dispatchEvent(
             new CustomEvent('png101:effect-popover-open', { detail: { trigger: triggerRef.current } })
         );
@@ -77,7 +85,8 @@ export default function ScrubFontSizeControl({
             if (
                 triggerRef.current?.contains(e.target) ||
                 popRef.current?.contains(e.target) ||
-                e.target.closest?.('[data-effect-popover-trigger="true"]')
+                e.target.closest?.('[data-effect-popover-trigger="true"]') ||
+                (sessionKey !== undefined && e.target.closest?.('[data-editor-stage="true"] canvas, canvas.upper-canvas'))
             ) {
                 return;
             }
@@ -94,7 +103,7 @@ export default function ScrubFontSizeControl({
             document.removeEventListener('pointerdown', onPointerDown);
             document.removeEventListener('keydown', onKeyDown);
         };
-    }, [open]);
+    }, [open, temporarilyHidden, sessionKey]);
 
     const handleTriggerPointerDown = (e) => {
         if (e.button !== 0) return;

@@ -275,6 +275,19 @@ class RelatedImagesService
 
         $total = count($scored);
         $paginated = array_slice($scored, $offset, $limit);
+        if (!empty($paginated)) {
+            $pageIds = array_values(array_filter(array_column($paginated, 'id')));
+            $pageModels = !empty($pageIds)
+                ? Image::whereIn('id', $pageIds)->get()->keyBy('id')
+                : collect();
+            foreach ($paginated as &$row) {
+                $imgModel = $pageModels->get($row['id'] ?? null);
+                if ($imgModel) {
+                    $row['thumbPath'] = ImageProcessingService::ensureWebpThumbnail($imgModel);
+                }
+            }
+            unset($row);
+        }
 
         return [
             'images' => $paginated,

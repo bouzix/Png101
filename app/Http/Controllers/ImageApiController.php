@@ -115,6 +115,9 @@ class ImageApiController extends Controller
                 );
             }
 
+            ImageProcessingService::attachWebpThumbnails($popularImages);
+            ImageProcessingService::attachWebpThumbnails($latestImages);
+
             return response()->json([
                 'popularImages' => $popularImages,
                 'latestImages' => $latestImages,
@@ -181,6 +184,8 @@ class ImageApiController extends Controller
                         AnalyticsService::recordSearchQuery($qParam, $total);
                     }
 
+                    ImageProcessingService::attachWebpThumbnails($images);
+
                     return response()->json([
                         'images' => $images,
                         'total' => $total,
@@ -193,6 +198,8 @@ class ImageApiController extends Controller
                     ->offset($offset)
                     ->limit($pageSize)
                     ->get(['id', 'name', 'filename', 'path', 'thumbPath', 'createdAt', 'luminance', 'contrastBgDark', 'contrastBgLight']);
+
+                ImageProcessingService::attachWebpThumbnails($images);
 
                 return response()->json([
                     'images' => $images,
@@ -209,7 +216,10 @@ class ImageApiController extends Controller
                 $query->offset($offset);
             }
 
-            return response()->json($query->get());
+            $allImages = $query->get();
+            ImageProcessingService::attachWebpThumbnails($allImages);
+
+            return response()->json($allImages);
         } catch (\Throwable $e) {
             return response()->json($paginated ? ['images' => [], 'total' => 0, 'hasMore' => false] : []);
         }
@@ -270,9 +280,11 @@ class ImageApiController extends Controller
             $previewFilename = "preview-{$filename}.jpg";
             $previewFilepath = $uploadDir . '/' . $previewFilename;
             $previewOk = ImageProcessingService::generateCheckerboardPreview($filepath, $previewFilepath, $width, $height);
-            $thumbFilename = "thumb-{$filename}.png";
+            $thumbExt = function_exists('imagewebp') ? 'webp' : 'png';
+            $thumbBase = pathinfo($filename, PATHINFO_FILENAME);
+            $thumbFilename = "thumb-{$thumbBase}.{$thumbExt}";
             $thumbFilepath = $uploadDir . '/' . $thumbFilename;
-            $thumbOk = ImageProcessingService::generateThumbnail($filepath, $thumbFilepath, 450);
+            $thumbOk = ImageProcessingService::generateThumbnail($filepath, $thumbFilepath, 360, 82);
             $luminanceResult = ImageProcessingService::calculateLuminance($filepath);
 
             $tags = [];
@@ -534,10 +546,12 @@ class ImageApiController extends Controller
             }
             $dir = dirname($src);
             $relDir = str_replace('\\', '/', dirname('/' . ltrim((string) $img->path, '/')));
-            $thumbName = 'thumb-' . basename($src) . '.png';
+            $thumbExt = function_exists('imagewebp') ? 'webp' : 'png';
+            $thumbBase = pathinfo($src, PATHINFO_FILENAME);
+            $thumbName = "thumb-{$thumbBase}.{$thumbExt}";
             $thumbDest = $dir . '/' . $thumbName;
 
-            if (ImageProcessingService::generateThumbnail($src, $thumbDest, 450)) {
+            if (ImageProcessingService::generateThumbnail($src, $thumbDest, 360, 82)) {
                 $img->thumbPath = "{$relDir}/{$thumbName}";
                 $img->save();
                 $generated++;

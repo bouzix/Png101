@@ -55,19 +55,22 @@ function EffectSliderRow({ label, value, min, max, step = 1, unit = 'px', testId
     );
 }
 
-function useEffectListUiState(open) {
+function useEffectListUiState(open, suspended = false) {
     const [expandedIds, setExpandedIds] = useState(() => new Set());
     const [editingId, setEditingId] = useState(null);
     const [draftName, setDraftName] = useState('');
+    const wasOpenRef = useRef(open);
 
     useEffect(() => {
-        if (open) {
-            // Start all shadow/glow layers collapsed whenever the panel opens
+        const wasOpen = wasOpenRef.current;
+        wasOpenRef.current = open;
+        if (open && !wasOpen && !suspended) {
+            // Start all shadow/glow layers collapsed only on a fresh open (preserve across element drag/suspend)
             setExpandedIds(new Set());
             setEditingId(null);
             setDraftName('');
         }
-    }, [open]);
+    }, [open, suspended]);
 
     const toggleExpand = (id) => {
         setExpandedIds((prev) => {
@@ -109,13 +112,25 @@ function useEffectListUiState(open) {
     };
 }
 
-function useEffectPopover(open, setOpen, triggerRef, popRef, width = 296, fallbackHeight = 420) {
+function useEffectPopover(
+    open,
+    setOpen,
+    triggerRef,
+    popRef,
+    width = 296,
+    fallbackHeight = 420,
+    suspended = false,
+    sessionKey = undefined
+) {
     const [pos, setPos] = useState({ top: 0, left: 0 });
-    const presence = useAnimatedPresence(open, 180);
-    const drag = usePopoverDrag({ open, panelRef: popRef });
+    const effectiveOpen = Boolean(open && !suspended);
+    const presence = useAnimatedPresence(effectiveOpen, 180);
+    const drag = usePopoverDrag({ open, suspended, sessionKey, panelRef: popRef });
+    const hasCustomOffset = drag.offset.x !== 0 || drag.offset.y !== 0;
 
     useLayoutEffect(() => {
-        if (!open || !triggerRef.current) return undefined;
+        if (!effectiveOpen || !triggerRef.current) return undefined;
+        if (hasCustomOffset) return undefined;
         const update = () => {
             if (!triggerRef.current) return;
             const rect = triggerRef.current.getBoundingClientRect();
@@ -139,10 +154,10 @@ function useEffectPopover(open, setOpen, triggerRef, popRef, width = 296, fallba
             window.removeEventListener('resize', update);
             window.removeEventListener('scroll', update, true);
         };
-    }, [open, triggerRef, popRef, width, fallbackHeight]);
+    }, [effectiveOpen, hasCustomOffset, triggerRef, popRef, width, fallbackHeight]);
 
     useEffect(() => {
-        if (!open) return undefined;
+        if (!open || suspended) return undefined;
         window.dispatchEvent(
             new CustomEvent('png101:effect-popover-open', { detail: { trigger: triggerRef.current } })
         );
@@ -159,7 +174,8 @@ function useEffectPopover(open, setOpen, triggerRef, popRef, width = 296, fallba
                 e.target.closest?.('[role="dialog"][aria-label="Custom color picker"]') ||
                 e.target.closest?.('[data-testid="editor-eyedropper-overlay"]') ||
                 e.target.closest?.('[data-testid="studio-select-listbox"]') ||
-                e.target.closest?.('[role="listbox"]')
+                e.target.closest?.('[role="listbox"]') ||
+                (sessionKey !== undefined && e.target.closest?.('[data-editor-stage="true"] canvas, canvas.upper-canvas'))
             ) {
                 return;
             }
@@ -176,7 +192,7 @@ function useEffectPopover(open, setOpen, triggerRef, popRef, width = 296, fallba
             document.removeEventListener('pointerdown', onPointerDown);
             document.removeEventListener('keydown', onKeyDown);
         };
-    }, [open, setOpen, triggerRef, popRef]);
+    }, [open, suspended, sessionKey, setOpen, triggerRef, popRef]);
 
     return { pos, presence, drag };
 }
@@ -373,6 +389,8 @@ export function ShadowEffectControl({
     className = '',
     open: controlledOpen,
     onOpenChange,
+    temporarilyHidden = false,
+    sessionKey = undefined,
 }) {
     const [internalOpen, setInternalOpen] = useState(false);
     const [draft, setDraft] = useState(null);
@@ -392,8 +410,17 @@ export function ShadowEffectControl({
     const items = normalized.items;
     const isEffectActive = normalized.enabled && items.some((it) => it.enabled !== false);
 
-    const { pos, presence, drag } = useEffectPopover(open, setOpenState, triggerRef, popRef, 296, 440);
-    const ui = useEffectListUiState(open);
+    const { pos, presence, drag } = useEffectPopover(
+        open,
+        setOpenState,
+        triggerRef,
+        popRef,
+        296,
+        440,
+        temporarilyHidden,
+        sessionKey
+    );
+    const ui = useEffectListUiState(open, temporarilyHidden);
 
     const commitFull = (nextCfg) => {
         const clean = normalizeShadowConfig(nextCfg);
@@ -690,6 +717,8 @@ export function GlowEffectControl({
     className = '',
     open: controlledOpen,
     onOpenChange,
+    temporarilyHidden = false,
+    sessionKey = undefined,
 }) {
     const [internalOpen, setInternalOpen] = useState(false);
     const [draft, setDraft] = useState(null);
@@ -709,8 +738,17 @@ export function GlowEffectControl({
     const items = normalized.items;
     const isEffectActive = normalized.enabled && items.some((it) => it.enabled !== false);
 
-    const { pos, presence, drag } = useEffectPopover(open, setOpenState, triggerRef, popRef, 296, 440);
-    const ui = useEffectListUiState(open);
+    const { pos, presence, drag } = useEffectPopover(
+        open,
+        setOpenState,
+        triggerRef,
+        popRef,
+        296,
+        440,
+        temporarilyHidden,
+        sessionKey
+    );
+    const ui = useEffectListUiState(open, temporarilyHidden);
 
     const commitFull = (nextCfg) => {
         const clean = normalizeGlowConfig(nextCfg);

@@ -60,18 +60,33 @@ export default function StudioColorPicker({
     customTooltip = false,
     enableEyedropper = customTooltip,
     triggerIcon = null,
+    compactTrigger = false,
+    open: controlledOpen,
+    onOpenChange,
+    temporarilyHidden = false,
+    sessionKey = undefined,
     'data-testid': dataTestId,
     dataTestId: dataTestIdProp,
 }) {
-    const [open, setOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
+    const isControlled = controlledOpen !== undefined;
+    const open = isControlled ? controlledOpen : internalOpen;
+    const setOpen = (next) => {
+        const resolved = typeof next === 'function' ? next(open) : next;
+        if (!isControlled) setInternalOpen(resolved);
+        onOpenChange?.(resolved);
+    };
     const [isPicking, setIsPicking] = useState(false);
-    const { rendered, visible } = useAnimatedPresence(open, customTooltip ? 295 : 0);
-    const isPortalRendered = customTooltip ? rendered : open;
-    const isPortalVisible = (customTooltip ? visible : open) && !isPicking;
+    const effectiveOpen = Boolean(open && !temporarilyHidden);
+    const { rendered, visible } = useAnimatedPresence(effectiveOpen, customTooltip ? 295 : 0);
+    const isPortalRendered = customTooltip ? rendered : effectiveOpen;
+    const isPortalVisible = (customTooltip ? visible : effectiveOpen) && !isPicking;
     const [anchorPos, setAnchorPos] = useState({ top: 120, left: 120 });
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const [draftHex, setDraftHex] = useState(normalizeHex(value));
+    const prevSessionRef = useRef(sessionKey);
+    const pendingResetOffsetRef = useRef(false);
 
     const triggerRef = useRef(null);
     const popoverRef = useRef(null);
@@ -120,7 +135,38 @@ export default function StudioColorPicker({
     };
 
     useEffect(() => {
-        if (!open) {
+        if (sessionKey !== undefined && sessionKey !== prevSessionRef.current) {
+            prevSessionRef.current = sessionKey;
+            pendingResetOffsetRef.current = true;
+            if (!isControlled) setInternalOpen(false);
+        }
+    }, [sessionKey, isControlled]);
+
+    useEffect(() => {
+        if (!open && !temporarilyHidden) {
+            pendingResetOffsetRef.current = true;
+        }
+    }, [open, temporarilyHidden]);
+
+    useEffect(() => {
+        if (!effectiveOpen) return undefined;
+        if (pendingResetOffsetRef.current) {
+            pendingResetOffsetRef.current = false;
+            if (dragOffset.x !== 0 || dragOffset.y !== 0) {
+                setDragOffset({ x: 0, y: 0 });
+            }
+            computeAnchor();
+            const raf = requestAnimationFrame(() => computeAnchor());
+            return () => cancelAnimationFrame(raf);
+        }
+        if (dragOffset.x !== 0 || dragOffset.y !== 0) return undefined;
+        computeAnchor();
+        const raf = requestAnimationFrame(() => computeAnchor());
+        return () => cancelAnimationFrame(raf);
+    }, [effectiveOpen, dragOffset.x, dragOffset.y]);
+
+    useEffect(() => {
+        if (!open || temporarilyHidden) {
             setIsPicking(false);
             hexEditingRef.current = false;
             return undefined;
@@ -131,7 +177,8 @@ export default function StudioColorPicker({
             if (
                 popoverRef.current?.contains(e.target) ||
                 triggerRef.current?.contains(e.target) ||
-                e.target.closest?.('[data-testid="editor-eyedropper-overlay"]')
+                e.target.closest?.('[data-testid="editor-eyedropper-overlay"]') ||
+                (sessionKey !== undefined && e.target.closest?.('[data-editor-stage="true"] canvas, canvas.upper-canvas'))
             ) {
                 return;
             }
@@ -155,7 +202,9 @@ export default function StudioColorPicker({
             }
         };
 
-        const handleReposition = () => computeAnchor();
+        const handleReposition = () => {
+            if (dragOffset.x === 0 && dragOffset.y === 0) computeAnchor();
+        };
 
         document.addEventListener('pointerdown', handlePointerDownOutside, true);
         document.addEventListener('keydown', handleEscape);
@@ -165,7 +214,7 @@ export default function StudioColorPicker({
             document.removeEventListener('keydown', handleEscape);
             window.removeEventListener('resize', handleReposition);
         };
-    }, [open]);
+    }, [open, temporarilyHidden, sessionKey, dragOffset.x, dragOffset.y]);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -227,31 +276,54 @@ export default function StudioColorPicker({
     };
 
     const swatchSizeClass =
-        size === 'sm' ? 'w-7 h-7 rounded-md' : 'w-8 h-8 rounded-lg';
+        size === 'tile'
+            ? 'w-6 h-6 rounded-full'
+            : size === 'sm'
+                ? 'w-6 h-6 rounded-full'
+                : 'w-8 h-8 rounded-full';
 
     const resolvedTestId = dataTestId || dataTestIdProp;
 
     return (
         <div className={`inline-flex items-center gap-2 ${className}`}>
             {triggerIcon ? (
-                <button
-                    ref={triggerRef}
-                    type="button"
-                    data-testid={resolvedTestId}
-                    aria-label={ariaLabel}
-                    title={customTooltip ? undefined : title}
-                    data-tooltip={customTooltip ? title : undefined}
-                    onClick={handleToggle}
-                    className={`inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 hover:bg-slate-200 dark:bg-slate-950 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-sm shrink-0 cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
-                        size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs'
-                    }`}
-                >
-                    <span className="inline-flex items-center shrink-0">{triggerIcon}</span>
-                    <span
-                        className="w-3.5 h-3.5 rounded-sm border border-black/15 dark:border-white/25 shrink-0"
-                        style={{ backgroundColor: displayColor }}
-                    />
-                </button>
+                compactTrigger ? (
+                    <button
+                        ref={triggerRef}
+                        type="button"
+                        data-testid={resolvedTestId}
+                        aria-label={ariaLabel}
+                        title={customTooltip ? undefined : title}
+                        data-tooltip={customTooltip ? title : undefined}
+                        onClick={handleToggle}
+                        className="relative p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0 cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    >
+                        <span className="inline-flex items-center justify-center">{triggerIcon}</span>
+                        <span
+                            className="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border border-white dark:border-slate-900 shadow-xs pointer-events-none"
+                            style={{ backgroundColor: displayColor }}
+                        />
+                    </button>
+                ) : (
+                    <button
+                        ref={triggerRef}
+                        type="button"
+                        data-testid={resolvedTestId}
+                        aria-label={ariaLabel}
+                        title={customTooltip ? undefined : title}
+                        data-tooltip={customTooltip ? title : undefined}
+                        onClick={handleToggle}
+                        className={`inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-100 hover:bg-slate-200 dark:bg-slate-950 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-sm shrink-0 cursor-pointer transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
+                            size === 'sm' ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs'
+                        }`}
+                    >
+                        <span className="inline-flex items-center shrink-0">{triggerIcon}</span>
+                        <span
+                            className="w-3.5 h-3.5 rounded-full border border-black/15 dark:border-white/25 shrink-0"
+                            style={{ backgroundColor: displayColor }}
+                        />
+                    </button>
+                )
             ) : (
                 <button
                     ref={triggerRef}
@@ -377,7 +449,7 @@ export default function StudioColorPicker({
                                             }}
                                             title={customTooltip ? undefined : norm.toUpperCase()}
                                             data-tooltip={customTooltip ? norm.toUpperCase() : undefined}
-                                            className={`w-5 h-5 rounded-md border cursor-pointer transition-transform hover:scale-110 ${
+                                            className={`w-5 h-5 rounded-full border cursor-pointer transition-transform hover:scale-110 ${
                                                 active
                                                     ? 'border-blue-500 ring-2 ring-blue-500/40'
                                                     : 'border-card-border'
@@ -391,7 +463,7 @@ export default function StudioColorPicker({
 
                         <div className="flex items-center gap-2">
                             <div
-                                className="w-7 h-7 rounded-lg border border-card-border shrink-0"
+                                className="w-7 h-7 rounded-full border border-card-border shrink-0"
                                 style={{ backgroundColor: displayColor }}
                             />
                             <input

@@ -23,7 +23,6 @@ import {
     CaseUpper,
     Maximize2,
     Minimize2,
-    Palette,
 } from 'lucide-react';
 import FontPickerDropdown from './FontPickerDropdown';
 import SnapToggleButtons from './SnapToggleButtons';
@@ -83,6 +82,7 @@ export default function EditorFloatingToolbar({
     onUngroupSelected,
     snapPrefs,
     onToggleSnapPref,
+    onPlacementChange,
 }) {
     const barRef = useRef(null);
     const lastMetaRef = useRef(null);
@@ -91,10 +91,11 @@ export default function EditorFloatingToolbar({
     const movedLayerIdRef = useRef(null);
 
     const shouldShow = Boolean(!hidden && incomingMeta && selectionBounds);
-    if (shouldShow && incomingMeta) {
+    const isTemporarilyHidden = Boolean(hidden && incomingMeta && selectionBounds);
+    if ((shouldShow || isTemporarilyHidden) && incomingMeta) {
         lastMetaRef.current = incomingMeta;
     }
-    const selectionMeta = shouldShow ? incomingMeta : lastMetaRef.current;
+    const selectionMeta = (shouldShow || isTemporarilyHidden) ? incomingMeta : lastMetaRef.current;
 
     const [rendered, setRendered] = useState(shouldShow);
     const [visible, setVisible] = useState(false);
@@ -103,23 +104,84 @@ export default function EditorFloatingToolbar({
     const [placement, setPlacement] = useState('above');
     const [isDraggingBar, setIsDraggingBar] = useState(false);
     const [expanded, setExpanded] = useState(false);
-    const [activeEffectPanel, setActiveEffectPanel] = useState(null); // 'font-size' | 'shadow' | 'shadow-exp' | 'glow' | 'glow-exp' | null
+    const [activeEffectPanel, setActiveEffectPanel] = useState(null);
     const { rendered: expandedRendered, visible: expandedVisible } = useAnimatedPresence(
-        Boolean(shouldShow && expanded),
+        Boolean(shouldShow && expanded && !selectionMeta?.lockedLayer),
         295
     );
+    const isLocked = Boolean(selectionMeta?.lockedLayer);
+    const fullControlsContentRef = useRef(null);
+    const lockAnimTimerRef = useRef(null);
+    const prevLockedRef = useRef(isLocked);
+    const [lockAnim, setLockAnim] = useState(() => ({
+        collapsed: isLocked,
+        transitioning: false,
+        maxW: isLocked ? 0 : null,
+    }));
 
     useEffect(() => {
-        if (!shouldShow) setActiveEffectPanel(null);
-    }, [shouldShow]);
+        if (!shouldShow && !isTemporarilyHidden) {
+            if (lockAnimTimerRef.current) {
+                clearTimeout(lockAnimTimerRef.current);
+                lockAnimTimerRef.current = null;
+            }
+            prevLockedRef.current = isLocked;
+            setLockAnim({ collapsed: isLocked, transitioning: false, maxW: isLocked ? 0 : null });
+            return undefined;
+        }
+        if (prevLockedRef.current === isLocked) {
+            return undefined;
+        }
+        prevLockedRef.current = isLocked;
+        if (lockAnimTimerRef.current) {
+            clearTimeout(lockAnimTimerRef.current);
+            lockAnimTimerRef.current = null;
+        }
+        const measuredW = Math.max(220, fullControlsContentRef.current?.scrollWidth || 640);
+        if (!isLocked) {
+            // Smoothly expand from locked (0px) -> full normal floating toolbar
+            setLockAnim({ collapsed: true, transitioning: true, maxW: 0 });
+            const raf = requestAnimationFrame(() => {
+                setLockAnim({ collapsed: false, transitioning: true, maxW: measuredW });
+            });
+            lockAnimTimerRef.current = setTimeout(() => {
+                setLockAnim({ collapsed: false, transitioning: false, maxW: null });
+            }, 320);
+            return () => cancelAnimationFrame(raf);
+        } else {
+            // Smoothly collapse to locked floating toolbar
+            setExpanded(false);
+            setActiveEffectPanel(null);
+            setLockAnim({ collapsed: false, transitioning: true, maxW: measuredW });
+            const raf = requestAnimationFrame(() => {
+                setLockAnim({ collapsed: true, transitioning: true, maxW: 0 });
+            });
+            lockAnimTimerRef.current = setTimeout(() => {
+                setLockAnim({ collapsed: true, transitioning: false, maxW: 0 });
+            }, 320);
+            return () => cancelAnimationFrame(raf);
+        }
+    }, [isLocked, shouldShow, isTemporarilyHidden]);
 
-    // Reset manual toolbar position when switching to a different layer/object
-    const activeLayerId = incomingMeta?.layerId || incomingMeta?.type || null;
     useEffect(() => {
-        setActiveEffectPanel(null);
-        if (activeLayerId && movedLayerIdRef.current && movedLayerIdRef.current !== activeLayerId) {
-            setCustomCoords(null);
-            movedLayerIdRef.current = null;
+        return () => {
+            if (lockAnimTimerRef.current) clearTimeout(lockAnimTimerRef.current);
+        };
+    }, []);
+
+    // Reset manual toolbar position & open sub-panels when switching to another element; preserve moved position while fading out on deselect
+    const activeLayerId = incomingMeta?.selectionKey || incomingMeta?.layerId || incomingMeta?.type || null;
+    const prevActiveLayerIdRef = useRef(activeLayerId);
+    useEffect(() => {
+        const prev = prevActiveLayerIdRef.current;
+        if (prev !== activeLayerId) {
+            prevActiveLayerIdRef.current = activeLayerId;
+            setActiveEffectPanel(null);
+            setExpanded(false);
+            if (activeLayerId && prev && activeLayerId !== prev) {
+                setCustomCoords(null);
+                movedLayerIdRef.current = null;
+            }
         }
     }, [activeLayerId]);
 
@@ -145,11 +207,17 @@ export default function EditorFloatingToolbar({
         }
 
         setVisible(false);
+        // When temporarily hidden (e.g. moving/transforming the selected element), keep toolbar & panel states/positions mounted!
+        if (isTemporarilyHidden) {
+            return undefined;
+        }
+
         exitTimerRef.current = setTimeout(() => {
             setRendered(false);
             setCoords(null);
             setCustomCoords(null);
             setExpanded(false);
+            setActiveEffectPanel(null);
             movedLayerIdRef.current = null;
             lastMetaRef.current = null;
         }, 295);
@@ -157,7 +225,7 @@ export default function EditorFloatingToolbar({
         return () => {
             if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
         };
-    }, [shouldShow]);
+    }, [shouldShow, isTemporarilyHidden]);
 
     useLayoutEffect(() => {
         if (!shouldShow || !viewportRef?.current || !artboardRef?.current) {
@@ -186,8 +254,8 @@ export default function EditorFloatingToolbar({
             const maxLeft = Math.max(12, vpRect.width - barW - 58);
             const left = Math.max(12, Math.min(maxLeft, objCenterX - barW / 2));
 
-            // Prefer sitting cleanly above rotation handle; flip below object if near viewport top
-            const aboveTop = objTop - barH - 28;
+            // Prefer sitting cleanly above element; flip below object if near viewport top
+            const aboveTop = objTop - barH - 14;
             const belowTop = objBottom + 16;
             let nextPlacement = 'above';
             let top = aboveTop;
@@ -198,6 +266,14 @@ export default function EditorFloatingToolbar({
                 } else {
                     top = Math.max(10, Math.min(vpRect.height - barH - 10, aboveTop));
                 }
+            }
+
+            if (customCoords) {
+                const objMidY = (objTop + objBottom) / 2;
+                const customMidY = customCoords.top + barH / 2;
+                onPlacementChange?.(customMidY > objMidY ? 'below' : 'above');
+            } else {
+                onPlacementChange?.(nextPlacement);
             }
 
             setPlacement(nextPlacement);
@@ -215,7 +291,7 @@ export default function EditorFloatingToolbar({
             cancelAnimationFrame(raf);
             if (ro) ro.disconnect();
         };
-    }, [shouldShow, incomingMeta, selectionBounds, viewportRef, artboardRef, zoom, panOffset, canvasWidth, canvasHeight, expanded]);
+    }, [shouldShow, incomingMeta, selectionBounds, viewportRef, artboardRef, zoom, panOffset, canvasWidth, canvasHeight, expanded, isLocked, customCoords, onPlacementChange]);
 
     // Global drag listeners while moving the floating mini-toolbar
     useEffect(() => {
@@ -324,6 +400,7 @@ export default function EditorFloatingToolbar({
             }
             data-testid="floating-selection-toolbar"
             data-visible={isShown ? 'true' : 'false'}
+            data-locked={isLocked ? 'true' : 'false'}
             data-expanded={expanded ? 'true' : 'false'}
             data-moved={customCoords ? 'true' : 'false'}
             className={`absolute z-30 max-w-[calc(100%-76px)] rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-700/90 shadow-2xl px-2 py-1.5 flex flex-col text-xs text-slate-700 dark:text-slate-200 select-none ${originClass} ${
@@ -337,7 +414,7 @@ export default function EditorFloatingToolbar({
             }`}
         >
             {/* COMPACT MINI-TOOLBAR ROW */}
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className={`flex items-center ${lockAnim.collapsed ? 'gap-0.5' : 'gap-1.5'} ${!lockAnim.collapsed && !lockAnim.transitioning ? 'flex-wrap' : 'flex-nowrap'}`}>
                 {/* Drag Grip Handle to reposition mini-toolbar anywhere on workspace */}
             <button
                 type="button"
@@ -353,6 +430,21 @@ export default function EditorFloatingToolbar({
             >
                 <GripVertical className="w-3.5 h-3.5" />
             </button>
+
+            <div
+                data-testid="floating-toolbar-unlocked-controls"
+                style={{
+                    maxWidth: lockAnim.maxW === null ? undefined : `${lockAnim.maxW}px`,
+                    opacity: lockAnim.collapsed ? 0 : 1,
+                    overflow: lockAnim.collapsed || lockAnim.transitioning ? 'hidden' : 'visible',
+                    pointerEvents: lockAnim.collapsed ? 'none' : 'auto',
+                    transition: lockAnim.transitioning
+                        ? 'max-width 300ms cubic-bezier(0.22, 1, 0.36, 1), opacity 240ms ease'
+                        : undefined,
+                }}
+                aria-hidden={lockAnim.collapsed}
+            >
+                <div ref={fullControlsContentRef} className="flex items-center gap-1.5 w-max">
             {/* TEXT MINI-TOOLBAR */}
             {isText && (
                 <>
@@ -360,6 +452,10 @@ export default function EditorFloatingToolbar({
                         value={selectionMeta.fontFamily || 'Inter'}
                         brandFonts={fonts}
                         compact
+                        open={activeEffectPanel === 'font-picker'}
+                        onOpenChange={(next) => setActiveEffectPanel(next ? 'font-picker' : null)}
+                        temporarilyHidden={isTemporarilyHidden}
+                        sessionKey={activeLayerId}
                         onChange={(family) => onUpdateProp('fontFamily', family)}
                     />
 
@@ -384,6 +480,8 @@ export default function EditorFloatingToolbar({
                         compact
                         open={activeEffectPanel === 'font-size'}
                         onOpenChange={(next) => setActiveEffectPanel(next ? 'font-size' : null)}
+                        temporarilyHidden={isTemporarilyHidden}
+                        sessionKey={activeLayerId}
                     />
 
                     <StudioColorPicker
@@ -392,6 +490,10 @@ export default function EditorFloatingToolbar({
                         size="sm"
                         title="Text color"
                         customTooltip
+                        open={activeEffectPanel === 'color-text'}
+                        onOpenChange={(next) => setActiveEffectPanel(next ? 'color-text' : null)}
+                        temporarilyHidden={isTemporarilyHidden}
+                        sessionKey={activeLayerId}
                     />
 
                     {/* Text Alignment & Orientation */}
@@ -440,6 +542,8 @@ export default function EditorFloatingToolbar({
                             compact
                             open={activeEffectPanel === 'shadow'}
                             onOpenChange={(next) => setActiveEffectPanel(next ? 'shadow' : null)}
+                            temporarilyHidden={isTemporarilyHidden}
+                            sessionKey={activeLayerId}
                         />
                         <GlowEffectControl
                             glowConfig={selectionMeta.glowConfig}
@@ -449,6 +553,8 @@ export default function EditorFloatingToolbar({
                             compact
                             open={activeEffectPanel === 'glow'}
                             onOpenChange={(next) => setActiveEffectPanel(next ? 'glow' : null)}
+                            temporarilyHidden={isTemporarilyHidden}
+                            sessionKey={activeLayerId}
                         />
                     </div>
                 </>
@@ -479,6 +585,8 @@ export default function EditorFloatingToolbar({
                         label="Glow"
                         open={activeEffectPanel === 'glow'}
                         onOpenChange={(next) => setActiveEffectPanel(next ? 'glow' : null)}
+                        temporarilyHidden={isTemporarilyHidden}
+                        sessionKey={activeLayerId}
                     />
 
                     <div className="flex items-center gap-0.5 pl-1 border-l border-slate-200 dark:border-slate-800">
@@ -513,6 +621,8 @@ export default function EditorFloatingToolbar({
                             compact
                             open={activeEffectPanel === 'shadow'}
                             onOpenChange={(next) => setActiveEffectPanel(next ? 'shadow' : null)}
+                            temporarilyHidden={isTemporarilyHidden}
+                            sessionKey={activeLayerId}
                         />
                         <button
                             type="button"
@@ -537,6 +647,10 @@ export default function EditorFloatingToolbar({
                             size="sm"
                             title="Shape fill color"
                             customTooltip
+                            open={activeEffectPanel === 'color-shape-fill'}
+                            onOpenChange={(next) => setActiveEffectPanel(next ? 'color-shape-fill' : null)}
+                            temporarilyHidden={isTemporarilyHidden}
+                            sessionKey={activeLayerId}
                         />
                     </div>
 
@@ -548,6 +662,10 @@ export default function EditorFloatingToolbar({
                             size="sm"
                             title="Stroke color"
                             customTooltip
+                            open={activeEffectPanel === 'color-shape-stroke'}
+                            onOpenChange={(next) => setActiveEffectPanel(next ? 'color-shape-stroke' : null)}
+                            temporarilyHidden={isTemporarilyHidden}
+                            sessionKey={activeLayerId}
                         />
                         <input
                             type="number"
@@ -595,6 +713,8 @@ export default function EditorFloatingToolbar({
                             compact
                             open={activeEffectPanel === 'shadow'}
                             onOpenChange={(next) => setActiveEffectPanel(next ? 'shadow' : null)}
+                            temporarilyHidden={isTemporarilyHidden}
+                            sessionKey={activeLayerId}
                         />
                         <GlowEffectControl
                             glowConfig={selectionMeta.glowConfig}
@@ -604,6 +724,8 @@ export default function EditorFloatingToolbar({
                             compact
                             open={activeEffectPanel === 'glow'}
                             onOpenChange={(next) => setActiveEffectPanel(next ? 'glow' : null)}
+                            temporarilyHidden={isTemporarilyHidden}
+                            sessionKey={activeLayerId}
                         />
                     </div>
                 </>
@@ -621,7 +743,10 @@ export default function EditorFloatingToolbar({
                             ariaLabel={`Change color of ${selectionMeta.textChildrenCount || 'selected'} text layers`}
                             title={`Text Color (${selectionMeta.textChildrenCount || 1} text${(selectionMeta.textChildrenCount || 1) > 1 ? 's' : ''})`}
                             customTooltip
-                            triggerIcon={<Palette className="w-3.5 h-3.5" />}
+                            open={activeEffectPanel === 'color-multi-text'}
+                            onOpenChange={(next) => setActiveEffectPanel(next ? 'color-multi-text' : null)}
+                            temporarilyHidden={isTemporarilyHidden}
+                            sessionKey={activeLayerId}
                         />
                     )}
                     {isMulti && (
@@ -677,6 +802,8 @@ export default function EditorFloatingToolbar({
                         compact
                         open={activeEffectPanel === 'shadow'}
                         onOpenChange={(next) => setActiveEffectPanel(next ? 'shadow' : null)}
+                        temporarilyHidden={isTemporarilyHidden}
+                        sessionKey={activeLayerId}
                     />
                     <GlowEffectControl
                         glowConfig={selectionMeta.glowConfig}
@@ -686,14 +813,19 @@ export default function EditorFloatingToolbar({
                         compact
                         open={activeEffectPanel === 'glow'}
                         onOpenChange={(next) => setActiveEffectPanel(next ? 'glow' : null)}
+                        temporarilyHidden={isTemporarilyHidden}
+                        sessionKey={activeLayerId}
                     />
                 </div>
             )}
+                </div>
+            </div>
 
             {/* COMMON QUICK ACTIONS ON RIGHT EDGE */}
-            <div className="flex items-center gap-0.5 pl-1 border-l border-slate-200 dark:border-slate-800">
+            <div className={`flex items-center gap-0.5 ${isLocked ? '' : 'pl-1 border-l border-slate-200 dark:border-slate-800'}`}>
                 <button
                     type="button"
+                    data-testid="floating-toolbar-duplicate"
                     onClick={onDuplicate}
                     data-tooltip="Duplicate (Ctrl+D)"
                     className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer"
@@ -702,11 +834,12 @@ export default function EditorFloatingToolbar({
                 </button>
                 <button
                     type="button"
+                    data-testid="floating-toolbar-lock"
                     onClick={onToggleLock}
                     data-tooltip={selectionMeta.lockedLayer ? 'Unlock Layer' : 'Lock Layer'}
                     className={`p-1.5 rounded-lg cursor-pointer ${
                         selectionMeta.lockedLayer
-                            ? 'bg-amber-500/20 text-amber-500 dark:text-amber-400'
+                            ? 'bg-amber-500/20 text-amber-500 dark:text-amber-400 hover:bg-amber-500/30'
                             : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
                     }`}
                 >
@@ -714,27 +847,36 @@ export default function EditorFloatingToolbar({
                 </button>
                 <button
                     type="button"
-                    onClick={onDelete}
-                    data-tooltip="Delete (Del)"
-                    className="p-1.5 rounded-lg hover:bg-rose-500/15 dark:hover:bg-rose-500/20 text-rose-500 dark:text-rose-400 cursor-pointer"
+                    data-testid="floating-toolbar-delete"
+                    disabled={isLocked}
+                    aria-disabled={isLocked}
+                    onClick={isLocked ? undefined : onDelete}
+                    data-tooltip={isLocked ? 'Unlock layer to delete' : 'Delete (Del)'}
+                    className={`p-1.5 rounded-lg ${
+                        isLocked
+                            ? 'text-rose-400/50 dark:text-rose-500/40 opacity-50 cursor-not-allowed'
+                            : 'hover:bg-rose-500/15 dark:hover:bg-rose-500/20 text-rose-500 dark:text-rose-400 cursor-pointer'
+                    }`}
                 >
                     <Trash2 className="w-3.5 h-3.5" />
                 </button>
-                <button
-                    type="button"
-                    data-testid="floating-toolbar-expand"
-                    aria-expanded={expanded}
-                    aria-label={expanded ? 'Collapse parameters' : 'Expand more parameters'}
-                    data-tooltip={expanded ? 'Collapse parameters' : 'Expand more parameters'}
-                    onClick={() => setExpanded((prev) => !prev)}
-                    className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
-                        expanded
-                            ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
-                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
-                    }`}
-                >
-                    {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                </button>
+                {!isLocked && (
+                    <button
+                        type="button"
+                        data-testid="floating-toolbar-expand"
+                        aria-expanded={expanded}
+                        aria-label={expanded ? 'Collapse parameters' : 'Expand more parameters'}
+                        data-tooltip={expanded ? 'Collapse parameters' : 'Expand more parameters'}
+                        onClick={() => setExpanded((prev) => !prev)}
+                        className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                            expanded
+                                ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
+                                : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
+                        }`}
+                    >
+                        {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+                    </button>
+                )}
             </div>
             </div>
 
@@ -818,6 +960,8 @@ export default function EditorFloatingToolbar({
                                             compact
                                             open={activeEffectPanel === 'shadow-exp'}
                                             onOpenChange={(next) => setActiveEffectPanel(next ? 'shadow-exp' : null)}
+                                            temporarilyHidden={isTemporarilyHidden}
+                                            sessionKey={activeLayerId}
                                         />
                                         <GlowEffectControl
                                             glowConfig={selectionMeta.glowConfig}
@@ -827,6 +971,8 @@ export default function EditorFloatingToolbar({
                                             compact
                                             open={activeEffectPanel === 'glow-exp'}
                                             onOpenChange={(next) => setActiveEffectPanel(next ? 'glow-exp' : null)}
+                                            temporarilyHidden={isTemporarilyHidden}
+                                            sessionKey={activeLayerId}
                                         />
                                         <div className="flex items-center gap-1.5 ml-auto">
                                             <span className="text-[10px] text-slate-500 dark:text-slate-400">
@@ -838,6 +984,10 @@ export default function EditorFloatingToolbar({
                                                 size="sm"
                                                 title="Text outline color"
                                                 customTooltip
+                                                open={activeEffectPanel === 'color-text-outline'}
+                                                onOpenChange={(next) => setActiveEffectPanel(next ? 'color-text-outline' : null)}
+                                                temporarilyHidden={isTemporarilyHidden}
+                                                sessionKey={activeLayerId}
                                             />
                                             <input
                                                 type="number"
@@ -1029,6 +1179,8 @@ export default function EditorFloatingToolbar({
                                                 compact
                                                 open={activeEffectPanel === 'shadow-exp'}
                                                 onOpenChange={(next) => setActiveEffectPanel(next ? 'shadow-exp' : null)}
+                                                temporarilyHidden={isTemporarilyHidden}
+                                                sessionKey={activeLayerId}
                                             />
                                             <GlowEffectControl
                                                 glowConfig={selectionMeta.glowConfig}
@@ -1038,6 +1190,8 @@ export default function EditorFloatingToolbar({
                                                 compact
                                                 open={activeEffectPanel === 'glow-exp'}
                                                 onOpenChange={(next) => setActiveEffectPanel(next ? 'glow-exp' : null)}
+                                                temporarilyHidden={isTemporarilyHidden}
+                                                sessionKey={activeLayerId}
                                             />
                                         </div>
                                     )}

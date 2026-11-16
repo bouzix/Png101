@@ -42,7 +42,7 @@ function savePanelOffset(panelKey, offset) {
  * Shared drag-to-move controller for floating editor panels (Layers, Draw, Background, etc.).
  * Persists custom offsets per panel key across close/reopen and reloads.
  */
-export function useDraggablePanel(panelKey) {
+export function useDraggablePanel(panelKey, extraOffset = { x: 0, y: 0 }) {
     const panelRef = useRef(null);
     const [state, setState] = useState(() => ({
         key: panelKey,
@@ -59,6 +59,8 @@ export function useDraggablePanel(panelKey) {
 
     const offsetRef = useRef(offset);
     offsetRef.current = offset;
+    const extraOffsetRef = useRef(extraOffset);
+    extraOffsetRef.current = extraOffset || { x: 0, y: 0 };
 
     useEffect(() => {
         setState({ key: panelKey, offset: getSavedOffset(panelKey) });
@@ -109,8 +111,11 @@ export function useDraggablePanel(panelKey) {
         e.preventDefault();
         const rect = el.getBoundingClientRect();
         const cur = offsetRef.current;
-        const baseLeft = rect.left - cur.x;
-        const baseTop = rect.top - cur.y;
+        const ext = extraOffsetRef.current || { x: 0, y: 0 };
+        const visualX = cur.x + (ext.x || 0);
+        const visualY = cur.y + (ext.y || 0);
+        const baseLeft = rect.left - visualX;
+        const baseTop = rect.top - visualY;
 
         // Walk from parentElement so a panel whose root has overflow-hidden doesn't clamp against itself.
         const clipEl = el.parentElement?.closest('.overflow-hidden') ?? null;
@@ -136,13 +141,16 @@ export function useDraggablePanel(panelKey) {
         dragRef.current = {
             startX: e.clientX,
             startY: e.clientY,
-            origX: cur.x,
-            origY: cur.y,
+            origX: visualX,
+            origY: visualY,
             minX: minScreenLeft - baseLeft,
             maxX: maxScreenLeft - baseLeft,
             minY: minScreenTop - baseTop,
             maxY: maxScreenTop - baseTop,
         };
+        const synced = { x: Math.round(visualX), y: Math.round(visualY) };
+        offsetRef.current = synced;
+        setState({ key: keyRef.current, offset: synced });
         setIsDragging(true);
     }, []);
 
@@ -169,20 +177,45 @@ export function useDraggablePanel(panelKey) {
  * Ephemeral viewport-clamped drag offset hook for popovers, dropdowns, and modals.
  * Resets back to anchor position whenever the panel opens so closed exit fades stay in place.
  */
-export function usePopoverDrag({ open = true, panelRef: externalRef = null, resetOnOpen = true } = {}) {
+export function usePopoverDrag({
+    open = true,
+    suspended = false,
+    sessionKey = undefined,
+    panelRef: externalRef = null,
+    resetOnOpen = true,
+} = {}) {
     const internalRef = useRef(null);
     const panelRef = externalRef || internalRef;
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
     const offsetRef = useRef(offset);
     offsetRef.current = offset;
+    const prevOpenRef = useRef(open);
+    const prevSessionRef = useRef(sessionKey);
+    const pendingResetRef = useRef(false);
 
     useEffect(() => {
-        if (open && resetOnOpen) {
+        if (sessionKey !== undefined && sessionKey !== prevSessionRef.current) {
+            prevSessionRef.current = sessionKey;
+            pendingResetRef.current = true;
+        }
+    }, [sessionKey]);
+
+    useEffect(() => {
+        const wasOpen = prevOpenRef.current;
+        prevOpenRef.current = open;
+        if (!open && !suspended) {
+            // Defer offset reset until the next open so exit fade-out stays at the dragged position
+            pendingResetRef.current = true;
+            setIsDragging(false);
+            return;
+        }
+        if (open && !wasOpen && !suspended && (resetOnOpen || pendingResetRef.current)) {
+            pendingResetRef.current = false;
             setOffset({ x: 0, y: 0 });
             setIsDragging(false);
         }
-    }, [open, resetOnOpen]);
+    }, [open, suspended, resetOnOpen]);
 
     const handleDragStart = useCallback((e) => {
         if (e.button !== 0) return;

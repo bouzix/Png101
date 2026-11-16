@@ -144,12 +144,16 @@ class ImageProcessingService
     }
 
     /**
-     * Generate a lightweight transparent PNG thumbnail (max bounding box $maxSize px) for catalog grids.
-     * Returns false cleanly when the source image is already compact so no duplicate file is stored.
+     * Generate a lightweight transparent WebP (preferred) or PNG thumbnail (max bounding box $maxSize px)
+     * for catalog & editor asset grids.
      */
-    public static function generateThumbnail(string $sourcePath, string $destPath, int $maxSize = 450): bool
+    public static function generateThumbnail(string $sourcePath, string $destPath, int $maxSize = 360, int $quality = 82): bool
     {
         if (!function_exists('imagecreatefromstring') || !is_file($sourcePath)) {
+            return false;
+        }
+
+        if (str_ends_with(strtolower($sourcePath), '.svg')) {
             return false;
         }
 
@@ -172,8 +176,9 @@ class ImageProcessingService
                 return false;
             }
 
+            $isWebpDest = str_ends_with(strtolower($destPath), '.webp') && function_exists('imagewebp');
             $fileSize = @filesize($sourcePath) ?: 0;
-            if ($origW <= $maxSize && $origH <= $maxSize && $fileSize > 0 && $fileSize <= 40 * 1024) {
+            if (!$isWebpDest && $origW <= $maxSize && $origH <= $maxSize && $fileSize > 0 && $fileSize <= 40 * 1024) {
                 imagedestroy($src);
                 return false;
             }
@@ -194,19 +199,86 @@ class ImageProcessingService
             imagefilledrectangle($thumb, 0, 0, $targetW, $targetH, $transparent);
 
             imagecopyresampled($thumb, $src, 0, 0, 0, 0, $targetW, $targetH, $origW, $origH);
-            $saved = @imagepng($thumb, $destPath, 7);
+            $saved = $isWebpDest
+                ? @imagewebp($thumb, $destPath, $quality)
+                : @imagepng($thumb, $destPath, 7);
 
             imagedestroy($src);
             imagedestroy($thumb);
 
-            if ($saved && is_file($destPath) && $fileSize > 0 && (@filesize($destPath) ?: 0) >= $fileSize) {
+            if (!$saved || !is_file($destPath) || (@filesize($destPath) ?: 0) === 0) {
                 @unlink($destPath);
                 return false;
             }
 
-            return (bool) $saved;
+            return true;
         } catch (\Throwable $e) {
             return false;
+        }
+    }
+
+    /**
+     * Ensure an Image record has a compact transparent WebP thumbnail on disk and return its public path.
+     * Never falls back to checkerboard preview JPGs when the transparent source image is available.
+     */
+    public static function ensureWebpThumbnail(\App\Models\Image $img, int $maxSize = 360): ?string
+    {
+        $rawPath = (string) ($img->path ?? '');
+        if ($rawPath === '') {
+            return $img->thumbPath ?: null;
+        }
+
+        if (str_ends_with(strtolower($rawPath), '.svg') || strtolower((string) ($img->mimeType ?? '')) === 'image/svg+xml') {
+            return $rawPath;
+        }
+
+        $existingThumb = (string) ($img->thumbPath ?? '');
+        if ($existingThumb !== '' && str_ends_with(strtolower($existingThumb), '.webp')) {
+            $existingFile = public_path('/' . ltrim($existingThumb, '/'));
+            if (is_file($existingFile)) {
+                return $existingThumb;
+            }
+        }
+
+        $src = public_path('/' . ltrim($rawPath, '/'));
+        if (!is_file($src)) {
+            return $existingThumb !== '' ? $existingThumb : $rawPath;
+        }
+
+        $relDir = str_replace('\\', '/', dirname('/' . ltrim($rawPath, '/')));
+        $baseName = pathinfo($src, PATHINFO_FILENAME);
+        $ext = function_exists('imagewebp') ? 'webp' : 'png';
+        $thumbName = "thumb-{$baseName}.{$ext}";
+        $destPath = dirname($src) . '/' . $thumbName;
+        $relThumbPath = rtrim($relDir, '/') . '/' . $thumbName;
+
+        if (is_file($destPath) || self::generateThumbnail($src, $destPath, $maxSize, 82)) {
+            if ($img->thumbPath !== $relThumbPath) {
+                $img->thumbPath = $relThumbPath;
+                try {
+                    $img->saveQuietly();
+                } catch (\Throwable $e) {
+                    // Ignore persistence error if read-only
+                }
+            }
+            return $relThumbPath;
+        }
+
+        return $rawPath;
+    }
+
+    /**
+     * Ensure every Image model in a collection/array has its compact WebP thumbPath populated.
+     */
+    public static function attachWebpThumbnails(iterable $images, int $maxSize = 360): void
+    {
+        foreach ($images as $img) {
+            if ($img instanceof \App\Models\Image) {
+                $thumb = self::ensureWebpThumbnail($img, $maxSize);
+                if ($thumb) {
+                    $img->thumbPath = $thumb;
+                }
+            }
         }
     }
 
