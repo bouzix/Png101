@@ -120,6 +120,9 @@ export default function EditorTopBar({
     const { props: pageProps } = usePage();
     const auth = pageProps?.auth || {};
     const welcomeName = auth.role === 'team_member' && auth.name ? auth.name : 'Admin';
+    const isStaffAuthenticated =
+        Boolean(auth?.authenticated) && (auth?.role === 'super_admin' || auth?.role === 'team_member');
+    const canSaveAsTemplate = Boolean(canManageEditor && isStaffAuthenticated);
 
     // 'file' | 'resize' | 'editing' | 'dimensions' | 'export' | null
     const [openMenu, setOpenMenu] = useState(null);
@@ -1086,7 +1089,7 @@ export default function EditorTopBar({
                 )}
 
                 {/* Admin Visual Template Publisher CTA */}
-                {canManageEditor && !collectionHeroMode && (
+                {canSaveAsTemplate && !collectionHeroMode && (
                     <button
                         type="button"
                         data-testid="topbar-save-template-button"

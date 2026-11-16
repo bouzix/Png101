@@ -206,8 +206,12 @@ export default function ImageEditor({
     adminTemplate = null,
     collectionHeroMode = null,
     canManageEditor = false,
+    auth = null,
     seo = {},
 }) {
+    const isStaffAuthenticated =
+        Boolean(auth?.authenticated) && (auth?.role === 'super_admin' || auth?.role === 'team_member');
+    const canPublishTemplate = Boolean(canManageEditor && isStaffAuthenticated);
     const defaultW = Number(collectionHeroMode?.width || editorSettings.defaultWidth) || 1080;
     const defaultH = Number(collectionHeroMode?.height || editorSettings.defaultHeight) || 1080;
     const defaultTrans = collectionHeroMode ? true : editorSettings.defaultTransparentBg !== false;
@@ -392,10 +396,10 @@ export default function ImageEditor({
     // Admin Save Template Modal
     const [adminModalOpen, setAdminModalOpen] = useState(false);
     const { rendered: adminModalRendered, visible: adminModalVisible } = useAnimatedPresence(
-        Boolean(adminModalOpen && canManageEditor),
+        Boolean(adminModalOpen && canPublishTemplate),
         295
     );
-    const adminModalDrag = usePopoverDrag({ open: Boolean(adminModalOpen && canManageEditor) });
+    const adminModalDrag = usePopoverDrag({ open: Boolean(adminModalOpen && canPublishTemplate) });
     const [adminSaving, setAdminSaving] = useState(false);
 
     // Custom Confirm / Alert Dialog state (replaces native browser alert/confirm)
@@ -3094,8 +3098,9 @@ export default function ImageEditor({
                 exporting={exporting}
                 adminTemplateMode={adminTemplateMode}
                 adminTemplate={adminTemplate}
-                canManageEditor={canManageEditor}
+                canManageEditor={canPublishTemplate}
                 onOpenAdminSaveModal={() => {
+                    if (!canPublishTemplate) return;
                     setTplForm((p) => ({ ...p, title: p.title || projectTitle }));
                     setAdminModalOpen(true);
                 }}
@@ -3296,7 +3301,7 @@ export default function ImageEditor({
             )}
 
             {/* Admin Publish / Save Template Modal */}
-            {adminModalRendered && canManageEditor && (
+            {adminModalRendered && canPublishTemplate && (
                 <div
                     data-testid="admin-template-modal"
                     data-visible={adminModalVisible ? 'true' : 'false'}

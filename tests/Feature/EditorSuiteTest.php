@@ -260,4 +260,71 @@ class EditorSuiteTest extends TestCase
             'showInFooter' => true,
         ]);
     }
+
+    public function test_save_as_template_permission_is_only_granted_to_authenticated_admin_or_editor_team_member(): void
+    {
+        // 1. Unauthenticated / normal visitor cannot see or manage templates
+        $guestRes = $this->get('/image-editor');
+        $guestRes->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('ImageEditor')
+                ->where('canManageEditor', false)
+                ->where('auth.authenticated', false)
+            );
+
+        // 2. Super Admin receives canManageEditor = true
+        $this->withSession($this->adminSession())
+            ->get('/image-editor')
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('ImageEditor')
+                ->where('canManageEditor', true)
+                ->where('auth.authenticated', true)
+                ->where('auth.role', 'super_admin')
+            );
+
+        // 3. Team member WITH manage_editor permission receives canManageEditor = true
+        $editorMember = TeamMember::create([
+            'name' => 'Template Designer',
+            'email' => 'designer@example.com',
+            'passwordHash' => Hash::make('secret123'),
+            'permissions' => ['manage_editor'],
+            'isActive' => true,
+        ]);
+
+        $this->withSession([
+            'auth_token' => 'team_member',
+            'team_member_id' => $editorMember->id,
+        ])
+            ->get('/image-editor')
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('ImageEditor')
+                ->where('canManageEditor', true)
+                ->where('auth.authenticated', true)
+                ->where('auth.role', 'team_member')
+            );
+
+        // 4. Team member WITHOUT manage_editor permission cannot see Save as Template
+        $restrictedMember = TeamMember::create([
+            'name' => 'Restricted Uploader',
+            'email' => 'restricted@example.com',
+            'passwordHash' => Hash::make('secret123'),
+            'permissions' => ['upload_images'],
+            'isActive' => true,
+        ]);
+
+        $this->withSession([
+            'auth_token' => 'team_member',
+            'team_member_id' => $restrictedMember->id,
+        ])
+            ->get('/image-editor')
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('ImageEditor')
+                ->where('canManageEditor', false)
+                ->where('auth.authenticated', true)
+                ->where('auth.role', 'team_member')
+            );
+    }
 }
