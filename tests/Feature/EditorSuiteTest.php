@@ -473,4 +473,41 @@ class EditorSuiteTest extends TestCase
             }
         }
     }
+
+    public function test_admin_template_edit_mode_only_activates_via_admin_templates_query(): void
+    {
+        $this->get('/image-editor')->assertStatus(200);
+        $tpl = EditorTemplate::first();
+        $this->assertNotNull($tpl);
+
+        $session = $this->adminSession();
+
+        $publicFromTpl = $this->withSession($session)
+            ->get("/image-editor?template={$tpl->slug}");
+        $publicFromTpl->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('ImageEditor')
+                ->where('adminTemplateMode', null)
+                ->where('adminTemplate', null)
+                ->where('initialTemplate.id', $tpl->id)
+            );
+
+        $adminEdit = $this->withSession($session)
+            ->get("/image-editor?adminTemplate={$tpl->id}");
+        $adminEdit->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('ImageEditor')
+                ->where('adminTemplateMode', 'edit')
+                ->where('adminTemplate.id', $tpl->id)
+            );
+
+        $adminNew = $this->withSession($session)
+            ->get('/image-editor?adminTemplate=new');
+        $adminNew->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('ImageEditor')
+                ->where('adminTemplateMode', 'new')
+                ->where('adminTemplate', null)
+            );
+    }
 }

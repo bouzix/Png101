@@ -1170,7 +1170,7 @@ export default function EditorTopBar({
                             }`}
                     >
                         <Save className="w-3.5 h-3.5" />
-                        <span>{adminTemplate ? 'Update Template' : 'Save as Template'}</span>
+                        <span>{adminTemplateMode === 'edit' && adminTemplate ? 'Update Template' : 'Save as Template'}</span>
                     </button>
                 )}
 

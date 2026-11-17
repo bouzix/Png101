@@ -4643,7 +4643,7 @@ export default function ImageEditor({
                 tags: tplForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
             };
 
-            const isUpdate = Boolean(tplForm.id);
+            const isUpdate = Boolean(adminTemplateMode && tplForm.id);
             const url = isUpdate ? `/api/admin/editor/templates/${tplForm.id}` : '/api/admin/editor/templates';
             const res = await fetch(url, {
                 method: isUpdate ? 'PUT' : 'POST',
@@ -4653,8 +4653,12 @@ export default function ImageEditor({
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to save template');
 
-            setTplForm((prev) => ({ ...prev, id: data.template.id }));
-            setProjectTitle(data.template.title);
+            if (adminTemplateMode) {
+                setTplForm((prev) => ({ ...prev, id: data.template.id }));
+                setProjectTitle(data.template.title);
+            } else {
+                setTplForm((prev) => ({ ...prev, id: null }));
+            }
             setAdminModalOpen(false);
             toast.success(isUpdate ? 'Template updated!' : 'New template published to Studio!');
         } catch (err) {
@@ -4734,7 +4738,23 @@ export default function ImageEditor({
                 canManageEditor={canPublishTemplate}
                 onOpenAdminSaveModal={() => {
                     if (!canPublishTemplate) return;
-                    setTplForm((p) => ({ ...p, title: p.title || projectTitle }));
+                    if (!adminTemplateMode) {
+                        setTplForm({
+                            id: null,
+                            title: projectTitle && projectTitle !== 'Untitled Design' ? projectTitle : 'New Studio Template',
+                            description: '',
+                            categoryId: allTemplateCategories[0]?.id || templateCategories[0]?.id || '',
+                            status: 'published',
+                            isFeatured: false,
+                            tags: '',
+                        });
+                    } else {
+                        setTplForm((p) => ({
+                            ...p,
+                            id: adminTemplateMode === 'edit' ? (adminTemplate?.id || p.id) : p.id,
+                            title: p.title || projectTitle,
+                        }));
+                    }
                     setAdminModalOpen(true);
                 }}
                 collectionHeroMode={collectionHeroMode}
@@ -4993,7 +5013,7 @@ export default function ImageEditor({
                             <div className="flex items-center gap-2 text-sm font-bold">
                                 <GripHorizontal className="w-4 h-4 text-slate-400 shrink-0" />
                                 <Sparkles className="w-4 h-4 text-blue-500 dark:text-blue-400" />
-                                <span>{tplForm.id ? 'Update Studio Template' : 'Publish New Studio Template'}</span>
+                                <span>{adminTemplateMode && tplForm.id ? 'Update Studio Template' : 'Publish New Studio Template'}</span>
                             </div>
                             <button
                                 type="button"
@@ -5102,7 +5122,13 @@ export default function ImageEditor({
                                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
                                 >
                                     <Save className="w-3.5 h-3.5" />
-                                    <span>{adminSaving ? 'Saving...' : 'Save Template'}</span>
+                                    <span>
+                                        {adminSaving
+                                            ? 'Saving...'
+                                            : adminTemplateMode && tplForm.id
+                                            ? 'Update Template'
+                                            : 'Publish New Template'}
+                                    </span>
                                 </button>
                             </div>
                         </div>
