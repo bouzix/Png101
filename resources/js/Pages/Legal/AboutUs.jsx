@@ -103,7 +103,7 @@ export default function AboutUs({ websiteInfo = {}, legalContent = null }) {
                 </div>
 
                 {/* Story Card */}
-                <div className="bg-card-bg border border-card-border rounded-2xl p-8 md:p-10 space-y-6 text-foreground/80 leading-relaxed">
+                <div className="bg-transparent border-0 p-0 sm:bg-card-bg sm:border sm:border-card-border sm:rounded-2xl sm:p-8 md:p-10 space-y-6 text-foreground/80 leading-relaxed">
                     <h2 className="text-2xl font-bold text-foreground">{content.missionTitle}</h2>
                     <RichTextContent html={content.missionBodyHtml} />
                 </div>
