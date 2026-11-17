@@ -35,6 +35,7 @@ import {
     Eye,
 } from 'lucide-react';
 import ThemeToggle from '../ThemeToggle';
+import { BrandIcon } from '../BrandMark';
 import StudioSelect from '../ui/StudioSelect';
 import { OUTSIDE_CANVAS_MODES } from './editorHelpers';
 import { AnimatedPopover, useAnimatedPresence } from './useAnimatedPresence';
@@ -125,8 +126,13 @@ export default function EditorTopBar({
     onSaveCollectionHero,
     savingCollectionHero = false,
     onCancelCollectionHero,
+    brandSuiteMode = null,
+    onSaveBrandSuite,
+    savingBrandSuite = false,
+    onCancelBrandSuite,
 }) {
     const { props: pageProps } = usePage();
+    const websiteInfo = pageProps?.websiteInfo || {};
     const auth = pageProps?.auth || {};
     const welcomeName = auth.role === 'team_member' && auth.name ? auth.name : 'Admin';
     const isStaffAuthenticated =
@@ -312,28 +318,31 @@ export default function EditorTopBar({
                         <ArrowLeft className="w-3.5 h-3.5" />
                         <span>Back to Collection</span>
                     </button>
+                ) : brandSuiteMode ? (
+                    <button
+                        type="button"
+                        data-testid="topbar-back-brand-suite-button"
+                        onClick={onCancelBrandSuite}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer shrink-0 transition-colors"
+                    >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <span>Back to Settings</span>
+                    </button>
                 ) : (
                     <Link
                         href={adminTemplateMode ? '/admin/dashboard/editor/templates' : '/'}
                         data-testid="topbar-home-link"
                         aria-label={adminTemplateMode ? 'Back to Admin Templates' : 'Back to Homepage'}
                         data-tooltip={adminTemplateMode ? 'Back to Admin Templates' : 'Go to Homepage'}
-                        className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-[0_0_15px_rgba(59,130,246,0.35)] hover:shadow-[0_0_22px_rgba(59,130,246,0.65)] hover:scale-105 transition-all duration-200 shrink-0"
+                        className="rounded-xl hover:scale-105 transition-all duration-200 shrink-0"
                     >
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            strokeWidth={2}
-                            stroke="currentColor"
-                            className="w-5 h-5 text-white"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"
-                            />
-                        </svg>
+                        <BrandIcon
+                            iconUrl={websiteInfo?.iconUrl}
+                            alt={`${websiteInfo?.websiteName || 'Png101'} icon`}
+                            sizeClass="w-9 h-9"
+                            roundedClass="rounded-xl"
+                            className="hover:shadow-[0_0_22px_rgba(59,130,246,0.65)]"
+                        />
                     </Link>
                 )}
 
@@ -1158,8 +1167,32 @@ export default function EditorTopBar({
                     </button>
                 )}
 
+                {/* Website Brand Suite Save CTA */}
+                {brandSuiteMode && (
+                    <button
+                        type="button"
+                        data-testid="topbar-save-brand-suite-button"
+                        onClick={onSaveBrandSuite}
+                        disabled={savingBrandSuite}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 cursor-pointer transition-all"
+                    >
+                        {savingBrandSuite ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            <Save className="w-3.5 h-3.5" />
+                        )}
+                        <span>
+                            {savingBrandSuite
+                                ? 'Saving...'
+                                : brandSuiteMode.singleAssetRole && brandSuiteMode.artboards?.[0]?.name
+                                ? `Save ${brandSuiteMode.artboards[0].name}`
+                                : 'Save Branding Assets'}
+                        </span>
+                    </button>
+                )}
+
                 {/* Admin Visual Template Publisher CTA */}
-                {canSaveAsTemplate && !collectionHeroMode && (
+                {canSaveAsTemplate && !collectionHeroMode && !brandSuiteMode && (
                     <button
                         type="button"
                         data-testid="topbar-save-template-button"

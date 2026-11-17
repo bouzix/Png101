@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Head, Link, router } from '@inertiajs/react';
 import StudioSelect from '@/components/ui/StudioSelect';
 import { toast } from 'sonner';
@@ -19,9 +20,14 @@ import {
     LayoutGrid,
     Palette,
     RotateCcw,
+    Upload,
+    Image as ImageIcon,
+    Sparkles,
+    X,
 } from 'lucide-react';
 import AdminLayout from '../../../Layouts/AdminLayout';
 import { StatCard } from '../../../components/ui/StatCard';
+import { BrandIcon, BrandLogo } from '../../../components/BrandMark';
 import BgRemoverSettingsCard from '../../../components/admin/BgRemoverSettingsCard';
 import StudioColorPicker from '../../../components/tools/StudioColorPicker';
 import {
@@ -41,9 +47,46 @@ export default function SettingsPage() {
         country: '',
         address: '',
         foundedYear: '',
+        logoUrl: '',
+        iconUrl: '',
+        faviconUrl: '',
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [uploadingBrandSlot, setUploadingBrandSlot] = useState(null);
+    const [brandStudioTarget, setBrandStudioTarget] = useState(null); // null | 'all' | 'logo' | 'icon' | 'favicon'
+
+    useEffect(() => {
+        if (!brandStudioTarget || typeof window === 'undefined') return undefined;
+        const onMessage = (event) => {
+            if (event.origin !== window.location.origin) return;
+            const data = event.data;
+            if (!data || typeof data !== 'object') return;
+            if (data.type === 'PNG101_BRAND_SUITE_SAVED') {
+                const updatedLabel =
+                    brandStudioTarget === 'logo'
+                        ? 'Website Logo updated!'
+                        : brandStudioTarget === 'icon'
+                        ? 'Website Icon updated!'
+                        : brandStudioTarget === 'favicon'
+                        ? 'Browser Favicon updated!'
+                        : 'Website Logo (SVG), Icon (SVG) & Favicon (PNG) updated!';
+                setFormData((prev) => ({
+                    ...prev,
+                    logoUrl: data.logoUrl ?? prev.logoUrl,
+                    iconUrl: data.iconUrl ?? prev.iconUrl,
+                    faviconUrl: data.faviconUrl ?? prev.faviconUrl,
+                }));
+                setBrandStudioTarget(null);
+                toast.success(updatedLabel);
+                router.reload({ only: ['websiteInfo'], preserveScroll: true });
+            } else if (data.type === 'PNG101_BRAND_SUITE_CLOSE') {
+                setBrandStudioTarget(null);
+            }
+        };
+        window.addEventListener('message', onMessage);
+        return () => window.removeEventListener('message', onMessage);
+    }, [brandStudioTarget]);
     const [retentionDays, setRetentionDays] = useState(30);
     const [trashedCount, setTrashedCount] = useState(0);
     const [collectionsGridColumns, setCollectionsGridColumns] = useState({
@@ -85,6 +128,9 @@ export default function SettingsPage() {
                     country: data.country || '',
                     address: data.address || '',
                     foundedYear: data.foundedYear || '',
+                    logoUrl: data.logoUrl || '',
+                    iconUrl: data.iconUrl || '',
+                    faviconUrl: data.faviconUrl || '',
                 });
                 if (typeof trashData.retentionDays === 'number') {
                     setRetentionDays(trashData.retentionDays);
@@ -169,6 +215,54 @@ export default function SettingsPage() {
     };
 
     const hasLegalEmails = Boolean(formData.contactEmail && formData.dmcaEmail);
+
+    const persistBrandFields = async (partial, successMessage) => {
+        setFormData((prev) => ({ ...prev, ...partial }));
+        try {
+            const res = await fetch('/api/admin/website-info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(partial),
+            });
+            if (res.ok) {
+                if (successMessage) toast.success(successMessage);
+                router.reload({ only: ['websiteInfo'], preserveScroll: true });
+            } else {
+                toast.error('Failed to update branding settings');
+            }
+        } catch {
+            toast.error('Failed to update branding settings');
+        }
+    };
+
+    const handleBrandAssetUpload = async (type, file) => {
+        if (!file) return;
+        setUploadingBrandSlot(type);
+        try {
+            const payload = new FormData();
+            payload.append('file', file);
+            payload.append('type', type);
+            const res = await fetch('/api/admin/branding/upload', {
+                method: 'POST',
+                body: payload,
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok || !json?.success || !json?.path) {
+                toast.error(json?.error || `Failed to upload ${type}`);
+                return;
+            }
+            const fieldMap = { logo: 'logoUrl', icon: 'iconUrl', favicon: 'faviconUrl' };
+            const fieldKey = fieldMap[type];
+            if (fieldKey) {
+                const label = type.charAt(0).toUpperCase() + type.slice(1);
+                await persistBrandFields({ [fieldKey]: json.path }, `${label} updated across the site!`);
+            }
+        } catch {
+            toast.error(`Failed to upload ${type}`);
+        } finally {
+            setUploadingBrandSlot(null);
+        }
+    };
 
     return (
         <AdminLayout>
@@ -298,6 +392,265 @@ export default function SettingsPage() {
                                         placeholder="Discover and download free, high-resolution transparent PNG images for creative, educational, and commercial designs."
                                         className="w-full px-4 py-2.5 bg-background border border-card-border rounded-xl text-foreground text-sm focus:outline-none focus:border-primary-glow focus:ring-1 focus:ring-primary-glow/30 transition-all resize-none leading-relaxed"
                                     />
+                                </div>
+
+                                {/* Brand Logo, Icon & Favicon Settings */}
+                                <div className="md:col-span-2 pt-4 border-t border-card-border space-y-4">
+                                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                                        <div>
+                                            <h3 className="text-sm font-bold text-foreground">
+                                                Logo, Icon &amp; Favicon
+                                            </h3>
+                                            <p className="text-xs text-foreground/60 mt-0.5">
+                                                Customize the site logo (sticky header, homepage above search bar &amp; footer), brand icon (navigation menu, admin sidebar &amp; image editor), and browser favicon. Leave blank to keep the built-in defaults.
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-wrap shrink-0">
+                                            <button
+                                                type="button"
+                                                data-testid="reset-all-branding"
+                                                disabled={!formData.logoUrl && !formData.iconUrl && !formData.faviconUrl}
+                                                onClick={() =>
+                                                    persistBrandFields(
+                                                        { logoUrl: '', iconUrl: '', faviconUrl: '' },
+                                                        'All branding assets reset to default.'
+                                                    )
+                                                }
+                                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-card-border bg-foreground/[0.03] hover:bg-foreground/[0.08] disabled:opacity-45 disabled:pointer-events-none text-xs font-semibold text-foreground/80 transition-colors cursor-pointer"
+                                            >
+                                                <RotateCcw className="w-3.5 h-3.5" />
+                                                <span>Reset All</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                data-testid="open-brand-suite-studio"
+                                                onClick={() => setBrandStudioTarget('all')}
+                                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:brightness-110 text-white text-xs font-bold shadow-md shadow-blue-600/25 transition-all cursor-pointer"
+                                            >
+                                                <Sparkles className="w-3.5 h-3.5" />
+                                                <span>Design All 3 in Studio</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                        {/* Website Logo */}
+                                        <div className="rounded-xl border border-card-border bg-foreground/[0.02] p-4 flex flex-col justify-between gap-3">
+                                            <div className="space-y-2.5">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                                                        Website Logo
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        data-testid="reset-brand-logo"
+                                                        disabled={!formData.logoUrl}
+                                                        onClick={() => persistBrandFields({ logoUrl: '' }, 'Website Logo reset to default (synced with Icon + Title).')}
+                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-card-border bg-background/70 text-[11px] font-semibold text-foreground/70 hover:text-foreground disabled:opacity-45 disabled:pointer-events-none cursor-pointer transition-colors"
+                                                    >
+                                                        <RotateCcw className="w-3 h-3" />
+                                                        <span>Reset</span>
+                                                    </button>
+                                                </div>
+                                                <div className="h-16 rounded-lg border border-card-border bg-background/80 px-3 flex items-center justify-center overflow-hidden">
+                                                    <BrandLogo websiteInfo={formData} size="footer" />
+                                                </div>
+                                                <p className="text-[11px] text-foreground/55 leading-snug">
+                                                    {formData.logoUrl
+                                                        ? 'Custom logo active across sticky menu, hero & footer.'
+                                                        : 'Using default logo (automatically displays your Website Icon + Website Name).'}
+                                                </p>
+                                                <div className="rounded-lg bg-foreground/[0.03] border border-card-border/70 px-2.5 py-2 text-[10.5px] leading-relaxed text-foreground/65 space-y-0.5">
+                                                    <p>
+                                                        <strong className="text-foreground/85">Max recommended size:</strong> 480&times;120 px (up to 960&times;240 px, 4:1 ratio, max 5 MB)
+                                                    </p>
+                                                    <p>
+                                                        <strong className="text-foreground/85">Recommended formats:</strong> SVG (best), transparent PNG, or WebP
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <label
+                                                    data-testid="upload-brand-logo"
+                                                    className={`inline-flex items-center justify-center gap-1.5 w-full px-2.5 py-2 rounded-lg border border-card-border bg-background hover:border-primary-glow/60 text-xs font-semibold text-foreground transition-colors cursor-pointer ${
+                                                        uploadingBrandSlot === 'logo' ? 'opacity-60 pointer-events-none' : ''
+                                                    }`}
+                                                >
+                                                    <Upload className="w-3.5 h-3.5 text-primary-glow shrink-0" />
+                                                    <span className="truncate">{uploadingBrandSlot === 'logo' ? 'Uploading...' : 'Upload Logo'}</span>
+                                                    <input
+                                                        type="file"
+                                                        accept=".png,.jpg,.jpeg,.webp,.svg,.gif"
+                                                        className="hidden"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            e.target.value = '';
+                                                            handleBrandAssetUpload('logo', file);
+                                                        }}
+                                                    />
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    data-testid="studio-brand-logo"
+                                                    onClick={() => setBrandStudioTarget('logo')}
+                                                    className="inline-flex items-center justify-center gap-1.5 w-full px-2.5 py-2 rounded-lg border border-blue-500/35 bg-blue-500/10 hover:bg-blue-500/20 text-xs font-semibold text-blue-600 dark:text-blue-300 transition-colors cursor-pointer"
+                                                >
+                                                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                                    <span className="truncate">Design in Studio</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Website Icon */}
+                                        <div className="rounded-xl border border-card-border bg-foreground/[0.02] p-4 flex flex-col justify-between gap-3">
+                                            <div className="space-y-2.5">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                                                        Website Icon
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        data-testid="reset-brand-icon"
+                                                        disabled={!formData.iconUrl}
+                                                        onClick={() => persistBrandFields({ iconUrl: '' }, 'Website Icon reset to default blue shield.')}
+                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-card-border bg-background/70 text-[11px] font-semibold text-foreground/70 hover:text-foreground disabled:opacity-45 disabled:pointer-events-none cursor-pointer transition-colors"
+                                                    >
+                                                        <RotateCcw className="w-3 h-3" />
+                                                        <span>Reset</span>
+                                                    </button>
+                                                </div>
+                                                <div className="h-16 rounded-lg border border-card-border bg-background/80 px-3 flex items-center justify-center gap-2.5">
+                                                    <BrandIcon
+                                                        iconUrl={formData.iconUrl}
+                                                        alt={`${formData.websiteName || 'Png101'} icon preview`}
+                                                        sizeClass="w-10 h-10"
+                                                    />
+                                                    <span className="text-[11px] text-foreground/60">
+                                                        {formData.iconUrl ? 'Custom Icon' : 'Default Blue Shield'}
+                                                    </span>
+                                                </div>
+                                                <p className="text-[11px] text-foreground/55 leading-snug">
+                                                    Used in navigation menu, admin sidebar, and image editor top bar.
+                                                </p>
+                                                <div className="rounded-lg bg-foreground/[0.03] border border-card-border/70 px-2.5 py-2 text-[10.5px] leading-relaxed text-foreground/65 space-y-0.5">
+                                                    <p>
+                                                        <strong className="text-foreground/85">Max recommended size:</strong> 256&times;256 px square (up to 512&times;512 px, max 5 MB)
+                                                    </p>
+                                                    <p>
+                                                        <strong className="text-foreground/85">Recommended formats:</strong> SVG (best), transparent PNG, or WebP
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <label
+                                                    data-testid="upload-brand-icon"
+                                                    className={`inline-flex items-center justify-center gap-1.5 w-full px-2.5 py-2 rounded-lg border border-card-border bg-background hover:border-primary-glow/60 text-xs font-semibold text-foreground transition-colors cursor-pointer ${
+                                                        uploadingBrandSlot === 'icon' ? 'opacity-60 pointer-events-none' : ''
+                                                    }`}
+                                                >
+                                                    <Upload className="w-3.5 h-3.5 text-primary-glow shrink-0" />
+                                                    <span className="truncate">{uploadingBrandSlot === 'icon' ? 'Uploading...' : 'Upload Icon'}</span>
+                                                    <input
+                                                        type="file"
+                                                        accept=".png,.jpg,.jpeg,.webp,.svg,.gif,.ico"
+                                                        className="hidden"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            e.target.value = '';
+                                                            handleBrandAssetUpload('icon', file);
+                                                        }}
+                                                    />
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    data-testid="studio-brand-icon"
+                                                    onClick={() => setBrandStudioTarget('icon')}
+                                                    className="inline-flex items-center justify-center gap-1.5 w-full px-2.5 py-2 rounded-lg border border-blue-500/35 bg-blue-500/10 hover:bg-blue-500/20 text-xs font-semibold text-blue-600 dark:text-blue-300 transition-colors cursor-pointer"
+                                                >
+                                                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                                    <span className="truncate">Design in Studio</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Browser Favicon */}
+                                        <div className="rounded-xl border border-card-border bg-foreground/[0.02] p-4 flex flex-col justify-between gap-3">
+                                            <div className="space-y-2.5">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                                                        Browser Favicon
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        data-testid="reset-brand-favicon"
+                                                        disabled={!formData.faviconUrl}
+                                                        onClick={() => persistBrandFields({ faviconUrl: '' }, 'Browser Favicon reset to default.')}
+                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-card-border bg-background/70 text-[11px] font-semibold text-foreground/70 hover:text-foreground disabled:opacity-45 disabled:pointer-events-none cursor-pointer transition-colors"
+                                                    >
+                                                        <RotateCcw className="w-3 h-3" />
+                                                        <span>Reset</span>
+                                                    </button>
+                                                </div>
+                                                <div className="h-16 rounded-lg border border-card-border bg-background/80 px-3 flex items-center justify-center">
+                                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-foreground/[0.05] border border-card-border max-w-full">
+                                                        <img
+                                                            src={formData.faviconUrl || formData.iconUrl || '/favicon.svg'}
+                                                            alt="Favicon preview"
+                                                            className="w-4 h-4 object-contain shrink-0"
+                                                        />
+                                                        <span className="text-xs font-medium text-foreground/80 truncate max-w-[140px]">
+                                                            {formData.websiteName || 'Png101'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <p className="text-[11px] text-foreground/55 leading-snug">
+                                                    {formData.faviconUrl
+                                                        ? 'Custom browser favicon active.'
+                                                        : formData.iconUrl
+                                                        ? 'Using Website Icon as browser favicon (upload or design a custom favicon to override).'
+                                                        : 'Shown in browser tabs, bookmarks & shortcuts.'}
+                                                </p>
+                                                <div className="rounded-lg bg-foreground/[0.03] border border-card-border/70 px-2.5 py-2 text-[10.5px] leading-relaxed text-foreground/65 space-y-0.5">
+                                                    <p>
+                                                        <strong className="text-foreground/85">Max recommended size:</strong> 96&times;96 px square (up to 256&times;256 px, max 5 MB)
+                                                    </p>
+                                                    <p>
+                                                        <strong className="text-foreground/85">Recommended formats:</strong> ICO or PNG (best compatibility); SVG also supported
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <label
+                                                    data-testid="upload-brand-favicon"
+                                                    className={`inline-flex items-center justify-center gap-1.5 w-full px-2.5 py-2 rounded-lg border border-card-border bg-background hover:border-primary-glow/60 text-xs font-semibold text-foreground transition-colors cursor-pointer ${
+                                                        uploadingBrandSlot === 'favicon' ? 'opacity-60 pointer-events-none' : ''
+                                                    }`}
+                                                >
+                                                    <Upload className="w-3.5 h-3.5 text-primary-glow shrink-0" />
+                                                    <span className="truncate">{uploadingBrandSlot === 'favicon' ? 'Uploading...' : 'Upload Favicon'}</span>
+                                                    <input
+                                                        type="file"
+                                                        accept=".ico,.png,.svg,.webp,.jpg,.jpeg,.gif"
+                                                        className="hidden"
+                                                        onChange={(e) => {
+                                                            const file = e.target.files?.[0];
+                                                            e.target.value = '';
+                                                            handleBrandAssetUpload('favicon', file);
+                                                        }}
+                                                    />
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    data-testid="studio-brand-favicon"
+                                                    onClick={() => setBrandStudioTarget('favicon')}
+                                                    className="inline-flex items-center justify-center gap-1.5 w-full px-2.5 py-2 rounded-lg border border-blue-500/35 bg-blue-500/10 hover:bg-blue-500/20 text-xs font-semibold text-blue-600 dark:text-blue-300 transition-colors cursor-pointer"
+                                                >
+                                                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                                    <span className="truncate">Design in Studio</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -867,6 +1220,50 @@ export default function SettingsPage() {
                     </div>
                 </div>
             )}
+
+            {brandStudioTarget &&
+                typeof document !== 'undefined' &&
+                createPortal(
+                    <div
+                        data-testid="brand-suite-studio-modal"
+                        className="fixed inset-0 z-[150] bg-slate-950/85 backdrop-blur-sm flex flex-col"
+                    >
+                        <div className="h-11 px-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs text-slate-200 shrink-0">
+                            <span className="font-bold flex items-center gap-2">
+                                <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                                <span>
+                                    {brandStudioTarget === 'logo'
+                                        ? 'Website Logo Studio — SVG (480×120)'
+                                        : brandStudioTarget === 'icon'
+                                        ? 'Website Icon Studio — SVG (256×256)'
+                                        : brandStudioTarget === 'favicon'
+                                        ? 'Browser Favicon Studio — PNG (96×96)'
+                                        : 'Brand Suite Studio — Website Logo (SVG 480×120), Icon (SVG 256×256) & Favicon (PNG 96×96)'}
+                                </span>
+                            </span>
+                            <button
+                                type="button"
+                                data-testid="close-brand-suite-modal"
+                                onClick={() => setBrandStudioTarget(null)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold cursor-pointer"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                                <span>Close Studio</span>
+                            </button>
+                        </div>
+                        <iframe
+                            data-testid="brand-suite-studio-iframe"
+                            src={
+                                brandStudioTarget === 'all'
+                                    ? '/image-editor?mode=brand-suite'
+                                    : `/image-editor?mode=brand-suite&asset=${encodeURIComponent(brandStudioTarget)}`
+                            }
+                            title="Website Brand Suite Designer"
+                            className="flex-1 w-full h-full border-0 bg-slate-950"
+                        />
+                    </div>,
+                    document.body
+                )}
         </AdminLayout>
     );
 }

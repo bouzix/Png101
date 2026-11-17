@@ -9,6 +9,7 @@ use App\Services\AnalyticsService;
 use App\Services\CollectionService;
 use App\Services\ErrorPagesService;
 use App\Services\RelatedImagesService;
+use App\Services\SliderSettingsService;
 use App\Services\WebsiteInfoService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -149,6 +150,7 @@ class PublicController extends Controller
         return Inertia::render('Collections/Index', [
             'collections' => $collections,
             'gridColumns' => $gridColumns,
+            'featuredCollectionsSliderConfig' => SliderSettingsService::get('featured_collections'),
             'seo' => [
                 'title' => "Curated PNG Collections & Clipart Packs - {$info['websiteName']}",
                 'description' => "Explore curated collections of transparent PNG images, seasonal clipart, themed design packs, and brand graphics on {$info['websiteName']}.",

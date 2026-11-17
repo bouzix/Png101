@@ -6,6 +6,7 @@ import {
     ChevronRight,
     Sparkles,
     ArrowRight,
+    Star,
 } from 'lucide-react';
 
 export const DEFAULT_SLIDER_CONFIG = {
@@ -83,10 +84,31 @@ export const DEFAULT_PART_OF_COLLECTIONS_SLIDER_CONFIG = {
     arrowIconSize: 14,
 };
 
+export const DEFAULT_FEATURED_COLLECTIONS_SLIDER_CONFIG = {
+    ...DEFAULT_SLIDER_CONFIG,
+    id: 'featured_collections',
+    name: 'Featured Collections',
+    location: 'Collections Page (/collections)',
+    cardsDesktop: 4,
+    stepDesktop: 1,
+    cardsLaptop: 3,
+    stepLaptop: 1,
+    cardsTablet: 2,
+    stepTablet: 1,
+    cardsSmallTablet: 2,
+    stepSmallTablet: 1,
+    cardsMobile: 1,
+    stepMobile: 1,
+    maxTotalItems: 12,
+    autoScrollIntervalMs: 4000,
+    arrowSize: 32,
+    arrowIconSize: 16,
+};
+
 export default function CollectionCarouselSlider({
     collections = [],
     sliderConfig: rawSliderConfig = {},
-    variant = null, // 'compact' | 'trending' | 'part_of_collections' | null (auto-detected from sliderConfig.id)
+    variant = null, // 'compact' | 'trending' | 'part_of_collections' | 'featured_collections' | null (auto-detected from sliderConfig.id)
     forcedViewport = null, // 'desktop' | 'laptop' | 'tablet' | 'small_tablet' | 'mobile' | null
     isPreview = false,
     hideHeader = false,
@@ -95,12 +117,17 @@ export default function CollectionCarouselSlider({
         variant === 'trending' || rawSliderConfig?.id === 'trending_collections';
     const isPartOfCollectionsVariant =
         variant === 'part_of_collections' || rawSliderConfig?.id === 'part_of_collections';
+    const isFeaturedVariant =
+        variant === 'featured_collections' || rawSliderConfig?.id === 'featured_collections';
+    const isSquareShowcaseVariant = isTrendingVariant || isFeaturedVariant;
 
     const sliderConfig = {
         ...(isTrendingVariant
             ? DEFAULT_TRENDING_SLIDER_CONFIG
             : isPartOfCollectionsVariant
             ? DEFAULT_PART_OF_COLLECTIONS_SLIDER_CONFIG
+            : isFeaturedVariant
+            ? DEFAULT_FEATURED_COLLECTIONS_SLIDER_CONFIG
             : DEFAULT_SLIDER_CONFIG),
         ...(rawSliderConfig || {}),
     };
@@ -415,7 +442,7 @@ export default function CollectionCarouselSlider({
         ...(sliderConfig.arrowBorderColor ? { borderColor: sliderConfig.arrowBorderColor } : {}),
     };
 
-    const gapPx = isTrendingVariant ? (cardsPerRow >= 5 ? 16 : 24) : 12;
+    const gapPx = isSquareShowcaseVariant ? (cardsPerRow >= 5 ? 16 : 24) : 12;
 
     return (
         <div
@@ -423,7 +450,7 @@ export default function CollectionCarouselSlider({
             onMouseLeave={() => setIsHoveringSlider(false)}
             onTouchStart={() => setIsHoveringSlider(true)}
             onTouchEnd={() => setIsHoveringSlider(false)}
-            className={isTrendingVariant ? 'space-y-6' : 'space-y-4'}
+            className={isSquareShowcaseVariant ? 'space-y-4 sm:space-y-6' : 'space-y-4'}
         >
             <style>{`
                 .collections-slider-track::-webkit-scrollbar {
@@ -441,9 +468,6 @@ export default function CollectionCarouselSlider({
                             <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
                                 Trending Collections
                             </h2>
-                            <p className="text-xs text-foreground/50 mt-0.5">
-                                Top transparent PNG packs and curated bundles trending this week
-                            </p>
                         </div>
                     </div>
 
@@ -482,6 +506,37 @@ export default function CollectionCarouselSlider({
                         )}
                     </div>
                 </div>
+            ) : isFeaturedVariant ? (
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-card-border">
+                    <div className="flex items-center gap-2.5">
+                        <Star className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0" />
+                        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
+                            Featured Collections
+                        </h2>
+                    </div>
+                    {sliderConfig.showHeaderArrows && (canScrollLeft || canScrollRight || sliderConfig.loop) && (
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                type="button"
+                                onClick={() => scrollSliderByStep(-1)}
+                                disabled={!canScrollLeft}
+                                aria-label="Slide left"
+                                className="w-7 h-7 rounded-lg border border-card-border bg-card-bg hover:border-primary-glow/50 text-foreground/80 hover:text-primary-glow disabled:opacity-35 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer"
+                            >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => scrollSliderByStep(1)}
+                                disabled={!canScrollRight && !sliderConfig.loop}
+                                aria-label="Slide right"
+                                className="w-7 h-7 rounded-lg border border-card-border bg-card-bg hover:border-primary-glow/50 text-foreground/80 hover:text-primary-glow disabled:opacity-35 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer"
+                            >
+                                <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    )}
+                </div>
             ) : isPartOfCollectionsVariant ? (
                 <div className="flex items-center justify-between gap-2 pb-1">
                     <span className="text-sm font-bold text-foreground">
@@ -519,12 +574,9 @@ export default function CollectionCarouselSlider({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-purple-400" />
+                            <Sparkles className="w-4 h-4 text-blue-500" />
                             <span>More Collections You May Like</span>
                         </h3>
-                        <p className="text-xs text-foreground/50 mt-0.5">
-                            Drag horizontally or use the side arrows to explore {collections.length} curated graphic packs
-                        </p>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -658,7 +710,7 @@ export default function CollectionCarouselSlider({
                             (Math.max(1, cardsPerRow) - 1) * gapPx
                         }px) / ${Math.max(1, cardsPerRow)})`;
 
-                        if (isTrendingVariant) {
+                        if (isSquareShowcaseVariant) {
                             const hasCustomSquareCard = Boolean(rel.trendingCardImagePath);
                             return (
                                 <CardTag
@@ -681,7 +733,11 @@ export default function CollectionCarouselSlider({
                                                 : cardsPerRow === 5
                                                 ? 'p-2.5'
                                                 : 'p-3'
-                                        } rounded-2xl border border-card-border bg-card-bg overflow-hidden shadow-sm group-hover:shadow-xl group-hover:border-blue-500/40 transition-all duration-300 group-hover:-translate-y-1`}
+                                        } rounded-2xl border bg-card-bg overflow-hidden shadow-sm group-hover:shadow-xl transition-all duration-300 group-hover:-translate-y-1 ${
+                                            isFeaturedVariant
+                                                ? 'border-amber-500/30 ring-1 ring-amber-500/15 group-hover:border-primary-glow/50'
+                                                : 'border-card-border group-hover:border-blue-500/40'
+                                        }`}
                                         style={{
                                             backgroundImage:
                                                 'linear-gradient(45deg, #80808012 25%, transparent 25%), linear-gradient(-45deg, #80808012 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #80808012 75%), linear-gradient(-45deg, transparent 75%, #80808012 75%)',
@@ -725,6 +781,15 @@ export default function CollectionCarouselSlider({
                                             <div className="h-full w-full flex flex-col items-center justify-center text-foreground/30">
                                                 <Layers className="w-8 h-8 mb-1" />
                                                 <span className="text-[11px]">Collection</span>
+                                            </div>
+                                        )}
+
+                                        {isFeaturedVariant && (
+                                            <div className="absolute top-3 left-3 z-10">
+                                                <span className="flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full bg-amber-500 text-white shadow-md">
+                                                    <Star className="w-2.5 h-2.5 fill-current" />
+                                                    <span>Featured</span>
+                                                </span>
                                             </div>
                                         )}
 

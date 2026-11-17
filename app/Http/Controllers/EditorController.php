@@ -15,6 +15,7 @@ use App\Services\EditorDefaultsService;
 use App\Services\EditorSettingsService;
 use App\Services\ImageProcessingService;
 use App\Services\TeamService;
+use App\Services\WebsiteInfoService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -140,6 +141,58 @@ class EditorController extends Controller
             ];
         }
 
+        // Brand Suite multi-artboard designer mode ?mode=brand-suite (&asset=logo|icon|favicon optional)
+        $brandSuiteMode = null;
+        if (
+            $request->query('mode') === 'brand-suite'
+            && TeamService::hasAnyPermission($session, ['manage_general_settings', 'manage_editor'])
+        ) {
+            $brandInfo = WebsiteInfoService::get();
+            $allBrandBoards = [
+                [
+                    'id' => 'brand-logo',
+                    'role' => 'logo',
+                    'name' => 'Website Logo',
+                    'width' => 480,
+                    'height' => 120,
+                    'format' => 'svg',
+                ],
+                [
+                    'id' => 'brand-icon',
+                    'role' => 'icon',
+                    'name' => 'Website Icon',
+                    'width' => 256,
+                    'height' => 256,
+                    'format' => 'svg',
+                ],
+                [
+                    'id' => 'brand-favicon',
+                    'role' => 'favicon',
+                    'name' => 'Browser Favicon',
+                    'width' => 96,
+                    'height' => 96,
+                    'format' => 'png',
+                ],
+            ];
+            $requestedAsset = strtolower(trim((string) $request->query('asset', '')));
+            $singleAssetRole = in_array($requestedAsset, ['logo', 'icon', 'favicon'], true) ? $requestedAsset : null;
+            $selectedBoards = $singleAssetRole
+                ? array_values(array_filter($allBrandBoards, fn ($b) => $b['role'] === $singleAssetRole))
+                : $allBrandBoards;
+
+            $brandSuiteMode = [
+                'websiteName' => $brandInfo['websiteName'] ?? 'Png101',
+                'logoUrl' => $brandInfo['logoUrl'] ?? '',
+                'iconUrl' => $brandInfo['iconUrl'] ?? '',
+                'faviconUrl' => $brandInfo['faviconUrl'] ?? '',
+                'defaultFaviconUrl' => is_file(public_path('favicon.svg'))
+                    ? '/favicon.svg'
+                    : (is_file(public_path('favicon.ico')) ? '/favicon.ico' : ''),
+                'singleAssetRole' => $singleAssetRole,
+                'artboards' => $selectedBoards,
+            ];
+        }
+
         return Inertia::render('ImageEditor', [
             'editorSettings' => $settings,
             'templateCategories' => $categories,
@@ -153,6 +206,7 @@ class EditorController extends Controller
             'adminTemplateMode' => $adminTemplateMode,
             'adminTemplate' => $adminTemplate,
             'collectionHeroMode' => $collectionHeroMode,
+            'brandSuiteMode' => $brandSuiteMode,
             'canManageEditor' => $canManageEditor,
             'seo' => [
                 'title' => $settings['seoTitle'] ?: 'Free Online PNG & Graphic Design Editor',

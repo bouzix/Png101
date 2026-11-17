@@ -57,12 +57,13 @@ export default function CollectionShow({
 
                     {/* Collection Hero Banner Card */}
                     <div
+                        data-testid="collection-hero-card"
                         style={
                             collection?.heroBgColor
                                 ? { backgroundColor: collection.heroBgColor }
                                 : undefined
                         }
-                        className="relative h-[150px] flex items-center rounded-2xl border border-card-border bg-card-bg px-6 sm:px-10 shadow-xl overflow-hidden"
+                        className="relative h-[96px] sm:h-[150px] flex items-center rounded-2xl border border-card-border bg-card-bg px-4 sm:px-10 shadow-xl overflow-hidden"
                     >
                         {!collection?.heroBgColor && (
                             <>
@@ -82,14 +83,14 @@ export default function CollectionShow({
                             </div>
                         )}
 
-                        <div className="relative z-10 w-full flex items-center justify-between gap-4">
+                        <div className="relative z-10 w-full flex items-center justify-between gap-3 sm:gap-4">
                             <h1
                                 style={
                                     collection?.heroTextColor
                                         ? { color: collection.heroTextColor }
                                         : undefined
                                 }
-                                className="text-3xl sm:text-5xl md:text-6xl font-black uppercase text-foreground tracking-tight truncate"
+                                className="text-2xl sm:text-5xl md:text-6xl font-black uppercase text-foreground tracking-tight truncate"
                             >
                                 {collection.name}
                             </h1>
@@ -97,17 +98,19 @@ export default function CollectionShow({
                             <button
                                 type="button"
                                 onClick={handleShare}
-                                className="px-4 py-2.5 rounded-xl bg-card-bg/90 backdrop-blur-md hover:bg-card-bg border border-card-border hover:border-primary-glow/50 text-foreground text-xs font-bold transition-all inline-flex items-center gap-2 cursor-pointer shadow-md shrink-0 w-fit"
+                                aria-label={copied ? 'Link Copied!' : 'Share Collection'}
+                                title={copied ? 'Link Copied!' : 'Share Collection'}
+                                className="p-2.5 sm:px-4 sm:py-2.5 rounded-xl bg-white/95 hover:bg-white backdrop-blur-md border border-blue-500 hover:border-blue-600 text-slate-900 text-xs font-bold transition-all inline-flex items-center justify-center sm:gap-2 cursor-pointer shadow-md shrink-0 w-fit"
                             >
                                 {copied ? (
                                     <>
-                                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                        <span>Link Copied!</span>
+                                        <Check className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-emerald-600" />
+                                        <span className="hidden sm:inline">Link Copied!</span>
                                     </>
                                 ) : (
                                     <>
-                                        <Share2 className="w-3.5 h-3.5 text-primary-glow" />
-                                        <span>Share Collection</span>
+                                        <Share2 className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-blue-600" />
+                                        <span className="hidden sm:inline">Share Collection</span>
                                     </>
                                 )}
                             </button>
@@ -116,19 +119,6 @@ export default function CollectionShow({
 
                     {/* Graphics Grid Section */}
                     <section className="space-y-6">
-                        <div className="flex items-center justify-between pb-3 border-b border-card-border">
-                            <div className="flex items-center gap-2.5">
-                                <div className="w-1.5 h-6 rounded-full bg-primary-glow shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
-                                <div>
-                                    <h2 className="text-lg font-bold text-foreground">
-                                        Graphics in this Pack ({total})
-                                    </h2>
-                                    <p className="text-xs text-foreground/50 mt-0.5">
-                                        Click any graphic for dimensions, high-res previews, and instant download
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
 
                         {images.length === 0 ? (
                             <div className="py-20 text-center border border-dashed border-card-border rounded-xl p-8 bg-card-bg shadow-xl">

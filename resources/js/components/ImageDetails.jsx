@@ -293,15 +293,16 @@ const ImageDetails = ({ image, onResizeApply, collections = [], partOfCollection
                 </div>
             )}
 
-            {/* PNG Keywords Card (Collapsed by default on < sm portrait phones) */}
+            {/* PNG Keywords Card (Collapsed by default & collapsible on all screens) */}
             <div className="sm:col-span-2 lg:col-span-1 bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-lg">
                 <button
                     type="button"
-                    onClick={() => toggleMobileOnly(setKeywordsOpen)}
+                    data-testid="png-keywords-toggle"
+                    onClick={() => setKeywordsOpen((prev) => !prev)}
                     aria-expanded={keywordsOpen}
                     className={`w-full bg-slate-100 dark:bg-card-header-bg px-4 py-3 ${
-                        keywordsOpen ? 'border-b border-card-border' : 'border-b-0 sm:border-b sm:border-card-border'
-                    } flex items-center justify-between gap-2 text-left cursor-pointer sm:cursor-default`}
+                        keywordsOpen ? 'border-b border-card-border' : 'border-b-0'
+                    } flex items-center justify-between gap-2 text-left cursor-pointer`}
                 >
                     <span className="flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600 dark:text-blue-400">
@@ -310,12 +311,12 @@ const ImageDetails = ({ image, onResizeApply, collections = [], partOfCollection
                         <span className="font-semibold text-foreground text-sm">PNG keywords</span>
                     </span>
                     <ChevronDown
-                        className={`w-4 h-4 text-foreground/60 transition-transform duration-200 sm:hidden ${
+                        className={`w-4 h-4 text-foreground/60 transition-transform duration-200 ${
                             keywordsOpen ? 'rotate-180' : ''
                         }`}
                     />
                 </button>
-                <div className={`${keywordsOpen ? 'block' : 'hidden'} sm:block p-4`}>
+                <div className={`${keywordsOpen ? 'block' : 'hidden'} p-4`} data-testid="png-keywords-body">
                     <div className="flex flex-wrap gap-2">
                         {image.tags && image.tags.length > 0 ? (
                             image.tags.map((tag, index) => (

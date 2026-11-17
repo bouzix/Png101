@@ -552,6 +552,17 @@ class EditorSuiteTest extends TestCase
                 ->where('initialSliders.part_of_collections.id', 'part_of_collections')
                 ->where('initialSliders.part_of_collections.cardsDesktop', 1)
                 ->where('initialSliders.part_of_collections.cardsMobile', 1)
+                ->where('initialSliders.featured_collections.id', 'featured_collections')
+                ->where('initialSliders.featured_collections.cardsDesktop', 4)
+                ->where('initialSliders.featured_collections.cardsMobile', 1)
+            );
+
+        $this->get('/collections')
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('Collections/Index')
+                ->where('featuredCollectionsSliderConfig.id', 'featured_collections')
+                ->where('featuredCollectionsSliderConfig.cardsDesktop', 4)
             );
 
         $this->get("/images/{$img->id}-badge-icon")
@@ -622,6 +633,142 @@ class EditorSuiteTest extends TestCase
                     ->where('colorPickerDefaults.defaultGradientFrom', '#0ea5e9')
                     ->where('colorPickerDefaults.defaultGradientTo', '#10b981')
                 );
+        }
+    }
+
+    public function test_website_branding_assets_upload_save_and_shared_globally(): void
+    {
+        $session = $this->adminSession();
+        $createdPaths = [];
+
+        try {
+            $tmpPng = sys_get_temp_dir() . '/test_brand_' . uniqid() . '.png';
+            $im = imagecreatetruecolor(64, 64);
+            imagesavealpha($im, true);
+            $blue = imagecolorallocatealpha($im, 37, 99, 235, 0);
+            imagefill($im, 0, 0, $blue);
+            imagepng($im, $tmpPng);
+            imagedestroy($im);
+
+            $uploaded = [];
+            foreach (['logo', 'icon', 'favicon'] as $slot) {
+                $slotTmp = sys_get_temp_dir() . '/test_brand_' . $slot . '_' . uniqid() . '.png';
+                copy($tmpPng, $slotTmp);
+                $file = new \Illuminate\Http\UploadedFile($slotTmp, "brand-{$slot}.png", 'image/png', null, true);
+                $res = $this->withSession($session)
+                    ->post('/api/admin/branding/upload', [
+                        'type' => $slot,
+                        'file' => $file,
+                    ]);
+                @unlink($slotTmp);
+                $res->assertStatus(200)->assertJsonPath('success', true)->assertJsonPath('type', $slot);
+                $path = (string) $res->json('path');
+                $this->assertStringStartsWith('/uploads/branding/brand-' . $slot . '-', $path);
+                $createdPaths[] = public_path(ltrim($path, '/'));
+                $uploaded[$slot] = $path;
+            }
+            @unlink($tmpPng);
+
+            $saveRes = $this->withSession($session)
+                ->postJson('/api/admin/website-info', [
+                    'websiteName' => 'Png101 BrandTest',
+                    'logoUrl' => $uploaded['logo'],
+                    'iconUrl' => $uploaded['icon'],
+                    'faviconUrl' => $uploaded['favicon'],
+                ]);
+            $saveRes->assertStatus(200)
+                ->assertJsonPath('success', true)
+                ->assertJsonPath('data.logoUrl', $uploaded['logo'])
+                ->assertJsonPath('data.iconUrl', $uploaded['icon'])
+                ->assertJsonPath('data.faviconUrl', $uploaded['favicon']);
+
+            foreach (['/', '/image-editor', '/admin/dashboard/settings'] as $route) {
+                $req = str_starts_with($route, '/admin') ? $this->withSession($session) : $this;
+                $req->get($route)
+                    ->assertStatus(200)
+                    ->assertInertia(fn ($page) => $page
+                        ->where('websiteInfo.logoUrl', $uploaded['logo'])
+                        ->where('websiteInfo.iconUrl', $uploaded['icon'])
+                        ->where('websiteInfo.faviconUrl', $uploaded['favicon'])
+                    );
+            }
+
+            $htmlRes = $this->get('/');
+            $htmlRes->assertStatus(200);
+            $htmlRes->assertSee('<link rel="icon" href="' . $uploaded['favicon'] . '"', false);
+
+            // Public unauthenticated request must NOT receive admin brandSuiteMode
+            $this->flushSession();
+            $this->get('/image-editor?mode=brand-suite')
+                ->assertStatus(200)
+                ->assertInertia(fn ($page) => $page
+                    ->component('ImageEditor')
+                    ->where('brandSuiteMode', null)
+                );
+
+            // Authenticated admin receives pre-populated multi-artboard Brand Suite specs
+            $this->withSession($session)
+                ->get('/image-editor?mode=brand-suite')
+                ->assertStatus(200)
+                ->assertInertia(fn ($page) => $page
+                    ->component('ImageEditor')
+                    ->where('brandSuiteMode.logoUrl', $uploaded['logo'])
+                    ->where('brandSuiteMode.iconUrl', $uploaded['icon'])
+                    ->where('brandSuiteMode.faviconUrl', $uploaded['favicon'])
+                    ->where('brandSuiteMode.artboards.0.id', 'brand-logo')
+                    ->where('brandSuiteMode.artboards.0.format', 'svg')
+                    ->where('brandSuiteMode.artboards.0.width', 480)
+                    ->where('brandSuiteMode.artboards.0.height', 120)
+                    ->where('brandSuiteMode.artboards.1.id', 'brand-icon')
+                    ->where('brandSuiteMode.artboards.1.format', 'svg')
+                    ->where('brandSuiteMode.artboards.1.width', 256)
+                    ->where('brandSuiteMode.artboards.1.height', 256)
+                    ->where('brandSuiteMode.artboards.2.id', 'brand-favicon')
+                    ->where('brandSuiteMode.artboards.2.format', 'png')
+                    ->where('brandSuiteMode.artboards.2.width', 96)
+                    ->where('brandSuiteMode.artboards.2.height', 96)
+                );
+
+            // Dedicated single-asset Brand Suite mode ?mode=brand-suite&asset=icon
+            $this->withSession($session)
+                ->get('/image-editor?mode=brand-suite&asset=icon')
+                ->assertStatus(200)
+                ->assertInertia(fn ($page) => $page
+                    ->component('ImageEditor')
+                    ->where('brandSuiteMode.singleAssetRole', 'icon')
+                    ->where('brandSuiteMode.artboards.0.id', 'brand-icon')
+                    ->where('brandSuiteMode.artboards.0.width', 256)
+                    ->where('brandSuiteMode.artboards.0.height', 256)
+                    ->where('brandSuiteMode.artboards.0.format', 'svg')
+                    ->missing('brandSuiteMode.artboards.1')
+                );
+
+            // When only iconUrl is updated (logoUrl & faviconUrl stay empty), websiteInfo keeps logoUrl/faviconUrl='' and favicon falls back to iconUrl
+            $this->withSession($session)
+                ->postJson('/api/admin/website-info', [
+                    'logoUrl' => '',
+                    'iconUrl' => $uploaded['icon'],
+                    'faviconUrl' => '',
+                ])
+                ->assertStatus(200)
+                ->assertJsonPath('data.logoUrl', '')
+                ->assertJsonPath('data.iconUrl', $uploaded['icon'])
+                ->assertJsonPath('data.faviconUrl', '');
+
+            $fallbackRes = $this->get('/');
+            $fallbackRes->assertStatus(200)
+                ->assertInertia(fn ($page) => $page
+                    ->where('websiteInfo.logoUrl', '')
+                    ->where('websiteInfo.iconUrl', $uploaded['icon'])
+                    ->where('websiteInfo.faviconUrl', '')
+                );
+            $fallbackRes->assertSee('<link rel="icon" href="' . $uploaded['icon'] . '"', false);
+        } finally {
+            foreach ($createdPaths as $abs) {
+                if ($abs && is_file($abs)) {
+                    @unlink($abs);
+                }
+            }
         }
     }
 }

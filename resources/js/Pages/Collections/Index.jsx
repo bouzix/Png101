@@ -2,6 +2,9 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import Header from '@/components/Header';
 import Pagination from '@/components/ui/Pagination';
+import CollectionCarouselSlider, {
+    DEFAULT_FEATURED_COLLECTIONS_SLIDER_CONFIG,
+} from '@/components/collections/CollectionCarouselSlider';
 import { Layers, ArrowRight, Star, Search, X } from 'lucide-react';
 
 function CollectionCard({ collection, isHero = false }) {
@@ -13,13 +16,11 @@ function CollectionCard({ collection, isHero = false }) {
         >
             {/* 1:1 Square Visual Collage Stage Card */}
             <div
-                className={`relative aspect-square w-full rounded-2xl border bg-card-bg overflow-hidden ${
-                    hasCustomSquareCard ? 'p-0' : 'p-3'
-                } shadow-sm group-hover:shadow-xl group-hover:border-primary-glow/50 group-hover:shadow-primary-glow/10 transition-all duration-300 group-hover:-translate-y-1 ${
-                    isHero
+                className={`relative aspect-square w-full rounded-2xl border bg-card-bg overflow-hidden ${hasCustomSquareCard ? 'p-0' : 'p-3'
+                    } shadow-sm group-hover:shadow-xl group-hover:border-primary-glow/50 group-hover:shadow-primary-glow/10 transition-all duration-300 group-hover:-translate-y-1 ${isHero
                         ? 'border-amber-500/30 ring-1 ring-amber-500/15'
                         : 'border-card-border'
-                }`}
+                    }`}
                 style={{
                     backgroundImage:
                         'linear-gradient(45deg, #80808012 25%, transparent 25%), linear-gradient(-45deg, #80808012 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #80808012 75%), linear-gradient(-45deg, transparent 75%, #80808012 75%)',
@@ -130,7 +131,12 @@ export default function CollectionsIndex({
     collections = [],
     websiteInfo = {},
     gridColumns = { mobile: 1, smallTablet: 2, tablet: 3, desktop: 6 },
+    featuredCollectionsSliderConfig = {},
 }) {
+    const resolvedFeaturedSlider = {
+        ...DEFAULT_FEATURED_COLLECTIONS_SLIDER_CONFIG,
+        ...(featuredCollectionsSliderConfig || {}),
+    };
     const siteName = websiteInfo?.websiteName || 'Png101';
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
@@ -148,8 +154,8 @@ export default function CollectionsIndex({
             const tagsList = Array.isArray(col.tags)
                 ? col.tags
                 : Array.isArray(col.rules?.tags)
-                ? col.rules.tags
-                : [];
+                    ? col.rules.tags
+                    : [];
             const tagMatch = tagsList.some((t) => String(t).toLowerCase().includes(normalizedQuery));
             return nameMatch || descMatch || slugMatch || tagMatch;
         });
@@ -191,31 +197,30 @@ export default function CollectionsIndex({
         }
     };
 
-    const gridClassName = `grid ${COLS_BASE[gridColumns?.mobile] || 'grid-cols-1'} ${
-        COLS_SM[gridColumns?.smallTablet] || 'sm:grid-cols-2'
-    } ${COLS_MD[gridColumns?.tablet] || 'md:grid-cols-3'} ${
-        COLS_LG[gridColumns?.desktop] || 'lg:grid-cols-6'
-    } gap-6`;
+    const gridClassName = `grid ${COLS_BASE[gridColumns?.mobile] || 'grid-cols-1'} ${COLS_SM[gridColumns?.smallTablet] || 'sm:grid-cols-2'
+        } ${COLS_MD[gridColumns?.tablet] || 'md:grid-cols-3'} ${COLS_LG[gridColumns?.desktop] || 'lg:grid-cols-6'
+        } gap-6`;
 
     return (
         <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
             <Head title={`Curated PNG Collections & Clipart Packs - ${siteName}`} />
             <Header siteName={siteName} />
 
-            <main className="flex-1 w-full px-6 sm:px-10 md:px-16 py-8 sm:py-12 space-y-12">
+            <main className="flex-1 w-full px-4 sm:px-10 md:px-16 py-5 sm:py-12 space-y-7 sm:space-y-12">
                 {/* Hero Header Banner */}
-                <div className="text-center max-w-3xl mx-auto space-y-4">
-                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary-glow/10 border border-primary-glow/20 text-primary-glow text-xs font-bold tracking-wide">
-                        <Layers className="w-3.5 h-3.5" />
-                        <span>Curated Design Packs</span>
-                    </div>
-
-                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-foreground">
-                        Themed PNG Collections
+                <div className="text-center max-w-3xl mx-auto space-y-2.5 sm:space-y-4">
+                    <h1 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-tight text-foreground">
+                        Curated PNG Collections
                     </h1>
 
-                    <p className="text-sm sm:text-base text-foreground/60 leading-relaxed max-w-2xl mx-auto">
-                        Explore handpicked packs and automated tag collections of premium transparent PNG graphics. Browse holiday clipart, matching icon kits, and aesthetic designs.
+                    <p
+                        data-testid="collections-hero-subtitle"
+                        className="text-xs sm:text-base text-foreground/60 leading-snug sm:leading-relaxed max-w-2xl mx-auto"
+                    >
+                        <span className="sm:hidden">Curated transparent PNG collections.</span>
+                        <span className="hidden sm:inline">
+                            Explore handpicked packs and collections of premium transparent PNG graphics. Browse holiday clipart, matching icon kits, and aesthetic designs.
+                        </span>
                     </p>
 
                     {/* Dedicated Collections Search Bar */}
@@ -244,21 +249,17 @@ export default function CollectionsIndex({
                     </div>
                 </div>
 
-                {/* Featured Collections Section */}
-                {featuredCollections.length > 0 && (
-                    <section className="space-y-4">
-                        <div className="flex items-center gap-2.5 pb-2 border-b border-card-border">
-                            <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-                                Featured Collections
-                            </h2>
-                        </div>
-
-                        <div className={gridClassName}>
-                            {featuredCollections.map((col) => (
-                                <CollectionCard key={col.id} collection={col} isHero={true} />
-                            ))}
-                        </div>
+                {/* Featured Collections Slider Section */}
+                {featuredCollections.length > 0 && resolvedFeaturedSlider.enabled !== false && (
+                    <section data-testid="featured-collections-slider-section">
+                        <CollectionCarouselSlider
+                            collections={featuredCollections.slice(
+                                0,
+                                Math.max(2, Number(resolvedFeaturedSlider.maxTotalItems) || 12)
+                            )}
+                            sliderConfig={resolvedFeaturedSlider}
+                            variant="featured_collections"
+                        />
                     </section>
                 )}
 

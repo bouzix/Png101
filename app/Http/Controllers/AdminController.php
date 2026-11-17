@@ -408,6 +408,51 @@ class AdminController extends Controller
         }
     }
 
+    public function uploadBrandAsset(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+
+        $type = strtolower(trim((string) $request->input('type', 'logo')));
+        if (! in_array($type, ['logo', 'icon', 'favicon'], true)) {
+            return response()->json(['error' => 'Invalid branding asset type'], 400);
+        }
+
+        if (! $request->hasFile('file')) {
+            return response()->json(['error' => 'No image file provided'], 400);
+        }
+
+        $file = $request->file('file');
+        if (! $file->isValid()) {
+            return response()->json(['error' => 'Invalid file upload'], 400);
+        }
+
+        if ($file->getSize() > 5 * 1024 * 1024) {
+            return response()->json(['error' => 'File must be 5 MB or smaller'], 400);
+        }
+
+        $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
+        if (! in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'svg', 'ico', 'gif'], true)) {
+            return response()->json(['error' => 'Unsupported format. Use PNG, SVG, WebP, JPG, GIF, or ICO.'], 400);
+        }
+
+        $dir = public_path('uploads/branding');
+        if (! is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+
+        $filename = 'brand-' . $type . '-' . uniqid() . '-' . time() . '.' . $ext;
+        $file->move($dir, $filename);
+        $publicPath = '/uploads/branding/' . $filename;
+
+        return response()->json([
+            'success' => true,
+            'type' => $type,
+            'path' => $publicPath,
+        ]);
+    }
+
     public function getErrorPages(Request $request): JsonResponse
     {
         if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {

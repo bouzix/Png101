@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import { ChevronDown, ArrowRight, Wand2, Sparkles, FileText } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
+import { BrandLogo } from './BrandMark';
 
 const Header = ({
     initialQuery = '',
-    siteName = 'Png101',
+    siteName = '',
     showOnScrollOnly = false
 }) => {
     const { props } = usePage();
+    const resolvedSiteName = siteName || props?.websiteInfo?.websiteName || 'Png101';
     const [query, setQuery] = useState(initialQuery);
     const [isScrolledPastHero, setIsScrolledPastHero] = useState(false);
 
@@ -50,33 +52,11 @@ const Header = ({
                 {/* Brand / Logo */}
                 <Link
                     href="/"
-                    className="flex items-center gap-2.5 sm:gap-3 group shrink-0"
-                    title={`Go to ${siteName} Homepage`}
+                    data-testid="header-brand-link"
+                    className="flex items-center group shrink-0"
+                    title={`Go to ${resolvedSiteName} Homepage`}
                 >
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-[0_0_15px_rgba(59,130,246,0.4)] group-hover:shadow-[0_0_22px_rgba(59,130,246,0.7)] group-hover:scale-105 transition-all duration-300">
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            strokeWidth={2}
-                            stroke="currentColor"
-                            className="w-5 h-5 text-white"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"
-                            />
-                        </svg>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="header-brand-title font-extrabold text-base sm:text-lg tracking-tight group-hover:text-blue-500 transition-colors">
-                            {siteName}
-                        </span>
-                        <span className="hidden lg:inline-flex text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                            PNG
-                        </span>
-                    </div>
+                    <BrandLogo websiteInfo={props?.websiteInfo} siteName={resolvedSiteName} size="header" />
                 </Link>
 
                 {/* Sleek Redesigned Search Input */}

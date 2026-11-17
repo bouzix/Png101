@@ -6,6 +6,7 @@ import CollectionCarouselSlider, {
     DEFAULT_SLIDER_CONFIG,
     DEFAULT_TRENDING_SLIDER_CONFIG,
     DEFAULT_PART_OF_COLLECTIONS_SLIDER_CONFIG,
+    DEFAULT_FEATURED_COLLECTIONS_SLIDER_CONFIG,
 } from '@/components/collections/CollectionCarouselSlider';
 import { HexColorPicker } from 'react-colorful';
 import {
@@ -52,6 +53,10 @@ const DEFAULT_TRENDING_COLLECTIONS = {
 
 const DEFAULT_PART_OF_COLLECTIONS = {
     ...DEFAULT_PART_OF_COLLECTIONS_SLIDER_CONFIG,
+};
+
+const DEFAULT_FEATURED_COLLECTIONS = {
+    ...DEFAULT_FEATURED_COLLECTIONS_SLIDER_CONFIG,
 };
 
 const BREAKPOINT_CARDS = [
@@ -347,6 +352,10 @@ export default function AdminSliderSettings({ initialSliders = {} }) {
             ...DEFAULT_PART_OF_COLLECTIONS,
             ...(initialSliders?.part_of_collections || {}),
         },
+        featured_collections: {
+            ...DEFAULT_FEATURED_COLLECTIONS,
+            ...(initialSliders?.featured_collections || {}),
+        },
         ...initialSliders,
     }));
     const [activeKey, setActiveKey] = useState('related_collections');
@@ -389,6 +398,8 @@ export default function AdminSliderSettings({ initialSliders = {} }) {
             ? DEFAULT_TRENDING_COLLECTIONS
             : activeKey === 'part_of_collections'
             ? DEFAULT_PART_OF_COLLECTIONS
+            : activeKey === 'featured_collections'
+            ? DEFAULT_FEATURED_COLLECTIONS
             : DEFAULT_RELATED_COLLECTIONS;
     const activeSlider = sliders[activeKey] || defaultForActive;
 

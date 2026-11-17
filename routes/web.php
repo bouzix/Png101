@@ -182,6 +182,7 @@ Route::prefix('api')->group(function () {
 
         Route::get('/admin/website-info', [AdminController::class, 'getWebsiteInfo']);
         Route::post('/admin/website-info', [AdminController::class, 'saveWebsiteInfo']);
+        Route::post('/admin/branding/upload', [AdminController::class, 'uploadBrandAsset']);
 
         Route::get('/admin/error-pages', [AdminController::class, 'getErrorPages']);
         Route::post('/admin/error-pages', [AdminController::class, 'saveErrorPages']);

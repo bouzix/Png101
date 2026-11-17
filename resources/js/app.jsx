@@ -30,12 +30,15 @@ createInertiaApp({
     },
     setup({ el, App, props }) {
         const RootApp = (propsObj) => {
-            const websiteInfo = propsObj.initialPage?.props?.websiteInfo || {
-                websiteName: 'Png101',
-                tagline: 'Discover and download free, high-resolution transparent PNG images for your creative projects.',
-                contactEmail: 'contact@png101.com',
-                companyName: 'Png101',
-            };
+            const [websiteInfo, setWebsiteInfo] = useState(
+                () =>
+                    propsObj.initialPage?.props?.websiteInfo || {
+                        websiteName: 'Png101',
+                        tagline: 'Discover and download free, high-resolution transparent PNG images for your creative projects.',
+                        contactEmail: 'contact@png101.com',
+                        companyName: 'Png101',
+                    }
+            );
             const initialUploadLimits = propsObj.initialPage?.props?.uploadLimits || null;
             const [currentUrl, setCurrentUrl] = useState(
                 () => propsObj.initialPage?.url || (typeof window !== 'undefined' ? window.location.pathname : '/')
@@ -109,6 +112,9 @@ createInertiaApp({
 
             useEffect(() => {
                 const syncPageProps = (pageObj) => {
+                    if (pageObj?.props?.websiteInfo) {
+                        setWebsiteInfo(pageObj.props.websiteInfo);
+                    }
                     if (pageObj?.props?.bonusToolsNav) {
                         setBonusToolsNav(pageObj.props.bonusToolsNav);
                     }
@@ -142,6 +148,16 @@ createInertiaApp({
                     window.removeEventListener('png101:color-picker-defaults', onCustomDefaults);
                 };
             }, []);
+
+            useEffect(() => {
+                if (typeof document === 'undefined') return;
+                const href = websiteInfo?.faviconUrl || websiteInfo?.iconUrl || '/favicon.svg';
+                document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]').forEach((linkEl) => {
+                    if (linkEl.getAttribute('href') !== href) {
+                        linkEl.setAttribute('href', href);
+                    }
+                });
+            }, [websiteInfo?.faviconUrl, websiteInfo?.iconUrl]);
 
             const isEditorRoute =
                 currentComponent === 'ImageEditor' ||

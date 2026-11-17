@@ -36,11 +36,8 @@ const ImageGrid = () => {
                         <div className="w-1.5 h-8 rounded-full bg-primary-glow shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
                         <div>
                             <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                                Most Popular Images
+                                Popular Images This Week
                             </h2>
-                            <p className="text-xs text-foreground/50 mt-0.5">
-                                Top downloaded and trending transparent PNGs this week
-                            </p>
                         </div>
                     </div>
                     {!loading && popularImages.length > 0 && (
@@ -91,9 +88,6 @@ const ImageGrid = () => {
                             <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
                                 Latest Uploaded Images
                             </h2>
-                            <p className="text-xs text-foreground/50 mt-0.5">
-                                Freshly added high-resolution PNGs and brand logos
-                            </p>
                         </div>
                     </div>
                     <Link

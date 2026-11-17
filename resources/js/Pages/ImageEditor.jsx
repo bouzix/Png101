@@ -34,6 +34,12 @@ import {
     makeArtboardBackgroundFill,
 } from '../components/editor/artboardHelpers';
 import {
+    buildBrandSuitePage,
+    populateBrandSuiteCanvas,
+    renderBrandSuiteBlobs,
+    computeBrandSuiteDigests,
+} from '../components/editor/brandSuiteHelpers';
+import {
     CUSTOM_PROPS,
     uid,
     saveProjectToIdb,
@@ -319,6 +325,7 @@ export default function ImageEditor({
     adminTemplateMode = null,
     adminTemplate = null,
     collectionHeroMode = null,
+    brandSuiteMode = null,
     canManageEditor = false,
     auth = null,
     seo = {},
@@ -326,9 +333,9 @@ export default function ImageEditor({
     const isStaffAuthenticated =
         Boolean(auth?.authenticated) && (auth?.role === 'super_admin' || auth?.role === 'team_member');
     const canPublishTemplate = Boolean(canManageEditor && isStaffAuthenticated);
-    const defaultW = Number(collectionHeroMode?.width || editorSettings.defaultWidth) || 1080;
-    const defaultH = Number(collectionHeroMode?.height || editorSettings.defaultHeight) || 1080;
-    const defaultTrans = collectionHeroMode ? true : editorSettings.defaultTransparentBg !== false;
+    const defaultW = Number(brandSuiteMode?.artboards?.[0]?.width || collectionHeroMode?.width || editorSettings.defaultWidth) || 1080;
+    const defaultH = Number(brandSuiteMode?.artboards?.[0]?.height || collectionHeroMode?.height || editorSettings.defaultHeight) || 1080;
+    const defaultTrans = (collectionHeroMode || brandSuiteMode) ? true : editorSettings.defaultTransparentBg !== false;
     const maxWidth = Number(editorSettings.maxCanvasWidth) || 4096;
     const maxHeight = Number(editorSettings.maxCanvasHeight) || 4096;
     const maxPages = Number(editorSettings.maxPagesPerProject) || 12;
@@ -341,14 +348,15 @@ export default function ImageEditor({
     const logicalHRef = useRef(defaultH);
     const autosaveTimerRef = useRef(null);
     const pendingOpenRef = useRef(null);
+    const brandSuiteInitialDigestsRef = useRef({});
 
     const initialProjectQueryId =
-        typeof window !== 'undefined' && !collectionHeroMode
+        typeof window !== 'undefined' && !collectionHeroMode && !brandSuiteMode
             ? new URLSearchParams(window.location.search).get('project')?.trim() || null
             : null;
 
     const [isProjectOpen, setIsProjectOpen] = useState(() =>
-        Boolean(initialTemplate || initialAsset || adminTemplateMode || collectionHeroMode || initialProjectQueryId)
+        Boolean(initialTemplate || initialAsset || adminTemplateMode || collectionHeroMode || brandSuiteMode || initialProjectQueryId)
     );
     const [activeProjectId, setActiveProjectId] = useState(() => initialProjectQueryId || uid('proj'));
     const activeProjectIdRef = useRef(activeProjectId);
@@ -356,7 +364,11 @@ export default function ImageEditor({
     const [projectsLoading, setProjectsLoading] = useState(true);
 
     const [projectTitle, setProjectTitle] = useState(
-        collectionHeroMode
+        brandSuiteMode
+            ? brandSuiteMode.singleAssetRole && brandSuiteMode.artboards?.[0]?.name
+                ? brandSuiteMode.artboards[0].name
+                : `${brandSuiteMode.websiteName || 'Website'} Brand Suite`
+            : collectionHeroMode
             ? `${collectionHeroMode.collectionName || 'Collection'} Hero Cover`
             : adminTemplate?.title || initialTemplate?.title || initialAsset?.name || 'Untitled Design'
     );
@@ -1554,6 +1566,34 @@ export default function ImageEditor({
                 setPages(adminTemplate.pagesJson);
                 setActivePageIdx(0);
                 await loadPageIntoCanvas(adminTemplate.pagesJson[0], true);
+            } else if (brandSuiteMode) {
+                const brandPage = buildBrandSuitePage(brandSuiteMode);
+                setPages([brandPage]);
+                await loadPageIntoCanvas(brandPage, true);
+                isRestoringRef.current = true;
+                try {
+                    await populateBrandSuiteCanvas(canvas, brandPage.artboards, brandSuiteMode);
+                    canvas.renderAll();
+                    syncLayersState(canvas, brandPage.artboards);
+                    const initSnap = {
+                        fabricJson: serializeCanvasSafely(canvas, CUSTOM_PROPS),
+                        artboards: JSON.parse(JSON.stringify(brandPage.artboards)),
+                        activeArtboardId: brandPage.artboards[0]?.id || 'brand-logo',
+                    };
+                    brandSuiteInitialDigestsRef.current = computeBrandSuiteDigests(
+                        brandPage.artboards,
+                        initSnap.fabricJson,
+                        brandSuiteMode
+                    );
+                    historyRef.current = [initSnap];
+                    historyIndexRef.current = 0;
+                    setHistory([initSnap]);
+                    setHistoryIndex(0);
+                    const bounds = getArtboardWorkspaceBounds(brandPage.artboards, defaultW, defaultH);
+                    fitZoomToViewport(bounds.totalW, bounds.totalH);
+                } finally {
+                    isRestoringRef.current = false;
+                }
             } else if (adminTemplateMode === 'new' || collectionHeroMode) {
                 const blank = EMPTY_PAGE(defaultW, defaultH, defaultTrans);
                 if (collectionHeroMode) {
@@ -1929,7 +1969,7 @@ export default function ImageEditor({
         const flushUnsavedDraft = () => {
             if (bypassUnsavedGuardRef.current) return;
             if (!isProjectOpen || !isDirtyRef.current || isRestoringRef.current) return;
-            if (adminTemplateMode || collectionHeroMode) return;
+            if (adminTemplateMode || collectionHeroMode || brandSuiteMode) return;
 
             const canvas = fabricRef.current;
             const json = canvas ? serializeCanvasSafely(canvas, CUSTOM_PROPS) : null;
@@ -4544,6 +4584,120 @@ export default function ImageEditor({
     };
 
     const [savingCollectionHero, setSavingCollectionHero] = useState(false);
+    const [savingBrandSuite, setSavingBrandSuite] = useState(false);
+
+    const handleSaveBrandSuite = async () => {
+        if (savingBrandSuite || !brandSuiteMode) return;
+        setSavingBrandSuite(true);
+        const toastId = toast.loading('Saving branding assets...');
+        try {
+            const snapshotPages = snapshotCurrentPageIntoArray();
+            setPages(snapshotPages);
+            const activePage = snapshotPages[activePageIdx] || snapshotPages[0];
+            const pageAbs = normalizeArtboardsForPage(activePage, canvasWidth, canvasHeight, defaultTrans);
+
+            let rolesToExport = null;
+            if (brandSuiteMode.singleAssetRole) {
+                rolesToExport = [brandSuiteMode.singleAssetRole];
+            } else {
+                const currentDigests = computeBrandSuiteDigests(pageAbs, activePage.fabricJson, brandSuiteMode);
+                const initDigests = brandSuiteInitialDigestsRef.current || {};
+                const specs = Array.isArray(brandSuiteMode.artboards) ? brandSuiteMode.artboards : [];
+                rolesToExport = specs
+                    .filter((spec) => {
+                        const changed = currentDigests[spec.role] !== initDigests[spec.role];
+                        // Keep Logo dynamic (synced with Icon + Website Name) unless custom logo exists or Logo artboard was explicitly edited
+                        if (spec.role === 'logo') {
+                            return Boolean(brandSuiteMode.logoUrl) || changed;
+                        }
+                        if (spec.role === 'icon') {
+                            return Boolean(brandSuiteMode.iconUrl) || changed;
+                        }
+                        if (spec.role === 'favicon') {
+                            return Boolean(brandSuiteMode.faviconUrl) || changed;
+                        }
+                        return changed;
+                    })
+                    .map((spec) => spec.role);
+
+                if (rolesToExport.length === 0) {
+                    toast.success('Branding is already using defaults (no changes made).', { id: toastId });
+                    handleCancelBrandSuite();
+                    return;
+                }
+            }
+
+            const rendered = await renderBrandSuiteBlobs(pageAbs, activePage.fabricJson, brandSuiteMode, rolesToExport);
+            if (!rendered.length) {
+                throw new Error('No brand artboards found to export');
+            }
+
+            const uploadedMap = {};
+            for (const item of rendered) {
+                const formData = new FormData();
+                formData.append('type', item.role);
+                formData.append('file', item.blob, `brand-${item.role}.${item.format}`);
+                const res = await fetch('/api/admin/branding/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+                const json = await res.json().catch(() => ({}));
+                if (!res.ok || !json?.success || !json?.path) {
+                    throw new Error(json?.error || `Failed to upload ${item.name}`);
+                }
+                uploadedMap[item.role] = json.path;
+            }
+
+            const saveRes = await fetch('/api/admin/website-info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...(uploadedMap.logo ? { logoUrl: uploadedMap.logo } : {}),
+                    ...(uploadedMap.icon ? { iconUrl: uploadedMap.icon } : {}),
+                    ...(uploadedMap.favicon ? { faviconUrl: uploadedMap.favicon } : {}),
+                }),
+            });
+            const saveJson = await saveRes.json().catch(() => ({}));
+            if (!saveRes.ok || !saveJson?.success) {
+                throw new Error(saveJson?.error || 'Failed to save brand assets to website settings');
+            }
+
+            toast.success('Website Logo (SVG), Icon (SVG) & Favicon (PNG) saved!', { id: toastId });
+            const msg = {
+                type: 'PNG101_BRAND_SUITE_SAVED',
+                logoUrl: saveJson?.data?.logoUrl ?? uploadedMap.logo ?? '',
+                iconUrl: saveJson?.data?.iconUrl ?? uploadedMap.icon ?? '',
+                faviconUrl: saveJson?.data?.faviconUrl ?? uploadedMap.favicon ?? '',
+            };
+            if (typeof window !== 'undefined') {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage(msg, window.location.origin);
+                }
+                if (window.opener) {
+                    window.opener.postMessage(msg, window.location.origin);
+                }
+            }
+        } catch (err) {
+            toast.error(err?.message || 'Failed to save branding assets', { id: toastId });
+        } finally {
+            setSavingBrandSuite(false);
+        }
+    };
+
+    const handleCancelBrandSuite = () => {
+        if (typeof window !== 'undefined') {
+            const msg = { type: 'PNG101_BRAND_SUITE_CLOSE' };
+            if (window.parent && window.parent !== window) {
+                window.parent.postMessage(msg, window.location.origin);
+                return;
+            }
+            if (window.opener) {
+                window.close();
+                return;
+            }
+            router.visit('/admin/dashboard/settings');
+        }
+    };
 
     const handleSaveCollectionHero = async () => {
         if (savingCollectionHero) return;
@@ -4761,6 +4915,10 @@ export default function ImageEditor({
                 onSaveCollectionHero={handleSaveCollectionHero}
                 savingCollectionHero={savingCollectionHero}
                 onCancelCollectionHero={handleCancelCollectionHero}
+                brandSuiteMode={brandSuiteMode}
+                onSaveBrandSuite={handleSaveBrandSuite}
+                savingBrandSuite={savingBrandSuite}
+                onCancelBrandSuite={handleCancelBrandSuite}
             />
 
             {isProjectOpen && (

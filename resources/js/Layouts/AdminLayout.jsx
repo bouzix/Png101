@@ -11,6 +11,7 @@ import React, {
 import { Link, usePage, router } from '@inertiajs/react';
 import { ShieldAlert, Lock, Wrench, UploadCloud } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
+import { BrandIcon } from '@/components/BrandMark';
 import GlobalUpdateNotifier from '@/components/admin/GlobalUpdateNotifier';
 import { useBulkEdit } from '@/components/admin/BulkEditSidebar';
 import { useUploadManager } from '@/components/admin/UploadManager';
@@ -134,7 +135,9 @@ function SubmenuList({ items, activePath, onSelectChild }) {
 }
 
 export function PersistentAdminLayout({ children }) {
-    const { url } = usePage();
+    const { url, props: pageProps } = usePage();
+    const websiteInfo = pageProps?.websiteInfo || {};
+    const adminBrandName = websiteInfo?.websiteName || 'Png101';
     const { isOpen: isBulkEditOpen, isMinimized: isBulkEditMinimized } = useBulkEdit();
     const { startStagingUpload } = useUploadManager();
     const [isGlobalDragging, setIsGlobalDragging] = useState(false);
@@ -572,14 +575,17 @@ export function PersistentAdminLayout({ children }) {
 
                     {/* Header */}
                     <div className={`p-6 border-b border-slate-200 dark:border-slate-800/80 flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} transition-all duration-300 h-[88px]`}>
-                        <Link href="/" className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center border border-blue-400/30 shadow-[0_0_15px_rgba(59,130,246,0.3)] flex-shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 text-white">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-                            </svg>
+                        <Link href="/" data-testid="admin-sidebar-brand-link" className="shrink-0">
+                            <BrandIcon
+                                iconUrl={websiteInfo?.iconUrl}
+                                alt={`${adminBrandName} icon`}
+                                sizeClass="w-8 h-8"
+                                roundedClass="rounded-lg"
+                            />
                         </Link>
                         <div className={`overflow-hidden transition-all duration-300 ${isCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}>
                             <h1 className="text-xl font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                                Png101
+                                {adminBrandName}
                             </h1>
                             {session && (
                                 <p className="text-[11px] text-slate-500 dark:text-blue-300/70 truncate">

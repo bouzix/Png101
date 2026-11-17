@@ -75,9 +75,6 @@ export default function TrendingCollections() {
                         <h2 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
                             Trending Collections
                         </h2>
-                        <p className="text-xs text-foreground/50 mt-0.5">
-                            Top transparent PNG packs and curated bundles trending this week
-                        </p>
                     </div>
                 </div>
 

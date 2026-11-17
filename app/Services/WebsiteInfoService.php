@@ -22,17 +22,96 @@ class WebsiteInfoService
             'country' => 'United States',
             'address' => '',
             'foundedYear' => '2025',
+            'logoUrl' => '',
+            'iconUrl' => '',
+            'faviconUrl' => '',
         ];
+    }
+
+    public static function defaultBrandAssets(): array
+    {
+        return [
+            'logoUrl' => '',
+            'iconUrl' => '',
+            'faviconUrl' => '',
+        ];
+    }
+
+    public static function sanitizeBrandAssetUrl(mixed $value): string
+    {
+        if (! is_string($value)) {
+            return '';
+        }
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return '';
+        }
+        if (str_starts_with($trimmed, '/') && ! str_contains($trimmed, '..')) {
+            return $trimmed;
+        }
+        if (preg_match('#^https?://#i', $trimmed)) {
+            return $trimmed;
+        }
+
+        return '';
+    }
+
+    public static function getBrandAssets(): array
+    {
+        $defaults = self::defaultBrandAssets();
+
+        try {
+            $setting = Setting::find('brand_assets');
+            if (! $setting || ! is_string($setting->value) || $setting->value === '') {
+                return $defaults;
+            }
+            $decoded = json_decode($setting->value, true);
+            if (! is_array($decoded)) {
+                return $defaults;
+            }
+
+            return [
+                'logoUrl' => self::sanitizeBrandAssetUrl($decoded['logoUrl'] ?? ''),
+                'iconUrl' => self::sanitizeBrandAssetUrl($decoded['iconUrl'] ?? ''),
+                'faviconUrl' => self::sanitizeBrandAssetUrl($decoded['faviconUrl'] ?? ''),
+            ];
+        } catch (\Throwable) {
+            return $defaults;
+        }
+    }
+
+    public static function saveBrandAssets(array $data): array
+    {
+        $current = self::getBrandAssets();
+        $next = [
+            'logoUrl' => array_key_exists('logoUrl', $data)
+                ? self::sanitizeBrandAssetUrl($data['logoUrl'])
+                : $current['logoUrl'],
+            'iconUrl' => array_key_exists('iconUrl', $data)
+                ? self::sanitizeBrandAssetUrl($data['iconUrl'])
+                : $current['iconUrl'],
+            'faviconUrl' => array_key_exists('faviconUrl', $data)
+                ? self::sanitizeBrandAssetUrl($data['faviconUrl'])
+                : $current['faviconUrl'],
+        ];
+
+        Setting::updateOrCreate(
+            ['key' => 'brand_assets'],
+            ['value' => json_encode($next, JSON_UNESCAPED_SLASHES)]
+        );
+
+        return $next;
     }
 
     public static function get(): array
     {
         $defaults = self::defaults();
+        $brandAssets = self::getBrandAssets();
 
         try {
             $record = WebsiteInfo::find(self::DEFAULT_ID);
             if ($record) {
-                return [
+                return array_merge([
                     'id' => self::DEFAULT_ID,
                     'websiteName' => $record->websiteName ?: $defaults['websiteName'],
                     'websiteUrl' => $record->websiteUrl ?: $defaults['websiteUrl'],
@@ -44,7 +123,7 @@ class WebsiteInfoService
                     'address' => $record->address ?? $defaults['address'],
                     'foundedYear' => $record->foundedYear ?: $defaults['foundedYear'],
                     'updatedAt' => $record->updatedAt?->toISOString(),
-                ];
+                ], $brandAssets);
             }
 
             $titleSetting = Setting::find('websiteTitle');
@@ -56,7 +135,7 @@ class WebsiteInfoService
             // Table might not exist yet before migration
         }
 
-        return $defaults;
+        return array_merge($defaults, $brandAssets);
     }
 
     public static function save(array $data): array
@@ -77,6 +156,7 @@ class WebsiteInfoService
         ];
 
         $record = WebsiteInfo::updateOrCreate(['id' => self::DEFAULT_ID], $next);
+        $brandAssets = self::saveBrandAssets($data);
 
         try {
             Setting::updateOrCreate(
@@ -87,7 +167,7 @@ class WebsiteInfoService
             // Ignore
         }
 
-        return array_merge(['id' => self::DEFAULT_ID], $next, [
+        return array_merge(['id' => self::DEFAULT_ID], $next, $brandAssets, [
             'updatedAt' => $record->updatedAt?->toISOString(),
         ]);
     }
