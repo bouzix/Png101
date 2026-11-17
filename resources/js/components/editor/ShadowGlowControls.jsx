@@ -423,7 +423,9 @@ export function ShadowEffectControl({
     const ui = useEffectListUiState(open, temporarilyHidden);
 
     const commitFull = (nextCfg) => {
-        const clean = normalizeShadowConfig(nextCfg);
+        const clean = nextCfg?.resetScale
+            ? { ...normalizeShadowConfig(nextCfg), resetScale: true }
+            : normalizeShadowConfig(nextCfg);
         setDraft(null);
         onUpdateShadow?.(clean, true);
     };
@@ -431,7 +433,11 @@ export function ShadowEffectControl({
     const previewItemPatch = (idx, patch) => {
         const baseItems = normalized.items.length > 0 ? [...normalized.items] : [createShadowItem()];
         baseItems[idx] = createShadowItem({ ...baseItems[idx], enabled: true, ...patch });
-        const nextCfg = { enabled: true, items: baseItems };
+        const nextCfg = {
+            ...(normalized.refScaleX > 0 ? { refScaleX: normalized.refScaleX, refScaleY: normalized.refScaleY } : {}),
+            enabled: true,
+            items: baseItems,
+        };
         setDraft(nextCfg);
         onUpdateShadow?.(nextCfg, false);
     };
@@ -440,6 +446,7 @@ export function ShadowEffectControl({
         const baseItems = normalized.items.length > 0 ? [...normalized.items] : [createShadowItem()];
         baseItems[idx] = createShadowItem({ ...baseItems[idx], ...patch });
         const nextCfg = {
+            ...(normalized.refScaleX > 0 ? { refScaleX: normalized.refScaleX, refScaleY: normalized.refScaleY } : {}),
             enabled: baseItems.some((it) => it.enabled !== false),
             items: baseItems,
         };
@@ -541,7 +548,7 @@ export function ShadowEffectControl({
                                     type="button"
                                     data-testid={`${testIdPrefix}-shadow-reset`}
                                     disabled={items.length === 0}
-                                    onClick={() => commitFull({ enabled: true, items: [createShadowItem()] })}
+                                    onClick={() => commitFull({ enabled: true, items: [createShadowItem()], resetScale: true })}
                                     className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                     title="Reset to default shadow"
                                 >
@@ -751,7 +758,9 @@ export function GlowEffectControl({
     const ui = useEffectListUiState(open, temporarilyHidden);
 
     const commitFull = (nextCfg) => {
-        const clean = normalizeGlowConfig(nextCfg);
+        const clean = nextCfg?.resetScale
+            ? { ...normalizeGlowConfig(nextCfg), resetScale: true }
+            : normalizeGlowConfig(nextCfg);
         setDraft(null);
         onUpdateGlow?.(clean, true);
     };
@@ -759,7 +768,11 @@ export function GlowEffectControl({
     const previewItemPatch = (idx, patch) => {
         const baseItems = normalized.items.length > 0 ? [...normalized.items] : [createGlowItem()];
         baseItems[idx] = createGlowItem({ ...baseItems[idx], enabled: true, ...patch });
-        const nextCfg = { enabled: true, items: baseItems };
+        const nextCfg = {
+            ...(normalized.refScaleX > 0 ? { refScaleX: normalized.refScaleX, refScaleY: normalized.refScaleY } : {}),
+            enabled: true,
+            items: baseItems,
+        };
         setDraft(nextCfg);
         onUpdateGlow?.(nextCfg, false);
     };
@@ -768,6 +781,7 @@ export function GlowEffectControl({
         const baseItems = normalized.items.length > 0 ? [...normalized.items] : [createGlowItem()];
         baseItems[idx] = createGlowItem({ ...baseItems[idx], ...patch });
         const nextCfg = {
+            ...(normalized.refScaleX > 0 ? { refScaleX: normalized.refScaleX, refScaleY: normalized.refScaleY } : {}),
             enabled: baseItems.some((it) => it.enabled !== false),
             items: baseItems,
         };
@@ -869,7 +883,7 @@ export function GlowEffectControl({
                                     type="button"
                                     data-testid={`${testIdPrefix}-glow-reset`}
                                     disabled={items.length === 0}
-                                    onClick={() => commitFull({ enabled: true, items: [createGlowItem()] })}
+                                    onClick={() => commitFull({ enabled: true, items: [createGlowItem()], resetScale: true })}
                                     className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                                     title="Reset to default glow"
                                 >

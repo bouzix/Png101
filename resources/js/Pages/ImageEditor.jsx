@@ -2273,14 +2273,15 @@ export default function ImageEditor({
         const active = canvas?.getActiveObject();
         if (!canvas || !active) return;
         const cfg = normalizeShadowConfig(nextCfg);
+        const input = nextCfg?.resetScale ? { ...cfg, resetScale: true } : cfg;
         if (active.type === 'activeselection') {
             active.getObjects().forEach((child) => {
-                applyEffectsToObject(child, cfg, undefined);
+                applyEffectsToObject(child, { ...input }, undefined);
                 dirtyObjectAndAncestors(child);
             });
             active.set('shadowConfig', cfg);
         } else {
-            applyEffectsToObject(active, cfg, undefined);
+            applyEffectsToObject(active, input, undefined);
         }
         dirtyObjectAndAncestors(active);
         canvas.requestRenderAll?.();
@@ -2297,14 +2298,15 @@ export default function ImageEditor({
         const active = canvas?.getActiveObject();
         if (!canvas || !active) return;
         const cfg = normalizeGlowConfig(nextCfg);
+        const input = nextCfg?.resetScale ? { ...cfg, resetScale: true } : cfg;
         if (active.type === 'activeselection') {
             active.getObjects().forEach((child) => {
-                applyEffectsToObject(child, undefined, cfg);
+                applyEffectsToObject(child, undefined, { ...input });
                 dirtyObjectAndAncestors(child);
             });
             active.set('glowConfig', cfg);
         } else {
-            applyEffectsToObject(active, undefined, cfg);
+            applyEffectsToObject(active, undefined, input);
         }
         dirtyObjectAndAncestors(active);
         canvas.requestRenderAll?.();

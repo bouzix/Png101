@@ -162,34 +162,71 @@ export function rgbaToHexAndAlpha(colorStr = '#000000') {
     };
 }
 
+export function getObjectSceneScaling(obj) {
+    if (!obj) return { x: 1, y: 1 };
+    if (typeof obj.getObjectScaling === 'function') {
+        const s = obj.getObjectScaling();
+        return {
+            x: Math.max(1e-4, Math.abs(Number(s?.x) || 1)),
+            y: Math.max(1e-4, Math.abs(Number(s?.y) || 1)),
+        };
+    }
+    return {
+        x: Math.max(1e-4, Math.abs(Number(obj.scaleX) || 1)),
+        y: Math.max(1e-4, Math.abs(Number(obj.scaleY) || 1)),
+    };
+}
+
+function preservePositiveRefScales(target, source) {
+    const rx = Number(source?.refScaleX);
+    const ry = Number(source?.refScaleY);
+    if (Number.isFinite(rx) && rx > 0 && Number.isFinite(ry) && ry > 0) {
+        target.refScaleX = rx;
+        target.refScaleY = ry;
+    }
+    return target;
+}
+
 export function normalizeShadowConfig(raw) {
     if (!raw || typeof raw !== 'object') return { enabled: false, items: [] };
     if (Array.isArray(raw.items)) {
-        return {
-            enabled: Boolean(raw.enabled),
-            items: raw.items.map((it) => createShadowItem(it)),
-        };
+        return preservePositiveRefScales(
+            {
+                enabled: Boolean(raw.enabled),
+                items: raw.items.map((it) => createShadowItem(it)),
+            },
+            raw
+        );
     }
     // Migrate legacy single-object shadowConfig
-    return {
-        enabled: Boolean(raw.enabled),
-        items: [createShadowItem({ ...raw, enabled: true })],
-    };
+    return preservePositiveRefScales(
+        {
+            enabled: Boolean(raw.enabled),
+            items: [createShadowItem({ ...raw, enabled: true })],
+        },
+        raw
+    );
 }
 
 export function normalizeGlowConfig(raw) {
     if (!raw || typeof raw !== 'object') return { enabled: false, items: [] };
     if (Array.isArray(raw.items)) {
-        return {
-            enabled: Boolean(raw.enabled),
-            items: raw.items.map((it) => createGlowItem(it)),
-        };
+        return preservePositiveRefScales(
+            {
+                enabled: Boolean(raw.enabled),
+                items: raw.items.map((it) => createGlowItem(it)),
+            },
+            raw
+        );
     }
     // Migrate legacy single-object glowConfig
-    return {
-        enabled: Boolean(raw.enabled),
-        items: [createGlowItem({ ...raw, enabled: true })],
-    };
+    return preservePositiveRefScales(
+        {
+            enabled: Boolean(raw.enabled),
+            items: [createGlowItem({ ...raw, enabled: true })],
+        },
+        raw
+    );
 }
 
 export function parseShadowMeta(obj) {
@@ -248,8 +285,45 @@ export function parseGlowMeta(obj) {
 
 export function applyEffectsToObject(obj, nextShadow, nextGlow) {
     if (!obj) return;
+    const prevShadow = obj.shadowConfig;
+    const prevGlow = obj.glowConfig;
     const shadowCfg = normalizeShadowConfig(nextShadow !== undefined ? nextShadow : parseShadowMeta(obj));
     const glowCfg = normalizeGlowConfig(nextGlow !== undefined ? nextGlow : parseGlowMeta(obj));
+    const curScale = getObjectSceneScaling(obj);
+
+    const resolveRefScales = (cfg, rawInput, prevCfg) => {
+        if (cfg.items.length === 0 && !cfg.enabled) {
+            delete cfg.refScaleX;
+            delete cfg.refScaleY;
+            return cfg;
+        }
+        if (rawInput?.resetScale) {
+            cfg.refScaleX = curScale.x;
+            cfg.refScaleY = curScale.y;
+            return cfg;
+        }
+        if (Number.isFinite(Number(cfg.refScaleX)) && cfg.refScaleX > 0 && Number.isFinite(Number(cfg.refScaleY)) && cfg.refScaleY > 0) {
+            return cfg;
+        }
+        if (
+            prevCfg &&
+            (prevCfg.items?.length > 0 || prevCfg.enabled) &&
+            Number.isFinite(Number(prevCfg.refScaleX)) &&
+            prevCfg.refScaleX > 0 &&
+            Number.isFinite(Number(prevCfg.refScaleY)) &&
+            prevCfg.refScaleY > 0
+        ) {
+            cfg.refScaleX = Number(prevCfg.refScaleX);
+            cfg.refScaleY = Number(prevCfg.refScaleY);
+            return cfg;
+        }
+        cfg.refScaleX = curScale.x;
+        cfg.refScaleY = curScale.y;
+        return cfg;
+    };
+
+    resolveRefScales(shadowCfg, nextShadow, prevShadow);
+    resolveRefScales(glowCfg, nextGlow, prevGlow);
 
     obj.set('shadowConfig', shadowCfg);
     obj.set('glowConfig', glowCfg);
@@ -537,10 +611,55 @@ function collectObjectEffects(obj) {
     return { outer, inner };
 }
 
+function ensureEffectConfigRefScales(obj) {
+    if (!obj) return;
+    const curScale = getObjectSceneScaling(obj);
+    if (obj.shadowConfig && (obj.shadowConfig.enabled || obj.shadowConfig.items?.length > 0)) {
+        if (!(Number(obj.shadowConfig.refScaleX) > 0) || !(Number(obj.shadowConfig.refScaleY) > 0)) {
+            obj.shadowConfig = {
+                ...obj.shadowConfig,
+                refScaleX: curScale.x,
+                refScaleY: curScale.y,
+            };
+        }
+    }
+    if (obj.glowConfig && (obj.glowConfig.enabled || obj.glowConfig.items?.length > 0)) {
+        if (!(Number(obj.glowConfig.refScaleX) > 0) || !(Number(obj.glowConfig.refScaleY) > 0)) {
+            obj.glowConfig = {
+                ...obj.glowConfig,
+                refScaleX: curScale.x,
+                refScaleY: curScale.y,
+            };
+        }
+    }
+}
+
+function resolveEffectScaling(obj, kind) {
+    const curScale = getObjectSceneScaling(obj);
+    const cfg = kind === 'glow' ? obj?.glowConfig : obj?.shadowConfig;
+    const refX = Number(cfg?.refScaleX) > 0 ? Number(cfg.refScaleX) : curScale.x;
+    const refY = Number(cfg?.refScaleY) > 0 ? Number(cfg.refScaleY) : curScale.y;
+
+    const ratioX = curScale.x / Math.max(1e-4, refX);
+    const ratioY = curScale.y / Math.max(1e-4, refY);
+    const ratioAvg = Math.sqrt(Math.max(1e-6, ratioX * ratioY));
+
+    // Derive cache pixels per scene unit directly from Fabric's _cacheCanvas zoom (zoomX / curScale.x).
+    // This guarantees identical proportional rendering regardless of viewport zoom, mobile DPR (1x vs 3x),
+    // export multiplier, interactive noScaleCache dragging, or Fabric's perfLimitSizeTotal cache capping.
+    const cacheZoomX = Math.max(1e-4, Math.abs(Number(obj?.zoomX) || curScale.x));
+    const cacheZoomY = Math.max(1e-4, Math.abs(Number(obj?.zoomY) || curScale.y));
+    const pxPerSceneX = cacheZoomX / curScale.x;
+    const pxPerSceneY = cacheZoomY / curScale.y;
+    const pxPerSceneAvg = (pxPerSceneX + pxPerSceneY) * 0.5;
+
+    return { curScale, ratioX, ratioY, ratioAvg, cacheZoomX, cacheZoomY, pxPerSceneAvg };
+}
+
 function buildDilatedSilhouette(srcCanvas, spreadPx, color) {
     const srcW = srcCanvas.width;
     const srcH = srcCanvas.height;
-    const r = Math.min(48, Math.max(0, spreadPx));
+    const r = Math.min(240, Math.max(0, spreadPx));
     const pad = Math.ceil(r) + 2;
     const { canvas, ctx, w, h } = ensureScratchCanvas(scratchDilateCanvas, srcW + pad * 2, srcH + pad * 2);
     scratchDilateCanvas = canvas;
@@ -549,8 +668,8 @@ function buildDilatedSilhouette(srcCanvas, spreadPx, color) {
     ctx.clearRect(0, 0, w, h);
 
     if (r > 0) {
-        const rings = r > 8 ? [r * 0.5, r] : [r];
-        const steps = r > 12 ? 16 : 12;
+        const rings = r > 24 ? [r * 0.33, r * 0.66, r] : r > 8 ? [r * 0.5, r] : [r];
+        const steps = r > 24 ? 20 : r > 12 ? 16 : 12;
         rings.forEach((radius) => {
             for (let i = 0; i < steps; i++) {
                 const theta = (i * Math.PI * 2) / steps;
@@ -566,40 +685,49 @@ function buildDilatedSilhouette(srcCanvas, spreadPx, color) {
     return { canvas, pad, w, h };
 }
 
-function resolveEffectOffsetInCacheSpace(ctx, ef, obj) {
-    const canvas = obj.canvas;
-    const retina = typeof obj.getCanvasRetinaScaling === 'function' ? obj.getCanvasRetinaScaling() : 1;
-    const vpt = canvas?.viewportTransform || [1, 0, 0, 1, 0, 0];
-    const multX = (vpt[0] || 1) * retina;
-    const multY = (vpt[3] || 1) * retina;
-    const sDx = (ef.offsetX || 0) * multX;
-    const sDy = (ef.offsetY || 0) * multY;
-
+function resolveEffectOffsetInCacheSpace(ef, obj, scaling) {
+    const sDx = (Number(ef.offsetX) || 0) * scaling.ratioX;
+    const sDy = (Number(ef.offsetY) || 0) * scaling.ratioY;
     if (sDx === 0 && sDy === 0) return { dx: 0, dy: 0 };
 
-    const T = typeof ctx.getTransform === 'function' ? ctx.getTransform() : null;
-    if (!T) return { dx: sDx, dy: sDy };
-    const det = T.a * T.d - T.b * T.c;
-    if (!det || Math.abs(det) < 1e-6) return { dx: sDx, dy: sDy };
+    // Transform the scene-space shadow vector into object-local coordinates via the inverse
+    // linear 2x2 part of obj.calcTransformMatrix(), then scale into _cacheCanvas pixel space.
+    // Because this depends only on the object's transform and cache zoom, it stays 100% consistent
+    // across zoom levels, mobile DPR, cached parent groups, flips, rotations, and exports.
+    const m = typeof obj?.calcTransformMatrix === 'function' ? obj.calcTransformMatrix() : null;
+    if (!m) {
+        return {
+            dx: sDx * (scaling.cacheZoomX / Math.max(1e-4, scaling.curScale.x)),
+            dy: sDy * (scaling.cacheZoomY / Math.max(1e-4, scaling.curScale.y)),
+        };
+    }
 
+    const det = m[0] * m[3] - m[1] * m[2];
+    if (!det || Math.abs(det) < 1e-6) {
+        return {
+            dx: sDx * (scaling.cacheZoomX / Math.max(1e-4, scaling.curScale.x)),
+            dy: sDy * (scaling.cacheZoomY / Math.max(1e-4, scaling.curScale.y)),
+        };
+    }
+
+    const lx = (m[3] * sDx - m[2] * sDy) / det;
+    const ly = (-m[1] * sDx + m[0] * sDy) / det;
     return {
-        dx: (T.d * sDx - T.c * sDy) / det,
-        dy: (-T.b * sDx + T.a * sDy) / det,
+        dx: lx * scaling.cacheZoomX,
+        dy: ly * scaling.cacheZoomY,
     };
 }
 
 function renderOuterEffectLayer(ctx, srcCanvas, destX, destY, ef, obj) {
     const srcW = srcCanvas.width;
     const srcH = srcCanvas.height;
-    const retina = typeof obj.getCanvasRetinaScaling === 'function' ? obj.getCanvasRetinaScaling() : 1;
-    const vpt = obj.canvas?.viewportTransform || [1, 0, 0, 1, 0, 0];
-    const scaleAvg = (((vpt[0] || 1) + (vpt[3] || 1)) * 0.5) * retina;
-    const blurPx = Math.max(0, Number(ef.blur) || 0) * scaleAvg;
-    const spreadPx = Math.max(0, Number(ef.spread) || 0) * scaleAvg;
-    const { dx: offX, dy: offY } = resolveEffectOffsetInCacheSpace(ctx, ef, obj);
+    const scaling = resolveEffectScaling(obj, ef.kind);
+    const blurPx = Math.max(0, Number(ef.blur) || 0) * scaling.ratioAvg * scaling.pxPerSceneAvg;
+    const spreadPx = Math.max(0, Number(ef.spread) || 0) * scaling.ratioAvg * scaling.pxPerSceneAvg;
+    const { dx: offX, dy: offY } = resolveEffectOffsetInCacheSpace(ef, obj, scaling);
 
-    const padX = Math.min(260, Math.ceil(blurPx * 1.45 + Math.abs(offX) + spreadPx + 6));
-    const padY = Math.min(260, Math.ceil(blurPx * 1.45 + Math.abs(offY) + spreadPx + 6));
+    const padX = Math.min(1200, Math.ceil(blurPx * 1.45 + Math.abs(offX) + spreadPx + 6));
+    const padY = Math.min(1200, Math.ceil(blurPx * 1.45 + Math.abs(offY) + spreadPx + 6));
     const { canvas: outCanvas, ctx: outCtx, w, h } = ensureScratchCanvas(
         scratchOutCanvas,
         srcW + padX * 2,
@@ -613,7 +741,7 @@ function renderOuterEffectLayer(ctx, srcCanvas, destX, destY, ef, obj) {
 
     if (spreadPx > 0) {
         const dilated = buildDilatedSilhouette(srcCanvas, spreadPx, ef.color || '#ffffff');
-        outCtx.shadowColor = hexToRgba(ef.color, ef.opacity);
+        outCtx.shadowColor = hexToRgba(ef.color, 1);
         outCtx.shadowBlur = blurPx;
         outCtx.shadowOffsetX = offX;
         outCtx.shadowOffsetY = offY;
@@ -666,14 +794,13 @@ function renderOuterEffectLayer(ctx, srcCanvas, destX, destY, ef, obj) {
 function renderInnerEffectLayer(ctx, srcCanvas, destX, destY, ef, obj) {
     const srcW = srcCanvas.width;
     const srcH = srcCanvas.height;
-    const retina = typeof obj.getCanvasRetinaScaling === 'function' ? obj.getCanvasRetinaScaling() : 1;
-    const vpt = obj.canvas?.viewportTransform || [1, 0, 0, 1, 0, 0];
-    const scaleAvg = (((vpt[0] || 1) + (vpt[3] || 1)) * 0.5) * retina;
-    const blurPx = Math.max(0, Number(ef.blur) || 0) * scaleAvg;
-    const spreadPx = Math.max(0, Number(ef.spread) || 0) * scaleAvg;
-    const { dx: offX, dy: offY } = resolveEffectOffsetInCacheSpace(ctx, ef, obj);
+    const scaling = resolveEffectScaling(obj, ef.kind);
+    const blurPx = Math.max(0, Number(ef.blur) || 0) * scaling.ratioAvg * scaling.pxPerSceneAvg;
+    const spreadPx = Math.max(0, Number(ef.spread) || 0) * scaling.ratioAvg * scaling.pxPerSceneAvg;
+    const { dx: offX, dy: offY } = resolveEffectOffsetInCacheSpace(ef, obj, scaling);
 
-    const borderPad = Math.max(4, Math.ceil(blurPx * 0.5 + Math.abs(offX) + Math.abs(offY) + spreadPx + 4));
+    const r = Math.min(200, Math.max(0, spreadPx));
+    const borderPad = Math.max(6, Math.ceil(blurPx * 1.45 + Math.abs(offX) + Math.abs(offY) + r + 6));
     const maskW = srcW + borderPad * 2;
     const maskH = srcH + borderPad * 2;
 
@@ -700,9 +827,8 @@ function renderInnerEffectLayer(ctx, srcCanvas, destX, destY, ef, obj) {
     inCtx.shadowOffsetY = offY;
     inCtx.globalAlpha = ef.opacity;
 
-    if (spreadPx > 0) {
-        const r = Math.min(36, spreadPx);
-        const steps = 8;
+    if (r > 0) {
+        const steps = r > 14 ? 16 : 8;
         for (let i = 0; i < steps; i++) {
             const theta = (i * Math.PI * 2) / steps;
             inCtx.drawImage(
@@ -799,6 +925,7 @@ export function installMultiEffectRenderer() {
     };
 
     FabricObject.prototype.render = function (ctx) {
+        ensureEffectConfigRefScales(this);
         const { outer, inner } = collectObjectEffects(this);
         const objBlend = normalizeBlendMode(this.globalCompositeOperation);
         const isCustomObjBlend = objBlend === 'dissolve' || objBlend === 'subtract';
@@ -2081,6 +2208,10 @@ export async function exportPagesAsZip(pages, safeTitle, exportOpts) {
 
 export function normalizeFabricLayerMetadata(obj) {
     if (!obj) return;
+    ensureEffectConfigRefScales(obj);
+    if (obj.shadow && typeof obj.shadow === 'object') {
+        obj.shadow.nonScaling = false;
+    }
     if (!obj.layerId) obj.set('layerId', uid('layer'));
     if (!obj.layerName) {
         const t = (obj.type || 'Layer').toLowerCase();
