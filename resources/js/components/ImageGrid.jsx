@@ -41,7 +41,7 @@ const ImageGrid = () => {
                         </div>
                     </div>
                     {!loading && popularImages.length > 0 && (
-                        <span className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/25 text-blue-500 dark:text-blue-400 text-xs font-semibold select-none shadow-sm">
+                        <span className="hidden sm:inline-flex self-start sm:self-auto items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/25 text-blue-500 dark:text-blue-400 text-xs font-semibold select-none shadow-sm">
                             <div className="ring-container">
                                 <div className="ringring"></div>
                                 <div className="circle"></div>

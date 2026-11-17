@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import Header from '@/components/Header';
+import RichTextContent from '@/components/legal/RichTextContent';
 import { toast } from 'sonner';
 import { Mail, ShieldAlert, Globe, Send } from 'lucide-react';
 
-function ContactForm({ contactEmail, websiteName }) {
+function ContactForm({ contactEmail, websiteName, submitButtonText }) {
     const [form, setForm] = useState({
         name: '',
         email: '',
@@ -91,16 +92,16 @@ function ContactForm({ contactEmail, websiteName }) {
 
             <button
                 type="submit"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-primary-glow text-white font-semibold rounded-xl hover:bg-blue-600 transition-all shadow-lg shadow-primary-glow/20 cursor-pointer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-primary-glow text-white font-semibold rounded-xl hover:bg-blue-600 transition-all shadow-lg shadow-primary-glow/20 cursor-pointer"
             >
                 <Send className="w-4 h-4" />
-                Send Message
+                {submitButtonText || 'Send Message'}
             </button>
         </form>
     );
 }
 
-export default function ContactUs({ websiteInfo = {} }) {
+export default function ContactUs({ websiteInfo = {}, legalContent = null }) {
     const info = {
         websiteName: websiteInfo.websiteName || 'Png101',
         contactEmail: websiteInfo.contactEmail || 'contact@png101.com',
@@ -108,6 +109,21 @@ export default function ContactUs({ websiteInfo = {} }) {
         companyName: websiteInfo.companyName || 'Png101',
         country: websiteInfo.country || 'United States',
         address: websiteInfo.address || '',
+    };
+
+    const content = legalContent || {
+        heroBadge: 'Get in Touch',
+        heroTitle: 'Contact Us',
+        heroSubtitleHtml: `<p>Have questions, feedback, or need assistance with an image on <strong>${info.websiteName}</strong>? Reach out to us using the details or form below.</p>`,
+        supportTitle: 'General Support & Inquiries',
+        supportDescriptionHtml: `<p>For questions, partnerships, or feedback about ${info.websiteName}:</p>`,
+        dmcaTitle: 'DMCA & Copyright Notices',
+        dmcaDescriptionHtml: '<p>For copyright or takedown requests (see our <a href="/dmca-policy">DMCA Policy</a>):</p>',
+        orgTitle: 'Organization Info',
+        orgNoteHtml: '',
+        formTitle: 'Send Us a Message',
+        formSubtitleHtml: `<p>Fill out the form below to compose a message directly to <strong>${info.contactEmail}</strong>.</p>`,
+        submitButtonText: 'Send Message',
     };
 
     return (
@@ -118,28 +134,32 @@ export default function ContactUs({ websiteInfo = {} }) {
             <main className="w-full px-6 sm:px-10 md:px-16 py-16 space-y-12">
                 {/* Page Header */}
                 <div className="text-center max-w-2xl mx-auto space-y-3">
-                    <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-primary-glow/10 text-primary-glow border border-primary-glow/20">
-                        Get in Touch
-                    </span>
-                    <h1 className="text-4xl font-bold text-foreground">Contact Us</h1>
-                    <p className="text-foreground/60">
-                        Have questions, feedback, or need assistance with an image on <strong>{info.websiteName}</strong>? Reach out to us using the details or form below.
-                    </p>
+                    {content.heroBadge && (
+                        <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-primary-glow/10 text-primary-glow border border-primary-glow/20">
+                            {content.heroBadge}
+                        </span>
+                    )}
+                    <h1 className="text-4xl font-bold text-foreground">{content.heroTitle}</h1>
+                    <RichTextContent
+                        html={content.heroSubtitleHtml}
+                        className="text-foreground/60"
+                    />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                     {/* Contact Info Sidebar */}
                     <div className="lg:col-span-5 space-y-6">
-                        <div className="bg-card-bg border border-card-border rounded-2xl p-6 space-y-4 shadow-xl">
+                        <div className="bg-card-bg border border-card-border rounded-2xl p-6 space-y-4">
                             <div className="flex items-start gap-4">
                                 <div className="p-3 rounded-xl bg-primary-glow/10 text-primary-glow border border-primary-glow/20">
                                     <Mail className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-foreground">General Support &amp; Inquiries</h3>
-                                    <p className="text-xs text-foreground/60 mt-1 mb-2">
-                                        For questions, partnerships, or feedback about {info.websiteName}:
-                                    </p>
+                                    <h3 className="font-bold text-foreground">{content.supportTitle}</h3>
+                                    <RichTextContent
+                                        html={content.supportDescriptionHtml}
+                                        className="text-xs text-foreground/60 mt-1 mb-2"
+                                    />
                                     <a
                                         href={`mailto:${info.contactEmail}`}
                                         className="text-sm font-medium text-primary-glow hover:underline break-all"
@@ -150,16 +170,17 @@ export default function ContactUs({ websiteInfo = {} }) {
                             </div>
                         </div>
 
-                        <div className="bg-card-bg border border-card-border rounded-2xl p-6 space-y-4 shadow-xl">
+                        <div className="bg-card-bg border border-card-border rounded-2xl p-6 space-y-4">
                             <div className="flex items-start gap-4">
                                 <div className="p-3 rounded-xl bg-primary-glow/10 text-primary-glow border border-primary-glow/20">
                                     <ShieldAlert className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-foreground">DMCA &amp; Copyright Notices</h3>
-                                    <p className="text-xs text-foreground/60 mt-1 mb-2">
-                                        For copyright or takedown requests (see our <Link href="/dmca-policy" className="text-primary-glow hover:underline">DMCA Policy</Link>):
-                                    </p>
+                                    <h3 className="font-bold text-foreground">{content.dmcaTitle}</h3>
+                                    <RichTextContent
+                                        html={content.dmcaDescriptionHtml}
+                                        className="text-xs text-foreground/60 mt-1 mb-2"
+                                    />
                                     <a
                                         href={`mailto:${info.dmcaEmail}`}
                                         className="text-sm font-medium text-primary-glow hover:underline break-all"
@@ -170,13 +191,13 @@ export default function ContactUs({ websiteInfo = {} }) {
                             </div>
                         </div>
 
-                        <div className="bg-card-bg border border-card-border rounded-2xl p-6 space-y-4 shadow-xl">
+                        <div className="bg-card-bg border border-card-border rounded-2xl p-6 space-y-4">
                             <div className="flex items-start gap-4">
                                 <div className="p-3 rounded-xl bg-primary-glow/10 text-primary-glow border border-primary-glow/20">
                                     <Globe className="w-5 h-5" />
                                 </div>
                                 <div className="space-y-1">
-                                    <h3 className="font-bold text-foreground">Organization Info</h3>
+                                    <h3 className="font-bold text-foreground">{content.orgTitle}</h3>
                                     <p className="text-sm text-foreground/70">
                                         <strong>Company:</strong> {info.companyName}
                                     </p>
@@ -188,18 +209,32 @@ export default function ContactUs({ websiteInfo = {} }) {
                                             <strong>Address:</strong> {info.address}
                                         </p>
                                     )}
+                                    {content.orgNoteHtml && (
+                                        <RichTextContent
+                                            html={content.orgNoteHtml}
+                                            className="text-xs text-foreground/65 pt-1"
+                                        />
+                                    )}
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     {/* Contact Form */}
-                    <div className="lg:col-span-7 bg-card-bg border border-card-border rounded-2xl p-8 shadow-xl">
-                        <h2 className="text-xl font-bold text-foreground mb-2">Send Us a Message</h2>
-                        <p className="text-sm text-foreground/60 mb-6">
-                            Fill out the form below to compose a message directly to <strong>{info.contactEmail}</strong>.
-                        </p>
-                        <ContactForm contactEmail={info.contactEmail} websiteName={info.websiteName} />
+                    <div
+                        data-testid="contact-form-container"
+                        className="lg:col-span-7 bg-transparent border-0 p-0 shadow-none sm:bg-card-bg sm:border sm:border-card-border sm:rounded-2xl sm:p-8 sm:shadow-xl"
+                    >
+                        <h2 className="text-xl font-bold text-foreground mb-2">{content.formTitle}</h2>
+                        <RichTextContent
+                            html={content.formSubtitleHtml}
+                            className="text-sm text-foreground/60 mb-6"
+                        />
+                        <ContactForm
+                            contactEmail={info.contactEmail}
+                            websiteName={info.websiteName}
+                            submitButtonText={content.submitButtonText}
+                        />
                     </div>
                 </div>
             </main>

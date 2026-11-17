@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Services\AnalyticsService;
 use App\Services\CollectionService;
 use App\Services\ErrorPagesService;
+use App\Services\LegalPagesService;
 use App\Services\RelatedImagesService;
 use App\Services\SliderSettingsService;
 use App\Services\WebsiteInfoService;
@@ -240,6 +241,7 @@ class PublicController extends Controller
     {
         $info = WebsiteInfoService::get();
         return Inertia::render('Legal/AboutUs', [
+            'legalContent' => LegalPagesService::getResolvedPage('aboutUs', $info),
             'seo' => ['title' => "About Us - {$info['websiteName']}"],
         ]);
     }
@@ -248,6 +250,7 @@ class PublicController extends Controller
     {
         $info = WebsiteInfoService::get();
         return Inertia::render('Legal/ContactUs', [
+            'legalContent' => LegalPagesService::getResolvedPage('contactUs', $info),
             'seo' => ['title' => "Contact Us - {$info['websiteName']}"],
         ]);
     }
@@ -256,6 +259,7 @@ class PublicController extends Controller
     {
         $info = WebsiteInfoService::get();
         return Inertia::render('Legal/TermsOfService', [
+            'legalContent' => LegalPagesService::getResolvedPage('termsOfService', $info),
             'seo' => ['title' => "Terms of Service - {$info['websiteName']}"],
         ]);
     }
@@ -264,6 +268,7 @@ class PublicController extends Controller
     {
         $info = WebsiteInfoService::get();
         return Inertia::render('Legal/PrivacyPolicy', [
+            'legalContent' => LegalPagesService::getResolvedPage('privacyPolicy', $info),
             'seo' => ['title' => "Privacy Policy - {$info['websiteName']}"],
         ]);
     }
@@ -272,6 +277,7 @@ class PublicController extends Controller
     {
         $info = WebsiteInfoService::get();
         return Inertia::render('Legal/DmcaPolicy', [
+            'legalContent' => LegalPagesService::getResolvedPage('dmcaPolicy', $info),
             'seo' => ['title' => "DMCA Policy - {$info['websiteName']}"],
         ]);
     }

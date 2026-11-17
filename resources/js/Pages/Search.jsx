@@ -3,7 +3,6 @@ import { Head, Link } from '@inertiajs/react';
 import Header from '@/components/Header';
 import ImageCard from '@/components/ImageCard';
 import { slugify } from '@/lib/utils';
-import { Layers, ArrowRight } from 'lucide-react';
 import { useIsDesktopXl } from '@/hooks/useIsDesktopXl';
 
 export default function Search({
@@ -26,20 +25,6 @@ export default function Search({
     const [loadingInitial, setLoadingInitial] = useState(!initialImages);
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(initialHasMore !== undefined ? initialHasMore : true);
-    const [matchingCollections, setMatchingCollections] = useState([]);
-
-    useEffect(() => {
-        if (query && query.trim()) {
-            fetch(`/api/collections?q=${encodeURIComponent(query.trim())}`)
-                .then((res) => res.json())
-                .then((data) => {
-                    if (Array.isArray(data)) setMatchingCollections(data.slice(0, 2));
-                })
-                .catch(() => { });
-        } else {
-            setMatchingCollections([]);
-        }
-    }, [query]);
 
     const offsetRef = useRef(initialImages ? initialImages.length : 0);
     const loadingRef = useRef(false);
@@ -163,32 +148,6 @@ export default function Search({
                             </p>
                         )}
                     </div>
-
-                    {/* Matching Collection Callout */}
-                    {matchingCollections.length > 0 && (
-                        <div className="mb-8 p-4 rounded-2xl bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-transparent border border-blue-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-500 flex items-center justify-center shrink-0">
-                                    <Layers className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <span className="text-[10px] uppercase font-bold tracking-wider text-blue-500">
-                                        Curated Collection Available
-                                    </span>
-                                    <h3 className="text-sm font-bold text-foreground">
-                                        Looking for a cohesive pack? Check out the &ldquo;{matchingCollections[0].name}&rdquo; collection
-                                    </h3>
-                                </div>
-                            </div>
-                            <Link
-                                href={`/collections/${matchingCollections[0].slug}`}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center gap-1.5 shrink-0 hover:scale-[1.02]"
-                            >
-                                <span>View Pack ({matchingCollections[0].imageCount} PNGs)</span>
-                                <ArrowRight className="w-3.5 h-3.5" />
-                            </Link>
-                        </div>
-                    )}
 
                     {loadingInitial ? (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-6">

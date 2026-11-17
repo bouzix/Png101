@@ -89,6 +89,7 @@ Route::middleware(['admin.auth'])->prefix('admin/dashboard')->group(function () 
     Route::get('/settings/code-injection', [AdminController::class, 'codeInjection'])->name('admin.settings.code-injection');
     Route::get('/settings/data-management', [AdminController::class, 'dataManagement'])->name('admin.settings.data-management');
     Route::get('/settings/error-pages', [AdminController::class, 'errorPages'])->name('admin.settings.error-pages');
+    Route::get('/settings/legal-pages', [AdminController::class, 'legalPages'])->name('admin.settings.legal-pages');
     Route::get('/settings/captcha', [AdminController::class, 'captchaSettings'])->name('admin.settings.captcha');
     Route::get('/settings/sliders', [AdminController::class, 'sliderSettings'])->name('admin.settings.sliders');
     Route::get('/settings/team', [AdminController::class, 'settingsTeam'])->name('admin.settings.team');
@@ -186,6 +187,10 @@ Route::prefix('api')->group(function () {
 
         Route::get('/admin/error-pages', [AdminController::class, 'getErrorPages']);
         Route::post('/admin/error-pages', [AdminController::class, 'saveErrorPages']);
+
+        Route::get('/admin/legal-pages', [AdminController::class, 'getLegalPages']);
+        Route::post('/admin/legal-pages', [AdminController::class, 'saveLegalPages']);
+        Route::post('/admin/legal-pages/reset', [AdminController::class, 'resetLegalPages']);
 
         Route::get('/admin/captcha', [AdminController::class, 'getCaptchaSettings']);
         Route::post('/admin/captcha', [AdminController::class, 'saveCaptchaSettings']);

@@ -11,6 +11,7 @@ use App\Services\CodeInjectionService;
 use App\Services\ConverterToolsService;
 use App\Services\ErrorPagesService;
 use App\Services\InstallerService;
+use App\Services\LegalPagesService;
 use App\Services\SeoGeneratorService;
 use App\Services\SliderSettingsService;
 use App\Services\SystemHealthService;
@@ -145,6 +146,57 @@ class AdminController extends Controller
             return $forbidden;
         }
         return Inertia::render('Admin/Settings/ErrorPages');
+    }
+
+    public function legalPages(Request $request): Response
+    {
+        if ($forbidden = $this->checkPermission($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+        return Inertia::render('Admin/Settings/LegalPages', [
+            'initialConfig' => LegalPagesService::get(),
+            'defaults' => LegalPagesService::defaults(),
+        ]);
+    }
+
+    public function getLegalPages(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+        return response()->json([
+            'legalPages' => LegalPagesService::get(),
+            'defaults' => LegalPagesService::defaults(),
+        ]);
+    }
+
+    public function saveLegalPages(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+        $payload = $request->input('legalPages', $request->all());
+        if (!is_array($payload)) {
+            return response()->json(['error' => 'Invalid legal pages payload'], 400);
+        }
+        $saved = LegalPagesService::save($payload);
+        return response()->json([
+            'success' => true,
+            'legalPages' => $saved,
+        ]);
+    }
+
+    public function resetLegalPages(Request $request): JsonResponse
+    {
+        if ($forbidden = $this->authorizeApi($request, 'manage_general_settings')) {
+            return $forbidden;
+        }
+        $pageKey = $request->input('pageKey');
+        $saved = LegalPagesService::reset(is_string($pageKey) && $pageKey !== '' ? $pageKey : null);
+        return response()->json([
+            'success' => true,
+            'legalPages' => $saved,
+        ]);
     }
 
     public function settingsTeam(Request $request): Response

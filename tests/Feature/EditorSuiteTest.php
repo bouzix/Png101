@@ -771,4 +771,63 @@ class EditorSuiteTest extends TestCase
             }
         }
     }
+
+    public function test_admin_can_view_save_sanitize_and_reset_legal_pages(): void
+    {
+        $session = $this->adminSession();
+
+        $this->withSession($session)
+            ->get('/admin/dashboard/settings/legal-pages')
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Settings/LegalPages')
+                ->has('initialConfig.aboutUs.missionBodyHtml')
+                ->has('initialConfig.contactUs.supportTitle')
+                ->has('initialConfig.termsOfService.sections', 8)
+                ->has('initialConfig.privacyPolicy.sections', 7)
+                ->has('initialConfig.dmcaPolicy.sections', 4)
+            );
+
+        $customPayload = \App\Services\LegalPagesService::get();
+        $customPayload['aboutUs']['missionTitle'] = 'Updated Mission';
+        $customPayload['aboutUs']['missionBodyHtml'] = '<p><strong>Bold</strong> and <em>italic</em> <a href="/contact-us">Contact</a><script>alert(1)</script><a href="javascript:evil()">bad</a></p>';
+        $customPayload['termsOfService']['sections'][0]['bodyHtml'] = '<ul><li><strong>Clause A</strong> <em>italic detail</em></li></ul>';
+
+        $saveRes = $this->withSession($session)
+            ->postJson('/api/admin/legal-pages', ['legalPages' => $customPayload]);
+
+        $saveRes->assertStatus(200)->assertJsonPath('success', true);
+        $savedBody = (string) $saveRes->json('legalPages.aboutUs.missionBodyHtml');
+        $this->assertStringContainsString('<strong>Bold</strong>', $savedBody);
+        $this->assertStringContainsString('<em>italic</em>', $savedBody);
+        $this->assertStringContainsString('href="/contact-us"', $savedBody);
+        $this->assertStringNotContainsString('<script>', $savedBody);
+        $this->assertStringNotContainsString('javascript:', $savedBody);
+
+        $this->get('/about-us')
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('Legal/AboutUs')
+                ->where('legalContent.missionTitle', 'Updated Mission')
+                ->where('legalContent.missionBodyHtml', fn ($val) => str_contains((string) $val, '<strong>Bold</strong>') && str_contains((string) $val, '<em>italic</em>'))
+            );
+
+        $this->get('/terms-of-service')
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('Legal/TermsOfService')
+                ->where('legalContent.sections.0.bodyHtml', fn ($val) => str_contains((string) $val, '<ul><li><strong>Clause A</strong> <em>italic detail</em></li></ul>'))
+            );
+
+        $this->withSession($session)
+            ->postJson('/api/admin/legal-pages/reset', ['pageKey' => 'aboutUs'])
+            ->assertStatus(200)
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('legalPages.aboutUs.missionTitle', 'Our Mission');
+
+        $this->withSession($session)
+            ->postJson('/api/admin/legal-pages/reset', ['pageKey' => 'termsOfService'])
+            ->assertStatus(200)
+            ->assertJsonPath('success', true);
+    }
 }

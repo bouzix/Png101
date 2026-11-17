@@ -365,6 +365,7 @@ export function PersistentAdminLayout({ children }) {
                     { name: 'Code Injection', href: '/admin/dashboard/settings/code-injection', permitted: hasPerm('manage_code_injection'), reason: 'Requires Code Injection permission' },
                     { name: 'Data Management', href: '/admin/dashboard/settings/data-management', permitted: hasPerm('manage_data_seo'), reason: 'Requires Data, Backup & SEO permission' },
                     { name: 'Error Pages', href: '/admin/dashboard/settings/error-pages', permitted: hasPerm('manage_general_settings'), reason: 'Requires General & Website Settings permission' },
+                    { name: 'Legal Pages', href: '/admin/dashboard/settings/legal-pages', permitted: hasPerm('manage_general_settings'), reason: 'Requires General & Website Settings permission' },
                     { name: 'Captcha', href: '/admin/dashboard/settings/captcha', permitted: hasPerm('manage_general_settings'), reason: 'Requires General & Website Settings permission' },
                     { name: 'Update App', href: '/admin/dashboard/settings/update-app', permitted: isSuperAdmin, reason: 'Super Admin only' },
                 ],
