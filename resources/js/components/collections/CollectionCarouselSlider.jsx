@@ -61,18 +61,47 @@ export const DEFAULT_TRENDING_SLIDER_CONFIG = {
     arrowIconSize: 16,
 };
 
+export const DEFAULT_PART_OF_COLLECTIONS_SLIDER_CONFIG = {
+    ...DEFAULT_SLIDER_CONFIG,
+    id: 'part_of_collections',
+    name: 'Part of Collections',
+    location: 'Image Detail Sidebar (/images/{slug})',
+    cardsDesktop: 1,
+    stepDesktop: 1,
+    cardsLaptop: 1,
+    stepLaptop: 1,
+    cardsTablet: 1,
+    stepTablet: 1,
+    cardsSmallTablet: 1,
+    stepSmallTablet: 1,
+    cardsMobile: 1,
+    stepMobile: 1,
+    maxTotalItems: 12,
+    autoScrollIntervalMs: 4000,
+    showEdgeFade: false,
+    arrowSize: 28,
+    arrowIconSize: 14,
+};
+
 export default function CollectionCarouselSlider({
     collections = [],
     sliderConfig: rawSliderConfig = {},
-    variant = null, // 'compact' | 'trending' | null (auto-detected from sliderConfig.id)
+    variant = null, // 'compact' | 'trending' | 'part_of_collections' | null (auto-detected from sliderConfig.id)
     forcedViewport = null, // 'desktop' | 'laptop' | 'tablet' | 'small_tablet' | 'mobile' | null
     isPreview = false,
+    hideHeader = false,
 }) {
     const isTrendingVariant =
         variant === 'trending' || rawSliderConfig?.id === 'trending_collections';
+    const isPartOfCollectionsVariant =
+        variant === 'part_of_collections' || rawSliderConfig?.id === 'part_of_collections';
 
     const sliderConfig = {
-        ...(isTrendingVariant ? DEFAULT_TRENDING_SLIDER_CONFIG : DEFAULT_SLIDER_CONFIG),
+        ...(isTrendingVariant
+            ? DEFAULT_TRENDING_SLIDER_CONFIG
+            : isPartOfCollectionsVariant
+            ? DEFAULT_PART_OF_COLLECTIONS_SLIDER_CONFIG
+            : DEFAULT_SLIDER_CONFIG),
         ...(rawSliderConfig || {}),
     };
 
@@ -404,7 +433,7 @@ export default function CollectionCarouselSlider({
                 }
             `}</style>
 
-            {isTrendingVariant ? (
+            {!hideHeader && (isTrendingVariant ? (
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pb-4 border-b border-card-border">
                     <div className="flex items-center gap-3">
                         <div className="w-1.5 h-8 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
@@ -451,6 +480,39 @@ export default function CollectionCarouselSlider({
                                 <ArrowRight className="w-3.5 h-3.5 transform group-hover:translate-x-0.5 transition-transform" />
                             </Link>
                         )}
+                    </div>
+                </div>
+            ) : isPartOfCollectionsVariant ? (
+                <div className="flex items-center justify-between gap-2 pb-1">
+                    <span className="text-sm font-bold text-foreground">
+                        Part of Collections
+                    </span>
+                    <div className="flex items-center gap-2">
+                        {sliderConfig.showHeaderArrows && (canScrollLeft || canScrollRight || sliderConfig.loop) && (
+                            <div className="flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => scrollSliderByStep(-1)}
+                                    disabled={!canScrollLeft}
+                                    aria-label="Slide left"
+                                    className="w-6 h-6 rounded-md border border-card-border bg-card-bg hover:border-primary-glow/50 text-foreground/80 hover:text-primary-glow disabled:opacity-35 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer"
+                                >
+                                    <ChevronLeft className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => scrollSliderByStep(1)}
+                                    disabled={!canScrollRight && !sliderConfig.loop}
+                                    aria-label="Slide right"
+                                    className="w-6 h-6 rounded-md border border-card-border bg-card-bg hover:border-primary-glow/50 text-foreground/80 hover:text-primary-glow disabled:opacity-35 disabled:cursor-not-allowed flex items-center justify-center transition-all cursor-pointer"
+                                >
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        )}
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-500">
+                            {collections.length}
+                        </span>
                     </div>
                 </div>
             ) : (
@@ -500,7 +562,7 @@ export default function CollectionCarouselSlider({
                         )}
                     </div>
                 </div>
-            )}
+            ))}
 
             {/* Slider Viewport with Edge-Centered Chevron Buttons */}
             <div className="relative group/slider">

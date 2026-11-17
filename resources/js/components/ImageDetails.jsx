@@ -2,8 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
 import { ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
+import CollectionCarouselSlider, {
+    DEFAULT_PART_OF_COLLECTIONS_SLIDER_CONFIG,
+} from './collections/CollectionCarouselSlider';
 
-const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
+const ImageDetails = ({ image, onResizeApply, collections = [], partOfCollectionsSliderConfig = {} }) => {
     const originalWidth = image.width || 800;
     const originalHeight = image.height || 600;
 
@@ -78,7 +81,7 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
     };
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-6 w-full max-w-sm sm:max-w-none lg:max-w-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4 sm:gap-6 w-full">
             {/* PNG Info Card (Collapsed by default on < sm portrait phones) */}
             <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-lg flex flex-col self-start sm:self-stretch">
                 <button
@@ -260,9 +263,12 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
             </div>
 
             {/* Included in Collections Card */}
-            {collections && collections.length > 0 && (
-                <div className="sm:col-span-2 lg:col-span-1 bg-card-bg border border-card-border rounded-xl overflow-hidden shadow-lg">
-                    <div className="bg-slate-100 dark:bg-card-header-bg px-4 py-3 border-b border-card-border flex items-center justify-between">
+            {partOfCollectionsSliderConfig?.enabled !== false && collections && collections.length > 0 && (
+                <div
+                    data-testid="part-of-collections-card"
+                    className="sm:col-span-2 lg:col-span-1 bg-card-bg border border-card-border rounded-xl shadow-lg w-full"
+                >
+                    <div className="bg-slate-100 dark:bg-card-header-bg px-4 py-3 border-b border-card-border rounded-t-xl flex items-center justify-between">
                         <div className="flex items-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-blue-600 dark:text-blue-400">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
@@ -273,30 +279,16 @@ const ImageDetails = ({ image, onResizeApply, collections = [] }) => {
                             {collections.length}
                         </span>
                     </div>
-                    <div className="p-3 space-y-2">
-                        {collections.map((col) => (
-                            <Link
-                                key={col.id}
-                                href={`/collections/${col.slug}`}
-                                className="group flex items-center gap-3 p-2 rounded-lg bg-foreground/[0.02] hover:bg-foreground/5 border border-card-border hover:border-blue-500/30 transition-all"
-                            >
-                                <div className="w-9 h-9 rounded-md bg-foreground/5 border border-card-border flex items-center justify-center p-1 shrink-0 overflow-hidden">
-                                    {col.coverImagePath ? (
-                                        <img src={col.coverImagePath} alt="" className="max-w-full max-h-full object-contain" />
-                                    ) : (
-                                        <div className="w-4 h-4 bg-blue-500/20 rounded" />
-                                    )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <h4 className="text-xs font-bold text-foreground group-hover:text-blue-500 transition-colors truncate">
-                                        {col.name}
-                                    </h4>
-                                    <span className="text-[10px] text-foreground/50">
-                                        View full pack &rarr;
-                                    </span>
-                                </div>
-                            </Link>
-                        ))}
+                    <div className="px-4 py-3.5">
+                        <CollectionCarouselSlider
+                            collections={collections}
+                            sliderConfig={{
+                                ...DEFAULT_PART_OF_COLLECTIONS_SLIDER_CONFIG,
+                                ...(partOfCollectionsSliderConfig || {}),
+                            }}
+                            variant="part_of_collections"
+                            hideHeader={true}
+                        />
                     </div>
                 </div>
             )}

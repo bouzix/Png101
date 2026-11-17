@@ -510,4 +510,118 @@ class EditorSuiteTest extends TestCase
                 ->where('adminTemplate', null)
             );
     }
+
+    public function test_part_of_collections_slider_and_related_card_props_on_image_detail(): void
+    {
+        $img = Image::create([
+            'filename' => 'badge-icon.png',
+            'path' => '/uploads/badge-icon.png',
+            'previewPath' => '/uploads/preview-badge-icon.jpg',
+            'thumbPath' => '/uploads/thumb-badge-icon.webp',
+            'name' => 'Badge Icon PNG',
+            'tags' => ['badge', 'icon'],
+            'status' => 'published',
+            'width' => 1024,
+            'height' => 1024,
+        ]);
+
+        $col = \App\Models\Collection::create([
+            'name' => 'Badge Icons Pack',
+            'slug' => 'badge-icons-pack',
+            'type' => 'manual',
+            'status' => 'published',
+            'coverImagePath' => '/uploads/col-thumb.webp',
+            'cardBgImagePath' => '/uploads/col-card-bg.png',
+            'cardBgColor' => '#1e1b4b',
+            'cardTextColor' => '#f8fafc',
+        ]);
+
+        \App\Models\CollectionImage::create([
+            'collectionId' => $col->id,
+            'imageId' => $img->id,
+            'position' => 0,
+            'isExcluded' => false,
+        ]);
+
+        $session = $this->adminSession();
+        $this->withSession($session)
+            ->get('/admin/dashboard/settings/sliders')
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('Admin/Settings/Sliders')
+                ->where('initialSliders.part_of_collections.id', 'part_of_collections')
+                ->where('initialSliders.part_of_collections.cardsDesktop', 1)
+                ->where('initialSliders.part_of_collections.cardsMobile', 1)
+            );
+
+        $this->get("/images/{$img->id}-badge-icon")
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->component('ImageDetail')
+                ->where('partOfCollectionsSliderConfig.id', 'part_of_collections')
+                ->where('partOfCollectionsSliderConfig.cardsDesktop', 1)
+                ->where('collections.0.id', $col->id)
+                ->where('collections.0.cardBgColor', '#1e1b4b')
+                ->where('collections.0.cardBgImagePath', '/uploads/col-card-bg.png')
+                ->where('collections.0.cardTextColor', '#f8fafc')
+                ->where('collections.0.coverImagePath', '/uploads/col-thumb.webp')
+                ->where('collections.0.imageCount', 1)
+            );
+    }
+
+    public function test_color_picker_defaults_persisted_and_shared_globally(): void
+    {
+        $session = $this->adminSession();
+
+        // Factory defaults shared on public and editor pages initially
+        $this->get('/')
+            ->assertStatus(200)
+            ->assertInertia(fn ($page) => $page
+                ->where('colorPickerDefaults.defaultColor', '#3b82f6')
+                ->where('colorPickerDefaults.defaultGradientType', 'linear')
+                ->where('colorPickerDefaults.defaultGradientAngle', 135)
+                ->where('colorPickerDefaults.defaultGradientFrom', '#3b82f6')
+                ->where('colorPickerDefaults.defaultGradientTo', '#9333ea')
+            );
+
+        // Save customized defaults through /api/admin/settings
+        $this->withSession($session)
+            ->postJson('/api/admin/settings', [
+                'color_picker_defaults' => json_encode([
+                    'defaultColor' => '#E11D48',
+                    'defaultGradientType' => 'radial',
+                    'defaultGradientAngle' => 45,
+                    'defaultGradientFrom' => '#0EA5E9',
+                    'defaultGradientTo' => '#10B981',
+                ]),
+            ])
+            ->assertStatus(200)
+            ->assertJsonPath('success', true);
+
+        $img = Image::create([
+            'filename' => 'color-default-check.png',
+            'path' => '/uploads/color-default-check.png',
+            'previewPath' => '/uploads/preview-color-default-check.jpg',
+            'thumbPath' => '/uploads/thumb-color-default-check.webp',
+            'name' => 'Color Default Check',
+            'tags' => ['test'],
+            'status' => 'published',
+            'width' => 512,
+            'height' => 512,
+        ]);
+
+        // Assert normalized lowercase hex values are shared globally across image detail, editor, and admin settings
+        foreach (["/images/{$img->id}-color-default-check", '/image-editor', '/admin/dashboard/settings'] as $route) {
+            $req = str_starts_with($route, '/admin') ? $this->withSession($session) : $this;
+            $req->get($route)
+                ->assertStatus(200)
+                ->assertInertia(fn ($page) => $page
+                    ->where('colorPickerDefaults.defaultColor', '#e11d48')
+                    ->where('colorPickerDefaults.defaultGradientType', 'radial')
+                    ->where('colorPickerDefaults.defaultGradientAngle', 45)
+                    ->where('colorPickerDefaults.defaultGradientFrom', '#0ea5e9')
+                    ->where('colorPickerDefaults.defaultGradientTo', '#10b981')
+                );
+        }
+    }
 }

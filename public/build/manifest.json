@@ -1,6 +1,6 @@
 {
   "node_modules/@imgly/background-removal/dist/index.mjs": {
-    "file": "assets/dist-E11a9zfx.js",
+    "file": "assets/dist-D3ZdxdHn.js",
     "name": "dist",
     "src": "node_modules/@imgly/background-removal/dist/index.mjs",
     "isDynamicEntry": true,
@@ -61,7 +61,7 @@
     "src": "node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm"
   },
   "node_modules/onnxruntime-web/dist/ort.bundle.min.mjs": {
-    "file": "assets/ort.bundle.min-CwjQwUEU.js",
+    "file": "assets/ort.bundle.min-Ctkr21qG.js",
     "name": "ort.bundle.min",
     "src": "node_modules/onnxruntime-web/dist/ort.bundle.min.mjs",
     "isDynamicEntry": true,
@@ -74,7 +74,7 @@
     ]
   },
   "node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs": {
-    "file": "assets/ort.webgpu.bundle.min-BUOWfluP.js",
+    "file": "assets/ort.webgpu.bundle.min-Blgq92xg.js",
     "name": "ort.webgpu.bundle.min",
     "src": "node_modules/onnxruntime-web/dist/ort.webgpu.bundle.min.mjs",
     "isDynamicEntry": true,
@@ -87,7 +87,7 @@
     ]
   },
   "node_modules/upng-js/UPNG.js": {
-    "file": "assets/UPNG-CaVwi-Yt.js",
+    "file": "assets/UPNG-BipmzLt5.js",
     "name": "UPNG",
     "src": "node_modules/upng-js/UPNG.js",
     "isDynamicEntry": true,
@@ -96,7 +96,7 @@
     ]
   },
   "resources/css/app.css": {
-    "file": "assets/app-BnECqYjm.css",
+    "file": "assets/app-B8-e8shk.css",
     "name": "app",
     "names": [
       "app.css"
@@ -105,7 +105,7 @@
     "isEntry": true
   },
   "resources/js/app.jsx": {
-    "file": "assets/app-DWrsTBAs.js",
+    "file": "assets/app-DjXStwOA.js",
     "name": "app",
     "src": "resources/js/app.jsx",
     "isEntry": true,
@@ -116,7 +116,7 @@
     ]
   },
   "resources/js/lib/avifCodec.js": {
-    "file": "assets/avifCodec-BYrr7I41.js",
+    "file": "assets/avifCodec-C6fwYcbf.js",
     "name": "avifCodec",
     "src": "resources/js/lib/avifCodec.js",
     "isDynamicEntry": true,

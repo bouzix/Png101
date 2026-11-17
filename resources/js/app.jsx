@@ -8,6 +8,7 @@ import ScrollToTopButton from './components/ScrollToTopButton';
 import { UploadManagerProvider, FloatingUploadTracker } from './components/admin/UploadManager';
 import { BulkEditProvider, GlobalBulkEditSidebar } from './components/admin/BulkEditSidebar';
 import { PersistentAdminLayout } from './Layouts/AdminLayout';
+import { GlobalColorPickerDefaultsProvider, sanitizeColorPickerDefaults } from './lib/colorPickerConfig';
 
 const renderPersistentAdminLayout = (pageNode) => (
     <PersistentAdminLayout>{pageNode}</PersistentAdminLayout>
@@ -47,6 +48,9 @@ createInertiaApp({
             );
             const [editorNav, setEditorNav] = useState(
                 () => propsObj.initialPage?.props?.editorNav || {}
+            );
+            const [colorPickerDefaults, setColorPickerDefaults] = useState(() =>
+                sanitizeColorPickerDefaults(propsObj.initialPage?.props?.colorPickerDefaults)
             );
 
             useEffect(() => {
@@ -104,19 +108,39 @@ createInertiaApp({
             }, []);
 
             useEffect(() => {
-                return router.on('navigate', (event) => {
+                const syncPageProps = (pageObj) => {
+                    if (pageObj?.props?.bonusToolsNav) {
+                        setBonusToolsNav(pageObj.props.bonusToolsNav);
+                    }
+                    if (pageObj?.props?.editorNav) {
+                        setEditorNav(pageObj.props.editorNav);
+                    }
+                    if (pageObj?.props?.colorPickerDefaults) {
+                        setColorPickerDefaults(sanitizeColorPickerDefaults(pageObj.props.colorPickerDefaults));
+                    }
+                };
+                const unbindNav = router.on('navigate', (event) => {
                     const nextUrl = event?.detail?.page?.url || window.location.pathname;
                     setCurrentUrl(nextUrl);
                     if (event?.detail?.page?.component) {
                         setCurrentComponent(event.detail.page.component);
                     }
-                    if (event?.detail?.page?.props?.bonusToolsNav) {
-                        setBonusToolsNav(event.detail.page.props.bonusToolsNav);
-                    }
-                    if (event?.detail?.page?.props?.editorNav) {
-                        setEditorNav(event.detail.page.props.editorNav);
-                    }
+                    syncPageProps(event?.detail?.page);
                 });
+                const unbindSuccess = router.on('success', (event) => {
+                    syncPageProps(event?.detail?.page);
+                });
+                const onCustomDefaults = (e) => {
+                    if (e?.detail) {
+                        setColorPickerDefaults(sanitizeColorPickerDefaults(e.detail));
+                    }
+                };
+                window.addEventListener('png101:color-picker-defaults', onCustomDefaults);
+                return () => {
+                    unbindNav?.();
+                    unbindSuccess?.();
+                    window.removeEventListener('png101:color-picker-defaults', onCustomDefaults);
+                };
             }, []);
 
             const isEditorRoute =
@@ -130,29 +154,31 @@ createInertiaApp({
                 currentUrl !== '/maintenance';
 
             return (
-                <UploadManagerProvider initialUploadLimits={initialUploadLimits}>
-                    <BulkEditProvider>
-                        <div className="min-h-screen flex flex-col flex-1">
-                            <div className="flex-1 flex flex-col">
-                                <App {...propsObj} />
+                <GlobalColorPickerDefaultsProvider value={colorPickerDefaults}>
+                    <UploadManagerProvider initialUploadLimits={initialUploadLimits}>
+                        <BulkEditProvider>
+                            <div className="min-h-screen flex flex-col flex-1">
+                                <div className="flex-1 flex flex-col">
+                                    <App {...propsObj} />
+                                </div>
+                                {isPublicFrontend && (
+                                    <Footer
+                                        info={websiteInfo}
+                                        currentUrl={currentUrl}
+                                        showConverters={Boolean(bonusToolsNav?.showInPublicNav)}
+                                        footerTools={Array.isArray(bonusToolsNav?.footerTools) ? bonusToolsNav.footerTools : []}
+                                        editorNav={editorNav}
+                                    />
+                                )}
+                                {isPublicFrontend && <ScrollToTopButton currentPath={currentUrl} />}
+                                {isPublicFrontend && <MobileBottomNav currentPath={currentUrl} />}
+                                <GlobalBulkEditSidebar />
+                                <FloatingUploadTracker />
+                                {!isEditorRoute && <Toaster position="top-right" richColors />}
                             </div>
-                            {isPublicFrontend && (
-                                <Footer
-                                    info={websiteInfo}
-                                    currentUrl={currentUrl}
-                                    showConverters={Boolean(bonusToolsNav?.showInPublicNav)}
-                                    footerTools={Array.isArray(bonusToolsNav?.footerTools) ? bonusToolsNav.footerTools : []}
-                                    editorNav={editorNav}
-                                />
-                            )}
-                            {isPublicFrontend && <ScrollToTopButton currentPath={currentUrl} />}
-                            {isPublicFrontend && <MobileBottomNav currentPath={currentUrl} />}
-                            <GlobalBulkEditSidebar />
-                            <FloatingUploadTracker />
-                            {!isEditorRoute && <Toaster position="top-right" richColors />}
-                        </div>
-                    </BulkEditProvider>
-                </UploadManagerProvider>
+                        </BulkEditProvider>
+                    </UploadManagerProvider>
+                </GlobalColorPickerDefaultsProvider>
             );
         };
 

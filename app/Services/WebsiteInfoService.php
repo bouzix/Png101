@@ -91,5 +91,63 @@ class WebsiteInfoService
             'updatedAt' => $record->updatedAt?->toISOString(),
         ]);
     }
+
+    public static function defaultColorPickerConfig(): array
+    {
+        return [
+            'defaultColor' => '#3b82f6',
+            'defaultGradientType' => 'linear',
+            'defaultGradientAngle' => 135,
+            'defaultGradientFrom' => '#3b82f6',
+            'defaultGradientTo' => '#9333ea',
+        ];
+    }
+
+    private static function sanitizeHexColor(mixed $value, string $fallback): string
+    {
+        if (! is_string($value)) {
+            return $fallback;
+        }
+        $trimmed = trim($value);
+        if (preg_match('/^#([0-9a-fA-F]{6})$/', $trimmed, $m)) {
+            return '#' . strtolower($m[1]);
+        }
+        if (preg_match('/^#([0-9a-fA-F]{3})$/', $trimmed, $m)) {
+            $chars = str_split(strtolower($m[1]));
+
+            return '#' . $chars[0] . $chars[0] . $chars[1] . $chars[1] . $chars[2] . $chars[2];
+        }
+
+        return $fallback;
+    }
+
+    public static function getColorPickerDefaults(): array
+    {
+        $defaults = self::defaultColorPickerConfig();
+
+        try {
+            $setting = Setting::find('color_picker_defaults');
+            if (! $setting || ! is_string($setting->value) || $setting->value === '') {
+                return $defaults;
+            }
+            $decoded = json_decode($setting->value, true);
+            if (! is_array($decoded)) {
+                return $defaults;
+            }
+            $angle = isset($decoded['defaultGradientAngle']) && is_numeric($decoded['defaultGradientAngle'])
+                ? ((int) round((float) $decoded['defaultGradientAngle']) % 360 + 360) % 360
+                : $defaults['defaultGradientAngle'];
+
+            return [
+                'defaultColor' => self::sanitizeHexColor($decoded['defaultColor'] ?? null, $defaults['defaultColor']),
+                'defaultGradientType' => ($decoded['defaultGradientType'] ?? null) === 'radial' ? 'radial' : 'linear',
+                'defaultGradientAngle' => $angle,
+                'defaultGradientFrom' => self::sanitizeHexColor($decoded['defaultGradientFrom'] ?? null, $defaults['defaultGradientFrom']),
+                'defaultGradientTo' => self::sanitizeHexColor($decoded['defaultGradientTo'] ?? null, $defaults['defaultGradientTo']),
+            ];
+        } catch (\Throwable) {
+            return $defaults;
+        }
+    }
 }
 

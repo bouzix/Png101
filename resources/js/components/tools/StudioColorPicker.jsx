@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { HexColorPicker } from 'react-colorful';
-import { GripHorizontal, Pipette, X } from 'lucide-react';
+import { GripHorizontal, Pipette, RotateCcw, X } from 'lucide-react';
 import { EDITOR_PANEL_TRANSITION, useAnimatedPresence } from '../editor/useAnimatedPresence';
 import EditorEyedropperOverlay from '../editor/EditorEyedropperOverlay';
+import { useGlobalColorPickerDefaults } from '../../lib/colorPickerConfig';
 
 const DEFAULT_QUICK_SWATCHES = [
     '#ffffff',
@@ -51,14 +52,16 @@ function normalizeHex(hex, fallback = '#ffffff') {
 export default function StudioColorPicker({
     value = '#ffffff',
     onChange,
+    defaultColor = undefined,
     ariaLabel = 'Choose color',
     title = 'Choose custom color',
+    popoverTitle = 'Color Picker',
     size = 'md',
     showHexLabel = false,
     quickSwatches = DEFAULT_QUICK_SWATCHES,
     className = '',
     customTooltip = false,
-    enableEyedropper = customTooltip,
+    enableEyedropper = true,
     triggerIcon = null,
     compactTrigger = false,
     open: controlledOpen,
@@ -68,6 +71,8 @@ export default function StudioColorPicker({
     'data-testid': dataTestId,
     dataTestId: dataTestIdProp,
 }) {
+    const globalColorDefaults = useGlobalColorPickerDefaults();
+    const effectiveDefaultColor = normalizeHex(defaultColor ?? globalColorDefaults.defaultColor, globalColorDefaults.defaultColor);
     const [internalOpen, setInternalOpen] = useState(false);
     const isControlled = controlledOpen !== undefined;
     const open = isControlled ? controlledOpen : internalOpen;
@@ -108,12 +113,21 @@ export default function StudioColorPicker({
     }, [resolvedColor]);
 
     const computeAnchor = () => {
-        if (!triggerRef.current) return;
-        const rect = triggerRef.current.getBoundingClientRect();
         const popW = 248;
         const popH = 340;
         const vw = window.innerWidth;
         const vh = window.innerHeight;
+
+        if (vw < 1024) {
+            setAnchorPos({
+                top: Math.max(12, Math.round((vh - popH) / 2)),
+                left: Math.max(12, Math.round((vw - popW) / 2)),
+            });
+            return;
+        }
+
+        if (!triggerRef.current) return;
+        const rect = triggerRef.current.getBoundingClientRect();
 
         let left = rect.left;
         if (left + popW > vw - 12) {
@@ -162,7 +176,12 @@ export default function StudioColorPicker({
         if (dragOffset.x !== 0 || dragOffset.y !== 0) return undefined;
         computeAnchor();
         const raf = requestAnimationFrame(() => computeAnchor());
-        return () => cancelAnimationFrame(raf);
+        const onResize = () => computeAnchor();
+        window.addEventListener('resize', onResize);
+        return () => {
+            cancelAnimationFrame(raf);
+            window.removeEventListener('resize', onResize);
+        };
     }, [effectiveOpen, dragOffset.x, dragOffset.y]);
 
     useEffect(() => {
@@ -394,18 +413,24 @@ export default function StudioColorPicker({
                         >
                             <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-foreground/55 pointer-events-none">
                                 <GripHorizontal className="w-3.5 h-3.5" />
-                                <span>Color Picker</span>
+                                <span>{popoverTitle}</span>
                             </div>
                             <div className="flex items-center gap-1">
-                                {(dragOffset.x !== 0 || dragOffset.y !== 0) && (
+                                {displayColor !== effectiveDefaultColor && (
                                     <button
                                         type="button"
-                                        onClick={() => setDragOffset({ x: 0, y: 0 })}
-                                        className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-foreground/10 hover:bg-foreground/15 text-foreground/75 cursor-pointer"
-                                        title={customTooltip ? undefined : 'Reset picker position'}
-                                        data-tooltip={customTooltip ? 'Reset picker position' : undefined}
+                                        data-testid="color-picker-reset"
+                                        onClick={() => {
+                                            hexEditingRef.current = false;
+                                            setDraftHex(effectiveDefaultColor);
+                                            onChange?.(effectiveDefaultColor);
+                                        }}
+                                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-foreground/10 hover:bg-foreground/15 text-foreground/75 cursor-pointer"
+                                        title={customTooltip ? undefined : `Reset color to default (${effectiveDefaultColor})`}
+                                        data-tooltip={customTooltip ? `Reset to ${effectiveDefaultColor}` : undefined}
                                     >
-                                        Reset
+                                        <RotateCcw className="w-2.5 h-2.5" />
+                                        <span>Reset</span>
                                     </button>
                                 )}
                                 <button
@@ -485,7 +510,7 @@ export default function StudioColorPicker({
                                 maxLength={24}
                                 spellCheck={false}
                                 aria-label="Hex color value"
-                                className="w-full px-2.5 py-1.5 text-xs font-mono uppercase select-text rounded-lg border border-card-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                                className="min-w-0 flex-1 px-2.5 py-1.5 text-xs font-mono uppercase select-text rounded-lg border border-card-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                             />
                             {enableEyedropper && (
                                 <button

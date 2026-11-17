@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import {
     Loader2,
@@ -24,10 +25,18 @@ import {
     Trash2,
     Eraser,
     Lightbulb,
+    RotateCcw,
+    Pipette,
 } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import StudioSelect from '../ui/StudioSelect';
+import EditorEyedropperOverlay from '../editor/EditorEyedropperOverlay';
 import { useUploadManager } from './UploadManager';
+import {
+    parseHexOrRgbColor,
+    useGlobalColorPickerDefaults,
+    useSmallColorPickerViewport,
+} from '@/lib/colorPickerConfig';
 
 const BulkEditContext = createContext(null);
 
@@ -672,6 +681,9 @@ export function useBulkEdit() {
 export function GlobalBulkEditSidebar() {
     const ctx = useContext(BulkEditContext);
     const uploadCtx = useUploadManager();
+    const globalColorDefaults = useGlobalColorPickerDefaults();
+    const isSmallViewport = useSmallColorPickerViewport();
+    const [eyedropperTarget, setEyedropperTarget] = useState(null);
 
     const {
         isOpen,
@@ -723,6 +735,12 @@ export function GlobalBulkEditSidebar() {
         maximizeBulkEdit,
         saveUpdates,
     } = ctx;
+
+    useEffect(() => {
+        if (!activeColorPicker) {
+            setEyedropperTarget(null);
+        }
+    }, [activeColorPicker]);
 
     const [isDragOverExpanded, setIsDragOverExpanded] = useState(false);
     const [isDragOverDock, setIsDragOverDock] = useState(false);
@@ -2104,77 +2122,104 @@ export function GlobalBulkEditSidebar() {
                                                         </button>
                                                     </div>
 
-                                                    {activeColorPicker?.id === data.id && activeColorPicker?.type === 'dark' && (
-                                                        <div className="p-3.5 bg-background border border-card-border rounded-xl shadow-md flex flex-col items-center gap-3 animate-in fade-in zoom-in-95 duration-150">
-                                                            <div className="flex items-center justify-between w-full">
-                                                                <span className="text-xs font-bold text-foreground">
-                                                                    Custom Dark Mode Background
-                                                                </span>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setActiveColorPicker(null)}
-                                                                    className="text-foreground/50 hover:text-foreground text-xs p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded cursor-pointer"
-                                                                >
-                                                                    <X className="w-4 h-4" />
-                                                                </button>
-                                                            </div>
+                                                    {activeColorPicker?.id === data.id && activeColorPicker?.type === 'dark' && (() => {
+                                                        const activeHex =
+                                                            data.contrastBgDark && data.contrastBgDark !== 'none'
+                                                                ? data.contrastBgDark
+                                                                : '#f8fafc';
+                                                        const isModified =
+                                                            parseHexOrRgbColor(activeHex, '') !== globalColorDefaults.defaultColor;
+                                                        const card = (
+                                                            <div
+                                                                className={`p-3.5 bg-background border border-card-border rounded-xl shadow-2xl flex flex-col items-center gap-3 w-full max-w-[290px] ${
+                                                                    eyedropperTarget ? 'opacity-0 pointer-events-none' : ''
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center justify-between w-full">
+                                                                    <span className="text-xs font-bold text-foreground">
+                                                                        Custom Dark Mode Background
+                                                                    </span>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        {isModified && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    handleInputChange(data.id, 'contrastBgDark', globalColorDefaults.defaultColor);
+                                                                                    handleInputChange(data.id, 'previewMode', 'dark');
+                                                                                }}
+                                                                                className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-foreground/10 text-foreground/75 hover:text-foreground cursor-pointer"
+                                                                                title={`Reset color to ${globalColorDefaults.defaultColor}`}
+                                                                            >
+                                                                                <RotateCcw className="w-2.5 h-2.5" />
+                                                                                <span>Reset</span>
+                                                                            </button>
+                                                                        )}
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setActiveColorPicker(null)}
+                                                                            className="text-foreground/50 hover:text-foreground text-xs p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded cursor-pointer"
+                                                                        >
+                                                                            <X className="w-4 h-4" />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
 
-                                                            <HexColorPicker
-                                                                color={
-                                                                    data.contrastBgDark && data.contrastBgDark !== 'none'
-                                                                        ? data.contrastBgDark
-                                                                        : '#f8fafc'
-                                                                }
-                                                                onChange={(newColor) => {
-                                                                    handleInputChange(data.id, 'contrastBgDark', newColor);
-                                                                    handleInputChange(data.id, 'previewMode', 'dark');
-                                                                }}
-                                                            />
-
-                                                            <div className="flex items-center gap-2 w-full max-w-[240px]">
-                                                                <span
-                                                                    className="w-7 h-7 rounded-lg border border-card-border shrink-0 shadow-sm"
-                                                                    style={{
-                                                                        backgroundColor:
-                                                                            data.contrastBgDark && data.contrastBgDark !== 'none'
-                                                                                ? data.contrastBgDark
-                                                                                : '#f8fafc',
-                                                                    }}
-                                                                />
-                                                                <input
-                                                                    type="text"
-                                                                    value={(data.contrastBgDark && data.contrastBgDark !== 'none'
-                                                                        ? data.contrastBgDark
-                                                                        : '#f8fafc'
-                                                                    ).toUpperCase()}
-                                                                    onChange={(e) => {
-                                                                        let val = e.target.value;
-                                                                        if (!val.startsWith('#') && val.length > 0) val = '#' + val;
-                                                                        handleInputChange(data.id, 'contrastBgDark', val);
+                                                                <HexColorPicker
+                                                                    color={activeHex}
+                                                                    onChange={(newColor) => {
+                                                                        handleInputChange(data.id, 'contrastBgDark', newColor);
                                                                         handleInputChange(data.id, 'previewMode', 'dark');
                                                                     }}
-                                                                    className="w-full bg-input-bg border border-input-border text-foreground text-xs px-2.5 py-1.5 rounded-lg font-mono uppercase focus:outline-none focus:border-primary-glow text-center font-bold"
-                                                                    placeholder="#HEX"
                                                                 />
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setActiveColorPicker(null)}
-                                                                    className="px-2.5 py-1.5 rounded-lg bg-primary-glow text-white text-xs font-bold hover:bg-primary-glow/90 shrink-0 cursor-pointer"
-                                                                >
-                                                                    Done
-                                                                </button>
-                                                            </div>
 
-                                                            {(() => {
-                                                                const currentColor = (
-                                                                    data.contrastBgDark && data.contrastBgDark !== 'none'
-                                                                        ? data.contrastBgDark
-                                                                        : '#f8fafc'
-                                                                ).toLowerCase();
-                                                                const isAlreadySaved = customDarkTemplates.some(
-                                                                    (c) => c.color.toLowerCase() === currentColor
-                                                                );
-                                                                const isMaxReached = customDarkTemplates.length >= 3;
+                                                                <div className="flex items-center gap-2 w-full max-w-[240px]">
+                                                                    <span
+                                                                        className="w-7 h-7 rounded-lg border border-card-border shrink-0 shadow-sm"
+                                                                        style={{ backgroundColor: activeHex }}
+                                                                    />
+                                                                    <input
+                                                                        type="text"
+                                                                        value={activeHex.toUpperCase()}
+                                                                        onChange={(e) => {
+                                                                            let val = e.target.value;
+                                                                            if (!val.startsWith('#') && val.length > 0) val = '#' + val;
+                                                                            handleInputChange(data.id, 'contrastBgDark', val);
+                                                                            handleInputChange(data.id, 'previewMode', 'dark');
+                                                                        }}
+                                                                        className="min-w-0 flex-1 bg-input-bg border border-input-border text-foreground text-xs px-2 py-1.5 rounded-lg font-mono uppercase focus:outline-none focus:border-primary-glow text-center font-bold"
+                                                                        placeholder="#HEX"
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        data-testid="bulk-dark-eyedropper"
+                                                                        onClick={() =>
+                                                                            setEyedropperTarget({
+                                                                                id: data.id,
+                                                                                type: 'dark',
+                                                                                initialColor: activeHex,
+                                                                            })
+                                                                        }
+                                                                        className="p-1.5 rounded-lg border border-input-border bg-card-header-bg hover:bg-blue-500/15 hover:border-blue-500/40 text-foreground/75 hover:text-blue-400 transition-colors cursor-pointer shrink-0"
+                                                                        aria-label="Pick Dark Mode background color from screen"
+                                                                        title="Eyedropper"
+                                                                    >
+                                                                        <Pipette className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setActiveColorPicker(null)}
+                                                                        className="px-2.5 py-1.5 rounded-lg bg-primary-glow text-white text-xs font-bold hover:bg-primary-glow/90 shrink-0 cursor-pointer"
+                                                                    >
+                                                                        Done
+                                                                    </button>
+                                                                </div>
+
+                                                                {(() => {
+                                                                    const currentColor = activeHex.toLowerCase();
+                                                                    const isAlreadySaved = customDarkTemplates.some(
+                                                                        (c) => c.color.toLowerCase() === currentColor
+                                                                    );
+                                                                    const isMaxReached = customDarkTemplates.length >= 3;
                                                                 const inputKey = `${data.id}_dark`;
                                                                 const currentNameInput = templateNameInput[inputKey] || '';
 
@@ -2243,9 +2288,24 @@ export function GlobalBulkEditSidebar() {
                                                                         )}
                                                                     </div>
                                                                 );
-                                                            })()}
-                                                        </div>
-                                                    )}
+                                                                })()}
+                                                            </div>
+                                                        );
+                                                        if (isSmallViewport && typeof document !== 'undefined') {
+                                                            return createPortal(
+                                                                <div
+                                                                    className={`fixed inset-0 z-[140] flex items-center justify-center bg-black/50 p-3 ${
+                                                                        eyedropperTarget ? 'opacity-0 pointer-events-none' : ''
+                                                                    }`}
+                                                                    onClick={() => setActiveColorPicker(null)}
+                                                                >
+                                                                    <div onClick={(e) => e.stopPropagation()}>{card}</div>
+                                                                </div>,
+                                                                document.body
+                                                            );
+                                                        }
+                                                        return card;
+                                                    })()}
                                                 </div>
                                             )}
 
@@ -2398,75 +2458,102 @@ export function GlobalBulkEditSidebar() {
                                                         </button>
                                                     </div>
 
-                                                    {activeColorPicker?.id === data.id && activeColorPicker?.type === 'light' && (
-                                                        <div className="p-3.5 bg-background border border-card-border rounded-xl shadow-md flex flex-col items-center gap-3 animate-in fade-in zoom-in-95 duration-150">
-                                                            <div className="flex items-center justify-between w-full">
-                                                                <span className="text-xs font-bold text-foreground">
-                                                                    Custom Light Mode Background
-                                                                </span>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setActiveColorPicker(null)}
-                                                                    className="text-foreground/50 hover:text-foreground text-xs p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded cursor-pointer"
-                                                                >
-                                                                    <X className="w-4 h-4" />
-                                                                </button>
-                                                            </div>
+                                                    {activeColorPicker?.id === data.id && activeColorPicker?.type === 'light' && (() => {
+                                                        const activeHex =
+                                                            data.contrastBgLight && data.contrastBgLight !== 'none'
+                                                                ? data.contrastBgLight
+                                                                : '#cbd5e1';
+                                                        const isModified =
+                                                            parseHexOrRgbColor(activeHex, '') !== globalColorDefaults.defaultColor;
+                                                        const card = (
+                                                            <div
+                                                                className={`p-3.5 bg-background border border-card-border rounded-xl shadow-2xl flex flex-col items-center gap-3 w-full max-w-[290px] ${
+                                                                    eyedropperTarget ? 'opacity-0 pointer-events-none' : ''
+                                                                }`}
+                                                            >
+                                                                <div className="flex items-center justify-between w-full">
+                                                                    <span className="text-xs font-bold text-foreground">
+                                                                        Custom Light Mode Background
+                                                                    </span>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        {isModified && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    handleInputChange(data.id, 'contrastBgLight', globalColorDefaults.defaultColor);
+                                                                                    handleInputChange(data.id, 'previewMode', 'light');
+                                                                                }}
+                                                                                className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-foreground/10 text-foreground/75 hover:text-foreground cursor-pointer"
+                                                                                title={`Reset color to ${globalColorDefaults.defaultColor}`}
+                                                                            >
+                                                                                <RotateCcw className="w-2.5 h-2.5" />
+                                                                                <span>Reset</span>
+                                                                            </button>
+                                                                        )}
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setActiveColorPicker(null)}
+                                                                            className="text-foreground/50 hover:text-foreground text-xs p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded cursor-pointer"
+                                                                        >
+                                                                            <X className="w-4 h-4" />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
 
-                                                            <HexColorPicker
-                                                                color={
-                                                                    data.contrastBgLight && data.contrastBgLight !== 'none'
-                                                                        ? data.contrastBgLight
-                                                                        : '#cbd5e1'
-                                                                }
-                                                                onChange={(newColor) => {
-                                                                    handleInputChange(data.id, 'contrastBgLight', newColor);
-                                                                    handleInputChange(data.id, 'previewMode', 'light');
-                                                                }}
-                                                            />
-
-                                                            <div className="flex items-center gap-2 w-full max-w-[240px]">
-                                                                <span
-                                                                    className="w-7 h-7 rounded-lg border border-card-border shrink-0 shadow-sm"
-                                                                    style={{
-                                                                        backgroundColor:
-                                                                            data.contrastBgLight && data.contrastBgLight !== 'none'
-                                                                                ? data.contrastBgLight
-                                                                                : '#cbd5e1',
-                                                                    }}
-                                                                />
-                                                                <input
-                                                                    type="text"
-                                                                    value={(data.contrastBgLight && data.contrastBgLight !== 'none'
-                                                                        ? data.contrastBgLight
-                                                                        : '#cbd5e1'
-                                                                    ).toUpperCase()}
-                                                                    onChange={(e) => {
-                                                                        let val = e.target.value;
-                                                                        if (!val.startsWith('#') && val.length > 0) val = '#' + val;
-                                                                        handleInputChange(data.id, 'contrastBgLight', val);
+                                                                <HexColorPicker
+                                                                    color={activeHex}
+                                                                    onChange={(newColor) => {
+                                                                        handleInputChange(data.id, 'contrastBgLight', newColor);
                                                                         handleInputChange(data.id, 'previewMode', 'light');
                                                                     }}
-                                                                    className="w-full bg-input-bg border border-input-border text-foreground text-xs px-2.5 py-1.5 rounded-lg font-mono uppercase focus:outline-none focus:border-primary-glow text-center font-bold"
-                                                                    placeholder="#HEX"
                                                                 />
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setActiveColorPicker(null)}
-                                                                    className="px-2.5 py-1.5 rounded-lg bg-primary-glow text-white text-xs font-bold hover:bg-primary-glow/90 shrink-0 cursor-pointer"
-                                                                >
-                                                                    Done
-                                                                </button>
-                                                            </div>
 
-                                                            {(() => {
-                                                                const currentColor = (
-                                                                    data.contrastBgLight && data.contrastBgLight !== 'none'
-                                                                        ? data.contrastBgLight
-                                                                        : '#cbd5e1'
-                                                                ).toLowerCase();
-                                                                const isAlreadySaved = customLightTemplates.some(
-                                                                    (c) => c.color.toLowerCase() === currentColor
+                                                                <div className="flex items-center gap-2 w-full max-w-[240px]">
+                                                                    <span
+                                                                        className="w-7 h-7 rounded-lg border border-card-border shrink-0 shadow-sm"
+                                                                        style={{ backgroundColor: activeHex }}
+                                                                    />
+                                                                    <input
+                                                                        type="text"
+                                                                        value={activeHex.toUpperCase()}
+                                                                        onChange={(e) => {
+                                                                            let val = e.target.value;
+                                                                            if (!val.startsWith('#') && val.length > 0) val = '#' + val;
+                                                                            handleInputChange(data.id, 'contrastBgLight', val);
+                                                                            handleInputChange(data.id, 'previewMode', 'light');
+                                                                        }}
+                                                                        className="min-w-0 flex-1 bg-input-bg border border-input-border text-foreground text-xs px-2 py-1.5 rounded-lg font-mono uppercase focus:outline-none focus:border-primary-glow text-center font-bold"
+                                                                        placeholder="#HEX"
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        data-testid="bulk-light-eyedropper"
+                                                                        onClick={() =>
+                                                                            setEyedropperTarget({
+                                                                                id: data.id,
+                                                                                type: 'light',
+                                                                                initialColor: activeHex,
+                                                                            })
+                                                                        }
+                                                                        className="p-1.5 rounded-lg border border-input-border bg-card-header-bg hover:bg-blue-500/15 hover:border-blue-500/40 text-foreground/75 hover:text-blue-400 transition-colors cursor-pointer shrink-0"
+                                                                        aria-label="Pick Light Mode background color from screen"
+                                                                        title="Eyedropper"
+                                                                    >
+                                                                        <Pipette className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setActiveColorPicker(null)}
+                                                                        className="px-2.5 py-1.5 rounded-lg bg-primary-glow text-white text-xs font-bold hover:bg-primary-glow/90 shrink-0 cursor-pointer"
+                                                                    >
+                                                                        Done
+                                                                    </button>
+                                                                </div>
+
+                                                                {(() => {
+                                                                    const currentColor = activeHex.toLowerCase();
+                                                                    const isAlreadySaved = customLightTemplates.some(
+                                                                        (c) => c.color.toLowerCase() === currentColor
                                                                 );
                                                                 const isMaxReached = customLightTemplates.length >= 3;
                                                                 const inputKey = `${data.id}_light`;
@@ -2537,9 +2624,24 @@ export function GlobalBulkEditSidebar() {
                                                                         )}
                                                                     </div>
                                                                 );
-                                                            })()}
-                                                        </div>
-                                                    )}
+                                                                })()}
+                                                            </div>
+                                                        );
+                                                        if (isSmallViewport && typeof document !== 'undefined') {
+                                                            return createPortal(
+                                                                <div
+                                                                    className={`fixed inset-0 z-[140] flex items-center justify-center bg-black/50 p-3 ${
+                                                                        eyedropperTarget ? 'opacity-0 pointer-events-none' : ''
+                                                                    }`}
+                                                                    onClick={() => setActiveColorPicker(null)}
+                                                                >
+                                                                    <div onClick={(e) => e.stopPropagation()}>{card}</div>
+                                                                </div>,
+                                                                document.body
+                                                            );
+                                                        }
+                                                        return card;
+                                                    })()}
                                                 </div>
                                             )}
 
@@ -3039,6 +3141,23 @@ export function GlobalBulkEditSidebar() {
                 </div>
                 </>
             )}
+            <EditorEyedropperOverlay
+                open={Boolean(eyedropperTarget)}
+                initialColor={eyedropperTarget?.initialColor || globalColorDefaults.defaultColor}
+                onPick={(hex) => {
+                    if (eyedropperTarget?.id) {
+                        if (eyedropperTarget.type === 'dark') {
+                            handleInputChange(eyedropperTarget.id, 'contrastBgDark', hex);
+                            handleInputChange(eyedropperTarget.id, 'previewMode', 'dark');
+                        } else if (eyedropperTarget.type === 'light') {
+                            handleInputChange(eyedropperTarget.id, 'contrastBgLight', hex);
+                            handleInputChange(eyedropperTarget.id, 'previewMode', 'light');
+                        }
+                    }
+                    setEyedropperTarget(null);
+                }}
+                onCancel={() => setEyedropperTarget(null)}
+            />
         </>
     );
 }

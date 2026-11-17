@@ -222,26 +222,11 @@ export default function EditorEyedropperOverlay({
 }) {
     const { rendered, visible } = useAnimatedPresence(open, 295);
     const loupeCanvasRef = useRef(null);
+    const gridRef = useRef(null);
+    const touchDragRef = useRef(false);
+    const [interactionMode, setInteractionMode] = useState('mouse');
     const [pointerPos, setPointerPos] = useState(null);
     const [sample, setSample] = useState({ hex: initialColor, alpha: 255, source: 'init' });
-
-    useEffect(() => {
-        if (!open) {
-            setPointerPos(null);
-            return undefined;
-        }
-        setSample({ hex: initialColor, alpha: 255, source: 'init' });
-
-        const onKeyDown = (e) => {
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                e.stopPropagation();
-                onCancel?.();
-            }
-        };
-        document.addEventListener('keydown', onKeyDown, true);
-        return () => document.removeEventListener('keydown', onKeyDown, true);
-    }, [open, initialColor, onCancel]);
 
     const drawLoupe = (grid) => {
         const c = loupeCanvasRef.current;
@@ -299,11 +284,46 @@ export default function EditorEyedropperOverlay({
 
     const updateFromCoords = (clientX, clientY) => {
         const res = sampleEditorColorAtPoint(clientX, clientY);
+        gridRef.current = res.grid;
         setPointerPos({ x: clientX, y: clientY });
         setSample(res);
         drawLoupe(res.grid);
         return res;
     };
+
+    useEffect(() => {
+        if (!open) {
+            touchDragRef.current = false;
+            gridRef.current = null;
+            setPointerPos(null);
+            return undefined;
+        }
+        setSample({ hex: initialColor, alpha: 255, source: 'init' });
+        const initRaf = requestAnimationFrame(() => {
+            if (typeof window === 'undefined') return;
+            const cx = Math.round(window.innerWidth / 2);
+            const cy = Math.round(window.innerHeight / 2);
+            updateFromCoords(cx, cy);
+        });
+
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                onCancel?.();
+            }
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => {
+            cancelAnimationFrame(initRaf);
+            document.removeEventListener('keydown', onKeyDown, true);
+        };
+    }, [open, initialColor, onCancel]);
+
+    useEffect(() => {
+        if (!rendered || !pointerPos) return;
+        drawLoupe(gridRef.current);
+    }, [rendered, pointerPos, sample]);
 
     if (!rendered || typeof document === 'undefined') {
         return null;
@@ -313,21 +333,46 @@ export default function EditorEyedropperOverlay({
     const vh = typeof window !== 'undefined' ? window.innerHeight : 720;
     const loupeW = 104;
     const loupeH = 128;
-    const loupeLeft = pointerPos
-        ? Math.min(vw - loupeW - 12, Math.max(12, pointerPos.x + 18))
-        : -9999;
-    const loupeTop = pointerPos
-        ? pointerPos.y + 18 + loupeH > vh - 12
-            ? Math.max(12, pointerPos.y - loupeH - 14)
-            : pointerPos.y + 18
-        : -9999;
+    const isTouchView = interactionMode === 'touch' || vw < 640;
+
+    let loupeLeft = -9999;
+    let loupeTop = -9999;
+    if (pointerPos) {
+        if (isTouchView) {
+            loupeLeft = Math.min(vw - loupeW - 12, Math.max(12, Math.round(pointerPos.x - loupeW / 2)));
+            const aboveTop = Math.round(pointerPos.y - loupeH - 28);
+            loupeTop = aboveTop >= 68 ? aboveTop : Math.min(vh - loupeH - 12, Math.round(pointerPos.y + 28));
+        } else {
+            const fitsRight = pointerPos.x + 18 + loupeW <= vw - 12;
+            loupeLeft = fitsRight
+                ? Math.max(12, pointerPos.x + 18)
+                : Math.max(12, Math.min(vw - loupeW - 12, pointerPos.x - loupeW - 18));
+            loupeTop =
+                pointerPos.y + 18 + loupeH > vh - 12
+                    ? Math.max(12, pointerPos.y - loupeH - 14)
+                    : Math.max(12, pointerPos.y + 18);
+        }
+    }
 
     return createPortal(
         <div
             data-testid="editor-eyedropper-overlay"
             data-visible={visible ? 'true' : 'false'}
-            onMouseMove={(e) => updateFromCoords(e.clientX, e.clientY)}
-            onPointerMove={(e) => updateFromCoords(e.clientX, e.clientY)}
+            onMouseMove={(e) => {
+                if (touchDragRef.current) return;
+                if (interactionMode !== 'mouse') setInteractionMode('mouse');
+                updateFromCoords(e.clientX, e.clientY);
+            }}
+            onPointerMove={(e) => {
+                const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
+                if (isTouch) {
+                    e.preventDefault();
+                    if (interactionMode !== 'touch') setInteractionMode('touch');
+                } else if (interactionMode !== 'mouse') {
+                    setInteractionMode('mouse');
+                }
+                updateFromCoords(e.clientX, e.clientY);
+            }}
             onPointerDown={(e) => {
                 if (e.target.closest?.('[data-testid="eyedropper-cancel-btn"]')) return;
                 e.preventDefault();
@@ -336,51 +381,86 @@ export default function EditorEyedropperOverlay({
                     onCancel?.();
                     return;
                 }
+                const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
+                if (isTouch) {
+                    touchDragRef.current = true;
+                    setInteractionMode('touch');
+                    try {
+                        e.currentTarget.setPointerCapture?.(e.pointerId);
+                    } catch {
+                        // Ignore capture errors on synthetic events
+                    }
+                    updateFromCoords(e.clientX, e.clientY);
+                    return;
+                }
                 if (e.button !== 0) return;
                 const picked = updateFromCoords(e.clientX, e.clientY);
                 onPick?.(picked.hex);
+            }}
+            onPointerUp={(e) => {
+                if (!touchDragRef.current) return;
+                e.preventDefault();
+                e.stopPropagation();
+                touchDragRef.current = false;
+                try {
+                    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+                        e.currentTarget.releasePointerCapture(e.pointerId);
+                    }
+                } catch {
+                    // Ignore capture release errors
+                }
+                const picked = updateFromCoords(e.clientX, e.clientY);
+                onPick?.(picked.hex);
+            }}
+            onPointerCancel={() => {
+                touchDragRef.current = false;
             }}
             onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onCancel?.();
             }}
-            className={`fixed inset-0 z-[145] cursor-crosshair select-none transition-opacity duration-[200ms] ${
+            className={`fixed inset-0 z-[200] cursor-crosshair select-none touch-none transition-opacity duration-[200ms] ${
                 visible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
             }`}
         >
-            {/* Top floating instruction pill */}
-            <div className="fixed top-4 left-1/2 -translate-x-1/2 pointer-events-auto">
+            {/* Top floating instruction pill (compacted on mobile < 640px) */}
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-auto max-w-[calc(100vw-1rem)]">
                 <div
                     data-testid="eyedropper-banner"
-                    className={`inline-flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-slate-900/95 dark:bg-slate-950/95 text-white border border-slate-700/80 shadow-2xl text-xs origin-top ${EDITOR_PANEL_TRANSITION} ${
+                    className={`inline-flex items-center gap-2 sm:gap-2.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl bg-slate-900/95 dark:bg-slate-950/95 text-white border border-slate-700/80 shadow-2xl text-xs origin-top ${EDITOR_PANEL_TRANSITION} ${
                         visible
                             ? 'opacity-100 translate-y-0 scale-100'
                             : 'opacity-0 -translate-y-3 scale-75'
                     }`}
                 >
-                    <span className="w-6 h-6 rounded-lg bg-blue-600/25 border border-blue-400/40 text-blue-300 flex items-center justify-center shrink-0">
+                    <span className="hidden sm:flex w-6 h-6 rounded-lg bg-blue-600/25 border border-blue-400/40 text-blue-300 items-center justify-center shrink-0">
                         <Pipette className="w-3.5 h-3.5" />
                     </span>
-                    <span className="font-medium">
+                    <span className="hidden sm:inline font-medium">
                         Click any uploaded image or canvas pixel to pick its color
                     </span>
                     <span
+                        data-testid="eyedropper-banner-swatch"
                         className="w-4 h-4 rounded border border-white/30 shrink-0"
                         style={{ backgroundColor: sample.hex }}
                     />
-                    <span className="font-mono font-bold text-[11px] uppercase text-slate-200 w-[62px]">
+                    <span
+                        data-testid="eyedropper-banner-hex"
+                        className="font-mono font-bold text-[11px] uppercase text-slate-200 w-[56px] sm:w-[62px]"
+                    >
                         {sample.hex}
                     </span>
                     <button
                         type="button"
                         data-testid="eyedropper-cancel-btn"
                         onPointerDown={(e) => e.stopPropagation()}
+                        onPointerUp={(e) => e.stopPropagation()}
                         onClick={(e) => {
                             e.stopPropagation();
                             onCancel?.();
                         }}
-                        className="ml-1 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold cursor-pointer"
+                        className="ml-0.5 sm:ml-1 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold cursor-pointer"
                     >
                         <X className="w-3 h-3" />
                         <span>Esc</span>
@@ -388,7 +468,16 @@ export default function EditorEyedropperOverlay({
                 </div>
             </div>
 
-            {/* Live Magnifier Loupe following cursor */}
+            {/* Active pixel crosshair ring */}
+            {pointerPos && (
+                <div
+                    data-testid="eyedropper-crosshair"
+                    style={{ left: `${pointerPos.x}px`, top: `${pointerPos.y}px` }}
+                    className="fixed -translate-x-1/2 -translate-y-1/2 pointer-events-none w-4 h-4 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(15,23,42,0.85)]"
+                />
+            )}
+
+            {/* Live Magnifier Loupe following cursor / touch point */}
             {pointerPos && (
                 <div
                     data-testid="eyedropper-loupe"

@@ -75,7 +75,10 @@ class PublicController extends Controller
         AnalyticsService::recordImageView($image->id);
 
         $related = RelatedImagesService::getRankedRelatedImages($imageId, 14, 0);
-        $collections = CollectionService::getCollectionsForImage($image->id, is_array($image->tags) ? $image->tags : []);
+        $partOfCollectionsSliderConfig = \App\Services\SliderSettingsService::get('part_of_collections');
+        $maxPartCols = max(1, (int) ($partOfCollectionsSliderConfig['maxTotalItems'] ?? 12));
+        $allMatchingCollections = CollectionService::getCollectionsForImage($image->id, is_array($image->tags) ? $image->tags : []);
+        $collections = array_slice($allMatchingCollections, 0, $maxPartCols);
 
         $siteName = $info['websiteName'] ?: 'Png101';
         $imgName = $image->name ?: $image->filename;
@@ -107,6 +110,7 @@ class PublicController extends Controller
             'relatedImages' => $related['images'],
             'totalRelatedImages' => $related['total'],
             'collections' => $collections,
+            'partOfCollectionsSliderConfig' => $partOfCollectionsSliderConfig,
             'seo' => [
                 'title' => "{$imgName} - {$siteName}",
                 'description' => $image->description ?: "Download {$imgName} PNG image. Free high-quality PNG image.",

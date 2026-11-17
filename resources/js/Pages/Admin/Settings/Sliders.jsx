@@ -1,11 +1,18 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Head } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import CollectionCarouselSlider, {
     DEFAULT_SLIDER_CONFIG,
     DEFAULT_TRENDING_SLIDER_CONFIG,
+    DEFAULT_PART_OF_COLLECTIONS_SLIDER_CONFIG,
 } from '@/components/collections/CollectionCarouselSlider';
 import { HexColorPicker } from 'react-colorful';
+import {
+    parseHexOrRgbColor,
+    useGlobalColorPickerDefaults,
+    useSmallColorPickerViewport,
+} from '@/lib/colorPickerConfig';
 import {
     SlidersHorizontal,
     Save,
@@ -27,8 +34,10 @@ import {
     X,
     ChevronDown,
     ChevronUp,
+    Pipette,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import EditorEyedropperOverlay from '@/components/editor/EditorEyedropperOverlay';
 
 const DEFAULT_RELATED_COLLECTIONS = {
     id: 'related_collections',
@@ -39,6 +48,10 @@ const DEFAULT_RELATED_COLLECTIONS = {
 
 const DEFAULT_TRENDING_COLLECTIONS = {
     ...DEFAULT_TRENDING_SLIDER_CONFIG,
+};
+
+const DEFAULT_PART_OF_COLLECTIONS = {
+    ...DEFAULT_PART_OF_COLLECTIONS_SLIDER_CONFIG,
 };
 
 const BREAKPOINT_CARDS = [
@@ -125,12 +138,24 @@ const SAMPLE_COLLECTION_NAMES = [
 
 function DraggableMiniColorPicker({ label, value, fallback = '#0f172a', onChange }) {
     const [open, setOpen] = useState(false);
+    const [isPicking, setIsPicking] = useState(false);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const ref = useRef(null);
+    const popupRef = useRef(null);
+    const pickingRef = useRef(false);
+    pickingRef.current = isPicking;
+    const globalColorDefaults = useGlobalColorPickerDefaults();
+    const isSmallViewport = useSmallColorPickerViewport();
+    const pickerColor = value || globalColorDefaults.defaultColor;
+    const isColorModified =
+        parseHexOrRgbColor(pickerColor, '') !== globalColorDefaults.defaultColor;
     const dragRef = useRef({ active: false, startX: 0, startY: 0, initX: 0, initY: 0 });
 
     useEffect(() => {
-        if (!open) return undefined;
+        if (!open) {
+            setIsPicking(false);
+            return undefined;
+        }
         const onMove = (e) => {
             if (!dragRef.current.active) return;
             if (e.cancelable) e.preventDefault();
@@ -143,7 +168,11 @@ function DraggableMiniColorPicker({ label, value, fallback = '#0f172a', onChange
             dragRef.current.active = false;
         };
         const onDownOutside = (e) => {
-            if (ref.current && !ref.current.contains(e.target)) {
+            if (pickingRef.current) return;
+            if (e.target?.closest?.('[data-testid="editor-eyedropper-overlay"]')) return;
+            const insideTrigger = ref.current && ref.current.contains(e.target);
+            const insidePopup = popupRef.current && popupRef.current.contains(e.target);
+            if (!insideTrigger && !insidePopup) {
                 setOpen(false);
             }
         };
@@ -191,50 +220,115 @@ function DraggableMiniColorPicker({ label, value, fallback = '#0f172a', onChange
                 </span>
             </button>
 
-            {open && (
-                <div
-                    onPointerDown={(e) => {
-                        if (e.target.closest('input, button, .react-colorful, [data-no-drag]')) return;
-                        if (e.cancelable) e.preventDefault();
-                        dragRef.current = {
-                            active: true,
-                            startX: e.clientX,
-                            startY: e.clientY,
-                            initX: offset.x,
-                            initY: offset.y,
-                        };
-                    }}
-                    style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
-                    className="absolute left-0 bottom-full mb-2 z-50 p-3.5 bg-card-bg border border-card-border rounded-2xl shadow-2xl flex flex-col items-center gap-3 cursor-move select-none touch-none"
-                >
-                    <div className="flex items-center justify-between w-full pb-1 border-b border-card-border/50 text-[11px] font-bold text-foreground/50">
-                        <div className="flex items-center gap-1.5 pointer-events-none">
-                            <GripHorizontal className="w-3.5 h-3.5 text-foreground/40" />
-                            <span>{label}</span>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => setOpen(false)}
-                            className="p-0.5 rounded-md text-foreground/50 hover:text-foreground cursor-pointer"
-                        >
-                            <X className="w-3.5 h-3.5" />
-                        </button>
-                    </div>
-                    <div className="cursor-default touch-none [&_.react-colorful]:touch-none" data-no-drag>
-                        <HexColorPicker color={value || fallback} onChange={onChange} />
-                    </div>
-                    <input
-                        type="text"
-                        data-no-drag
-                        value={(value || fallback).toUpperCase()}
-                        onChange={(e) => {
-                            const val = e.target.value;
-                            if (val.startsWith('#') || val.length <= 7) onChange(val);
+            {open && (() => {
+                const pickerPopup = (
+                    <div
+                        ref={popupRef}
+                        role="dialog"
+                        aria-label={`${label} color picker`}
+                        onPointerDown={(e) => {
+                            e.stopPropagation();
+                            if (e.target.closest('input, button, .react-colorful, [data-no-drag]')) return;
+                            if (e.cancelable) e.preventDefault();
+                            dragRef.current = {
+                                active: true,
+                                startX: e.clientX,
+                                startY: e.clientY,
+                                initX: offset.x,
+                                initY: offset.y,
+                            };
                         }}
-                        className="w-full bg-input-bg border border-input-border text-foreground text-xs px-2 py-1 rounded font-mono uppercase focus:outline-none focus:border-blue-500 text-center"
-                    />
-                </div>
-            )}
+                        style={{
+                            transform: isSmallViewport
+                                ? `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px))`
+                                : `translate(${offset.x}px, ${offset.y}px)`,
+                        }}
+                        className={`${
+                            isSmallViewport
+                                ? 'fixed left-1/2 top-1/2 z-[120]'
+                                : 'absolute left-0 bottom-full mb-2 z-50'
+                        } p-3.5 bg-card-bg border border-card-border rounded-2xl shadow-2xl flex flex-col items-center gap-3 cursor-move select-none touch-none max-w-[calc(100vw-1.5rem)] ${
+                            isPicking ? 'opacity-0 pointer-events-none' : ''
+                        }`}
+                    >
+                        <div className="flex items-center justify-between w-full pb-1 border-b border-card-border/50 text-[11px] font-bold text-foreground/50">
+                            <div className="flex items-center gap-1.5 pointer-events-none">
+                                <GripHorizontal className="w-3.5 h-3.5 text-foreground/40" />
+                                <span>{label}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                {isColorModified && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onChange(globalColorDefaults.defaultColor);
+                                        }}
+                                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-foreground/10 text-foreground/75 hover:text-foreground hover:bg-foreground/15 cursor-pointer"
+                                        title={`Reset color to ${globalColorDefaults.defaultColor}`}
+                                    >
+                                        <RotateCcw className="w-2.5 h-2.5" />
+                                        <span>Reset</span>
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => setOpen(false)}
+                                    className="p-0.5 rounded-md text-foreground/50 hover:text-foreground cursor-pointer"
+                                    aria-label="Close color picker"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="cursor-default touch-none [&_.react-colorful]:touch-none" data-no-drag>
+                            <HexColorPicker color={pickerColor} onChange={onChange} />
+                        </div>
+                        <div className="flex items-center gap-2 w-full" data-no-drag>
+                            <span
+                                className="w-5 h-5 rounded-md border border-card-border shrink-0"
+                                style={{ backgroundColor: pickerColor }}
+                            />
+                            <input
+                                type="text"
+                                data-no-drag
+                                value={pickerColor.toUpperCase()}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val.startsWith('#') || val.length <= 7) onChange(val);
+                                }}
+                                className="min-w-0 flex-1 bg-input-bg border border-input-border text-foreground text-xs px-2 py-1 rounded font-mono uppercase focus:outline-none focus:border-blue-500 text-center"
+                            />
+                            <button
+                                type="button"
+                                data-testid="admin-slider-eyedropper"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsPicking(true);
+                                }}
+                                className="p-1.5 rounded-md border border-input-border bg-card-header-bg hover:bg-blue-500/15 hover:border-blue-500/40 text-foreground/75 hover:text-blue-400 transition-colors cursor-pointer shrink-0"
+                                aria-label={`Pick ${label} from screen`}
+                                title="Eyedropper"
+                            >
+                                <Pipette className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    </div>
+                );
+                if (isSmallViewport && typeof document !== 'undefined') {
+                    return createPortal(pickerPopup, document.body);
+                }
+                return pickerPopup;
+            })()}
+            <EditorEyedropperOverlay
+                open={open && isPicking}
+                initialColor={pickerColor}
+                onPick={(hex) => {
+                    onChange(hex);
+                    setIsPicking(false);
+                }}
+                onCancel={() => setIsPicking(false)}
+            />
         </div>
     );
 }
@@ -248,6 +342,10 @@ export default function AdminSliderSettings({ initialSliders = {} }) {
         trending_collections: {
             ...DEFAULT_TRENDING_COLLECTIONS,
             ...(initialSliders?.trending_collections || {}),
+        },
+        part_of_collections: {
+            ...DEFAULT_PART_OF_COLLECTIONS,
+            ...(initialSliders?.part_of_collections || {}),
         },
         ...initialSliders,
     }));
@@ -289,6 +387,8 @@ export default function AdminSliderSettings({ initialSliders = {} }) {
     const defaultForActive =
         activeKey === 'trending_collections'
             ? DEFAULT_TRENDING_COLLECTIONS
+            : activeKey === 'part_of_collections'
+            ? DEFAULT_PART_OF_COLLECTIONS
             : DEFAULT_RELATED_COLLECTIONS;
     const activeSlider = sliders[activeKey] || defaultForActive;
 
@@ -314,6 +414,9 @@ export default function AdminSliderSettings({ initialSliders = {} }) {
                         'Curated collection of high-resolution transparent PNG graphics and vector-ready design assets.',
                     imageCount: 12 + ((i * 7) % 45),
                     coverImagePath: refCol?.coverImagePath || null,
+                    cardBgImagePath: refCol?.cardBgImagePath || null,
+                    cardBgColor: refCol?.cardBgColor || null,
+                    cardTextColor: refCol?.cardTextColor || null,
                     previewImages: refCol?.previewImages || [],
                 });
             }
@@ -580,17 +683,41 @@ export default function AdminSliderSettings({ initialSliders = {} }) {
                         <div
                             style={{
                                 width: '100%',
-                                maxWidth: activeBpMeta.widthHint,
+                                maxWidth:
+                                    activeKey === 'part_of_collections' && previewViewport !== 'mobile'
+                                        ? '384px'
+                                        : activeBpMeta.widthHint,
                                 transition: 'max-width 300ms cubic-bezier(0.22, 1, 0.36, 1)',
                             }}
                             className="px-4"
                         >
-                            <CollectionCarouselSlider
-                                collections={previewCollections}
-                                sliderConfig={activeSlider}
-                                forcedViewport={previewViewport}
-                                isPreview={true}
-                            />
+                            {activeKey === 'part_of_collections' ? (
+                                <div className="bg-card-bg border border-card-border rounded-xl shadow-lg">
+                                    <div className="bg-slate-100 dark:bg-card-header-bg px-4 py-3 border-b border-card-border rounded-t-xl flex items-center justify-between">
+                                        <span className="font-semibold text-foreground text-sm">Part of Collections</span>
+                                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-500">
+                                            {previewCollections.length}
+                                        </span>
+                                    </div>
+                                    <div className="px-4 py-3.5">
+                                        <CollectionCarouselSlider
+                                            collections={previewCollections}
+                                            sliderConfig={activeSlider}
+                                            variant="part_of_collections"
+                                            forcedViewport={previewViewport}
+                                            isPreview={true}
+                                            hideHeader={true}
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <CollectionCarouselSlider
+                                    collections={previewCollections}
+                                    sliderConfig={activeSlider}
+                                    forcedViewport={previewViewport}
+                                    isPreview={true}
+                                />
+                            )}
                         </div>
                     </div>
                 </div>

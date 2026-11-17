@@ -24,6 +24,7 @@ class HandleInertiaRequests extends Middleware
     {
         return array_merge(parent::share($request), [
             'websiteInfo' => fn () => WebsiteInfoService::get(),
+            'colorPickerDefaults' => fn () => WebsiteInfoService::getColorPickerDefaults(),
             'codeInjection' => fn () => CodeInjectionService::get(),
             'auth' => fn () => TeamService::getCurrentSession($request),
             'bonusToolsNav' => fn () => ConverterToolsService::getPublicUiFlags(),

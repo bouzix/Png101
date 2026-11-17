@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import StudioSelect from '@/components/ui/StudioSelect';
 import { toast } from 'sonner';
 import {
@@ -17,10 +17,18 @@ import {
     Zap,
     Settings,
     LayoutGrid,
+    Palette,
+    RotateCcw,
 } from 'lucide-react';
 import AdminLayout from '../../../Layouts/AdminLayout';
 import { StatCard } from '../../../components/ui/StatCard';
 import BgRemoverSettingsCard from '../../../components/admin/BgRemoverSettingsCard';
+import StudioColorPicker from '../../../components/tools/StudioColorPicker';
+import {
+    DEFAULT_COLOR_PICKER_CONFIG,
+    broadcastColorPickerDefaults,
+    sanitizeColorPickerDefaults,
+} from '../../../lib/colorPickerConfig';
 
 export default function SettingsPage() {
     const [formData, setFormData] = useState({
@@ -44,6 +52,7 @@ export default function SettingsPage() {
         tablet: 3,
         desktop: 6,
     });
+    const [colorPickerDefaults, setColorPickerDefaults] = useState(DEFAULT_COLOR_PICKER_CONFIG);
     const [health, setHealth] = useState(null);
     const [healthLoading, setHealthLoading] = useState(false);
     const [backfilling, setBackfilling] = useState(false);
@@ -98,6 +107,9 @@ export default function SettingsPage() {
                         // Ignore malformed JSON and keep defaults
                     }
                 }
+                if (allSettings?.color_picker_defaults) {
+                    setColorPickerDefaults(sanitizeColorPickerDefaults(allSettings.color_picker_defaults));
+                }
                 setLoading(false);
             })
             .catch((err) => {
@@ -130,6 +142,7 @@ export default function SettingsPage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         collections_grid_columns: JSON.stringify(collectionsGridColumns),
+                        color_picker_defaults: JSON.stringify(sanitizeColorPickerDefaults(colorPickerDefaults)),
                     }),
                 }),
             ]);
@@ -142,6 +155,8 @@ export default function SettingsPage() {
                         : 'General settings & trash retention policy saved'
                 );
                 loadHealth();
+                broadcastColorPickerDefaults(sanitizeColorPickerDefaults(colorPickerDefaults));
+                router.reload({ only: ['websiteInfo', 'colorPickerDefaults'], preserveScroll: true });
             } else {
                 toast.error('Failed to save settings');
             }
@@ -569,6 +584,175 @@ export default function SettingsPage() {
                                             </option>
                                         ))}
                                     </StudioSelect>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Global Color Picker Defaults */}
+                        <div className="bg-card-bg border border-card-border rounded-xl p-6 space-y-5">
+                            <div className="flex items-start justify-between gap-3 flex-wrap">
+                                <div className="flex items-start gap-3">
+                                    <div className="p-2.5 rounded-lg bg-pink-500/10 text-pink-400 border border-pink-500/20 mt-0.5">
+                                        <Palette className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-bold text-foreground">Color Picker Defaults</h2>
+                                        <p className="text-sm text-foreground/60">
+                                            Configure the global default solid color and default gradient used across all color pickers in the frontend, admin dashboard, and image editor. Changing a color shows a Reset button in every picker to return to these defaults.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setColorPickerDefaults(DEFAULT_COLOR_PICKER_CONFIG)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-card-border bg-foreground/[0.03] hover:bg-foreground/[0.08] text-xs font-semibold text-foreground/75 transition-colors cursor-pointer"
+                                >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                    Restore Factory Defaults
+                                </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Default Solid Color */}
+                                <div className="rounded-xl border border-card-border bg-foreground/[0.02] p-4 space-y-3">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div>
+                                            <h3 className="text-sm font-bold text-foreground">Default Solid Color</h3>
+                                            <p className="text-xs text-foreground/55">
+                                                Initial custom color &amp; reset target for solid color pickers.
+                                            </p>
+                                        </div>
+                                        <span className="text-xs font-mono uppercase px-2 py-1 rounded bg-foreground/[0.06] text-foreground/80">
+                                            {colorPickerDefaults.defaultColor}
+                                        </span>
+                                    </div>
+                                    <StudioColorPicker
+                                        value={colorPickerDefaults.defaultColor}
+                                        onChange={(next) =>
+                                            setColorPickerDefaults((prev) => ({
+                                                ...prev,
+                                                defaultColor: next,
+                                            }))
+                                        }
+                                        defaultColor={DEFAULT_COLOR_PICKER_CONFIG.defaultColor}
+                                        ariaLabel="Default Solid Color"
+                                        title="Default Solid Color"
+                                        popoverTitle="Default Solid Color"
+                                        showHexLabel={true}
+                                        enableEyedropper={true}
+                                    />
+                                </div>
+
+                                {/* Default Gradient */}
+                                <div className="rounded-xl border border-card-border bg-foreground/[0.02] p-4 space-y-3">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div>
+                                            <h3 className="text-sm font-bold text-foreground">Default Custom Gradient</h3>
+                                            <p className="text-xs text-foreground/55">
+                                                Initial gradient preset &amp; reset target for gradient pickers.
+                                            </p>
+                                        </div>
+                                        <div
+                                            className="w-12 h-6 rounded-md border border-card-border shadow-inner shrink-0"
+                                            style={{
+                                                background:
+                                                    colorPickerDefaults.defaultGradientType === 'radial'
+                                                        ? `radial-gradient(circle, ${colorPickerDefaults.defaultGradientFrom}, ${colorPickerDefaults.defaultGradientTo})`
+                                                        : `linear-gradient(${colorPickerDefaults.defaultGradientAngle}deg, ${colorPickerDefaults.defaultGradientFrom}, ${colorPickerDefaults.defaultGradientTo})`,
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <label className="block text-[11px] font-bold text-foreground/65 uppercase tracking-wider">
+                                                Color 1 (Start)
+                                            </label>
+                                            <StudioColorPicker
+                                                value={colorPickerDefaults.defaultGradientFrom}
+                                                onChange={(next) =>
+                                                    setColorPickerDefaults((prev) => ({
+                                                        ...prev,
+                                                        defaultGradientFrom: next,
+                                                    }))
+                                                }
+                                                defaultColor={DEFAULT_COLOR_PICKER_CONFIG.defaultGradientFrom}
+                                                ariaLabel="Default Gradient Start Color"
+                                                title="Gradient Start Color"
+                                                popoverTitle="Gradient Start"
+                                                showHexLabel={true}
+                                                enableEyedropper={true}
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="block text-[11px] font-bold text-foreground/65 uppercase tracking-wider">
+                                                Color 2 (End)
+                                            </label>
+                                            <StudioColorPicker
+                                                value={colorPickerDefaults.defaultGradientTo}
+                                                onChange={(next) =>
+                                                    setColorPickerDefaults((prev) => ({
+                                                        ...prev,
+                                                        defaultGradientTo: next,
+                                                    }))
+                                                }
+                                                defaultColor={DEFAULT_COLOR_PICKER_CONFIG.defaultGradientTo}
+                                                ariaLabel="Default Gradient End Color"
+                                                title="Gradient End Color"
+                                                popoverTitle="Gradient End"
+                                                showHexLabel={true}
+                                                enableEyedropper={true}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3 pt-1">
+                                        <div className="space-y-1.5">
+                                            <label className="block text-[11px] font-bold text-foreground/65 uppercase tracking-wider">
+                                                Type
+                                            </label>
+                                            <div className="flex rounded-lg bg-foreground/5 p-0.5 border border-card-border">
+                                                {['linear', 'radial'].map((gType) => (
+                                                    <button
+                                                        key={gType}
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setColorPickerDefaults((prev) => ({
+                                                                ...prev,
+                                                                defaultGradientType: gType,
+                                                            }))
+                                                        }
+                                                        className={`flex-1 py-1 text-[11px] font-bold rounded-md capitalize transition-all cursor-pointer ${
+                                                            colorPickerDefaults.defaultGradientType === gType
+                                                                ? 'bg-primary-glow text-white shadow-sm'
+                                                                : 'text-foreground/60 hover:text-foreground'
+                                                        }`}
+                                                    >
+                                                        {gType}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="block text-[11px] font-bold text-foreground/65 uppercase tracking-wider">
+                                                Angle ({colorPickerDefaults.defaultGradientAngle}°)
+                                            </label>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="360"
+                                                value={colorPickerDefaults.defaultGradientAngle}
+                                                disabled={colorPickerDefaults.defaultGradientType === 'radial'}
+                                                onChange={(e) =>
+                                                    setColorPickerDefaults((prev) => ({
+                                                        ...prev,
+                                                        defaultGradientAngle: Number(e.target.value),
+                                                    }))
+                                                }
+                                                className="w-full accent-primary-glow mt-2 disabled:opacity-40"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

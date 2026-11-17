@@ -373,22 +373,14 @@ class CollectionService
 
     public static function getCollectionsForImage(string $imageId, array $imageTags = []): array
     {
-        $direct = Collection::where('status', 'published')
+        $directIds = Collection::where('status', 'published')
             ->whereHas('images', function ($q) use ($imageId) {
                 $q->where('imageId', $imageId)->where('isExcluded', false);
             })
-            ->select(['id', 'name', 'slug', 'coverImagePath'])
-            ->get();
+            ->pluck('id')
+            ->all();
 
-        $results = [];
-        foreach ($direct as $c) {
-            $results[$c->id] = [
-                'id' => $c->id,
-                'name' => $c->name,
-                'slug' => $c->slug,
-                'coverImagePath' => $c->coverImagePath,
-            ];
-        }
+        $matchedIds = array_fill_keys($directIds, true);
 
         $normImgTags = self::normalizeTags($imageTags);
         if (!empty($normImgTags)) {
@@ -400,23 +392,29 @@ class CollectionService
                 ->get();
 
             foreach ($smart as $sc) {
+                if (isset($matchedIds[$sc->id])) {
+                    continue;
+                }
                 $excluded = $sc->images->contains(fn($ci) => (bool) $ci->isExcluded);
                 if ($excluded) {
                     continue;
                 }
                 $rules = self::normalizeTags($sc->tagRules ?? []);
                 if (self::matchesTagRules($normImgTags, $rules, $sc->ruleMatchMode ?: 'any')) {
-                    $results[$sc->id] = [
-                        'id' => $sc->id,
-                        'name' => $sc->name,
-                        'slug' => $sc->slug,
-                        'coverImagePath' => $sc->coverImagePath,
-                    ];
+                    $matchedIds[$sc->id] = true;
                 }
             }
         }
 
-        return array_values($results);
+        if (empty($matchedIds)) {
+            return [];
+        }
+
+        $allPublished = self::listCollections(['status' => 'published', 'includeDrafts' => false]);
+        return array_values(array_filter(
+            $allPublished,
+            fn(array $col) => isset($matchedIds[$col['id']])
+        ));
     }
 }
 

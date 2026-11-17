@@ -14,8 +14,15 @@ import {
     Layers,
     ChevronRight,
     ArrowRight,
+    Pipette,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import EditorEyedropperOverlay from '@/components/editor/EditorEyedropperOverlay';
+import {
+    parseHexOrRgbColor,
+    useGlobalColorPickerDefaults,
+    useSmallColorPickerViewport,
+} from '@/lib/colorPickerConfig';
 
 const HERO_BG_PRESETS = [
     '#0f172a',
@@ -48,8 +55,17 @@ function DraggableColorPickerField({
     align = 'left',
 }) {
     const [open, setOpen] = useState(false);
+    const [isPicking, setIsPicking] = useState(false);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const containerRef = useRef(null);
+    const popupRef = useRef(null);
+    const pickingRef = useRef(false);
+    pickingRef.current = isPicking;
+    const globalColorDefaults = useGlobalColorPickerDefaults();
+    const isSmallViewport = useSmallColorPickerViewport();
+    const pickerColor = value || globalColorDefaults.defaultColor;
+    const isColorModified =
+        parseHexOrRgbColor(pickerColor, '') !== globalColorDefaults.defaultColor;
     const dragRef = useRef({
         active: false,
         startX: 0,
@@ -94,9 +110,16 @@ function DraggableColorPickerField({
     }, [open]);
 
     useEffect(() => {
-        if (!open) return undefined;
+        if (!open) {
+            setIsPicking(false);
+            return undefined;
+        }
         const onDown = (e) => {
-            if (containerRef.current && !containerRef.current.contains(e.target)) {
+            if (pickingRef.current) return;
+            if (e.target?.closest?.('[data-testid="editor-eyedropper-overlay"]')) return;
+            const insideContainer = containerRef.current && containerRef.current.contains(e.target);
+            const insidePopup = popupRef.current && popupRef.current.contains(e.target);
+            if (!insideContainer && !insidePopup) {
                 setOpen(false);
             }
         };
@@ -158,73 +181,117 @@ function DraggableColorPickerField({
                 ))}
             </div>
 
-            {open && (
-                <div
-                    onPointerDown={handleStartDrag}
-                    style={{ transform: `translate(${offset.x}px, ${offset.y}px)` }}
-                    className={`absolute ${
-                        align === 'right' ? 'right-0' : 'left-0'
-                    } bottom-full mb-2 z-50 p-3.5 bg-card-bg border border-card-border rounded-2xl shadow-2xl flex flex-col items-center gap-3 cursor-move select-none touch-none`}
-                >
-                    <div className="flex items-center justify-between w-full pb-1 border-b border-card-border/50 text-[11px] font-bold text-foreground/50">
-                        <div className="flex items-center gap-1.5 pointer-events-none">
-                            <GripHorizontal className="w-3.5 h-3.5 text-foreground/40" />
-                            <span>{label}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {(offset.x !== 0 || offset.y !== 0) && (
+            {open && (() => {
+                const pickerPopup = (
+                    <div
+                        ref={popupRef}
+                        role="dialog"
+                        aria-label={`${label} color picker`}
+                        onPointerDown={(e) => {
+                            e.stopPropagation();
+                            handleStartDrag(e);
+                        }}
+                        style={{
+                            transform: isSmallViewport
+                                ? `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px))`
+                                : `translate(${offset.x}px, ${offset.y}px)`,
+                        }}
+                        className={`${
+                            isSmallViewport
+                                ? 'fixed left-1/2 top-1/2 z-[120]'
+                                : `absolute ${align === 'right' ? 'right-0' : 'left-0'} bottom-full mb-2 z-50`
+                        } p-3.5 bg-card-bg border border-card-border rounded-2xl shadow-2xl flex flex-col items-center gap-3 cursor-move select-none touch-none max-w-[calc(100vw-1.5rem)] ${
+                            isPicking ? 'opacity-0 pointer-events-none' : ''
+                        }`}
+                    >
+                        <div className="flex items-center justify-between w-full pb-1 border-b border-card-border/50 text-[11px] font-bold text-foreground/50">
+                            <div className="flex items-center gap-1.5 pointer-events-none">
+                                <GripHorizontal className="w-3.5 h-3.5 text-foreground/40" />
+                                <span>{label}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                {isColorModified && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onChange(globalColorDefaults.defaultColor);
+                                        }}
+                                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-foreground/10 text-foreground/75 hover:text-foreground hover:bg-foreground/15 cursor-pointer"
+                                        title={`Reset color to ${globalColorDefaults.defaultColor}`}
+                                    >
+                                        <RotateCcw className="w-2.5 h-2.5" />
+                                        <span>Reset</span>
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        setOffset({ x: 0, y: 0 });
+                                        setOpen(false);
                                     }}
-                                    className="text-[10px] text-foreground/40 hover:text-foreground hover:underline cursor-pointer"
+                                    className="p-0.5 rounded-md text-foreground/50 hover:text-foreground hover:bg-card-header-bg transition-colors cursor-pointer"
+                                    aria-label="Close color picker"
+                                    title="Close"
                                 >
-                                    Reset
+                                    <X className="w-3.5 h-3.5" />
                                 </button>
-                            )}
+                            </div>
+                        </div>
+
+                        <div className="cursor-default touch-none [&_.react-colorful]:touch-none" data-no-drag>
+                            <HexColorPicker
+                                color={pickerColor}
+                                onChange={(newColor) => onChange(newColor)}
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-2 w-full cursor-default" data-no-drag>
+                            <span
+                                className="w-5 h-5 rounded-md border border-card-border flex-shrink-0"
+                                style={{ backgroundColor: pickerColor }}
+                            />
+                            <input
+                                type="text"
+                                value={pickerColor.toUpperCase()}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val.startsWith('#') || val.length <= 7) {
+                                        onChange(val);
+                                    }
+                                }}
+                                className="min-w-0 flex-1 bg-input-bg border border-input-border text-foreground text-xs px-2 py-1 rounded font-mono uppercase focus:outline-none focus:border-blue-500 text-center cursor-text"
+                            />
                             <button
                                 type="button"
+                                data-testid="admin-hero-eyedropper"
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    setOpen(false);
+                                    setIsPicking(true);
                                 }}
-                                className="p-0.5 rounded-md text-foreground/50 hover:text-foreground hover:bg-card-header-bg transition-colors cursor-pointer"
-                                aria-label="Close color picker"
-                                title="Close"
+                                className="p-1.5 rounded-md border border-input-border bg-card-header-bg hover:bg-blue-500/15 hover:border-blue-500/40 text-foreground/75 hover:text-blue-400 transition-colors cursor-pointer shrink-0"
+                                aria-label={`Pick ${label} from screen`}
+                                title="Eyedropper"
                             >
-                                <X className="w-3.5 h-3.5" />
+                                <Pipette className="w-3.5 h-3.5" />
                             </button>
                         </div>
                     </div>
-
-                    <div className="cursor-default touch-none [&_.react-colorful]:touch-none" data-no-drag>
-                        <HexColorPicker
-                            color={value || defaultFallback}
-                            onChange={(newColor) => onChange(newColor)}
-                        />
-                    </div>
-
-                    <div className="flex items-center gap-2 w-full cursor-default" data-no-drag>
-                        <span
-                            className="w-5 h-5 rounded-md border border-card-border flex-shrink-0"
-                            style={{ backgroundColor: value || defaultFallback }}
-                        />
-                        <input
-                            type="text"
-                            value={(value || defaultFallback).toUpperCase()}
-                            onChange={(e) => {
-                                const val = e.target.value;
-                                if (val.startsWith('#') || val.length <= 7) {
-                                    onChange(val);
-                                }
-                            }}
-                            className="w-full bg-input-bg border border-input-border text-foreground text-xs px-2 py-1 rounded font-mono uppercase focus:outline-none focus:border-blue-500 text-center cursor-text"
-                        />
-                    </div>
-                </div>
-            )}
+                );
+                if (isSmallViewport && typeof document !== 'undefined') {
+                    return createPortal(pickerPopup, document.body);
+                }
+                return pickerPopup;
+            })()}
+            <EditorEyedropperOverlay
+                open={open && isPicking}
+                initialColor={pickerColor}
+                onPick={(hex) => {
+                    onChange(hex);
+                    setIsPicking(false);
+                }}
+                onCancel={() => setIsPicking(false)}
+            />
         </div>
     );
 }
