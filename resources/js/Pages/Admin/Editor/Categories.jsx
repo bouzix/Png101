@@ -121,13 +121,13 @@ export default function EditorCategoriesAdmin({ initialCategories = [], initialP
     return (
         <AdminLayout>
             <Head title="Categories & Canvas Presets" />
-            <div className="w-full space-y-8 animate-in fade-in duration-300">
+            <div className="w-full space-y-6 xl:space-y-8 animate-in fade-in duration-300">
                 <div>
-                    <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
-                        <FolderTree className="w-7 h-7 text-primary-glow shrink-0" />
+                    <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground flex items-center gap-2.5 sm:gap-3">
+                        <FolderTree className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                         <span>Categories &amp; Canvas Presets</span>
                     </h1>
-                    <p className="text-sm text-foreground/55 mt-1">
+                    <p className="hidden xl:block text-sm text-foreground/55 mt-1">
                         Organize editor templates by category and configure one-click document dimension presets.
                     </p>
                 </div>

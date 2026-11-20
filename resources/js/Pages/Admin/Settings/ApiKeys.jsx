@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/react';
 import { toast } from 'sonner';
 import AdminLayout from '../../../Layouts/AdminLayout';
 import ConfirmDialog from '../../../components/admin/ConfirmDialog';
+import ResponsiveTableWrapper from '../../../components/admin/ResponsiveTableWrapper';
 import {
     Key,
     Plus,
@@ -236,13 +237,13 @@ export default function ApiKeysPage() {
             <Head title="API Keys Vault - Png101 Admin" />
             <div className="space-y-6 pb-24">
                 {/* Page Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
-                            <Key className="w-7 h-7 text-primary-glow shrink-0" />
+                        <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground mb-1 flex items-center gap-2.5 sm:gap-3">
+                            <Key className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                             <span>API Keys Vault</span>
                         </h1>
-                        <p className="text-foreground/60 text-sm">
+                        <p className="hidden xl:block text-foreground/60 text-sm">
                             Manage Google Generative AI keys, toggle active credentials, and select supported Gemini model versions.
                         </p>
                     </div>
@@ -250,16 +251,17 @@ export default function ApiKeysPage() {
                     <div className="inline-flex items-center p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto">
                         <button
                             onClick={openAddModal}
-                            className="h-8 inline-flex items-center gap-2 px-3.5 bg-primary-glow hover:bg-blue-600 text-white font-bold text-xs rounded-lg shadow-sm transition-all cursor-pointer"
+                            className="h-8 inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 bg-primary-glow hover:bg-blue-600 text-white font-bold text-xs rounded-lg shadow-sm transition-all cursor-pointer"
                         >
                             <Plus className="w-3.5 h-3.5" />
-                            <span>Add New Key</span>
+                            <span className="sm:hidden">Add Key</span>
+                            <span className="hidden sm:inline">Add New Key</span>
                         </button>
                     </div>
                 </div>
 
-                {/* Primary Stat Cards Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Primary Stat Cards Grid (Desktop / Laptop >= 1280px only) */}
+                <div className="hidden xl:grid xl:grid-cols-4 gap-6">
                     <StatCard
                         title="Active AI Engine"
                         value={activeKey ? activeKey.name : 'None Assigned'}
@@ -312,14 +314,14 @@ export default function ApiKeysPage() {
                             <p className="text-foreground/60 text-sm">Loading API keys vault...</p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
+                        <ResponsiveTableWrapper>
                             <table className="w-full text-left">
                                 <thead className="bg-background/50 text-foreground/70 uppercase text-xs font-bold border-b border-card-border">
                                     <tr>
-                                        <th className="px-6 py-4">Key Name &amp; Engine</th>
-                                        <th className="px-6 py-4">Key Value</th>
-                                        <th className="px-6 py-4">Added Date</th>
-                                        <th className="px-6 py-4 text-right">Actions</th>
+                                        <th className="px-6 py-4 whitespace-nowrap">Key Name &amp; Engine</th>
+                                        <th className="px-6 py-4 whitespace-nowrap">Key Value</th>
+                                        <th className="px-6 py-4 whitespace-nowrap">Added Date</th>
+                                        <th className="px-6 py-4 text-right whitespace-nowrap">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-card-border">
@@ -462,7 +464,7 @@ export default function ApiKeysPage() {
                                     )}
                                 </tbody>
                             </table>
-                        </div>
+                        </ResponsiveTableWrapper>
                     )}
                 </div>
 

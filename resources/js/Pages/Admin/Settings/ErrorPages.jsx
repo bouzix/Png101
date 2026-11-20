@@ -264,42 +264,44 @@ export default function ErrorPagesSettingsPage() {
             ) : (
                 <div className="space-y-6">
                     {/* Page Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                         <div>
-                            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
-                                <ShieldAlert className="w-7 h-7 text-primary-glow shrink-0" />
+                            <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground mb-1 flex items-center gap-2.5 sm:gap-3">
+                                <ShieldAlert className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                                 <span>Error &amp; System Pages</span>
                             </h1>
-                            <p className="text-foreground/60 text-sm">
+                            <p className="hidden xl:block text-foreground/60 text-sm">
                                 Customize 404, 500, 403, and maintenance pages with seasonal graphics, helpful copy, and search fallbacks.
                             </p>
                         </div>
 
-                        <div className="inline-flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
+                        <div className="inline-flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto">
                             <button
                                 type="button"
                                 onClick={() => setPreviewModalOpen(true)}
-                                className="h-8 flex items-center gap-2 px-3.5 rounded-lg bg-card-bg hover:bg-foreground/5 text-foreground font-bold text-xs transition-all shadow-sm cursor-pointer"
+                                className="h-8 flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 rounded-lg bg-card-bg hover:bg-foreground/5 text-foreground font-bold text-xs transition-all shadow-sm cursor-pointer"
                                 title="Open interactive page mockup"
                             >
                                 <Eye className="w-3.5 h-3.5 text-primary-glow" />
-                                <span>Live Preview</span>
+                                <span className="sm:hidden">Preview</span>
+                                <span className="hidden sm:inline">Live Preview</span>
                             </button>
 
                             <button
                                 type="button"
                                 onClick={handleSave}
                                 disabled={saving}
-                                className="h-8 flex items-center gap-2 px-4 rounded-lg bg-primary-glow hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+                                className="h-8 flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 rounded-lg bg-primary-glow hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
                             >
                                 {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                                <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                                <span className="sm:hidden">{saving ? '...' : 'Save'}</span>
+                                <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save Changes'}</span>
                             </button>
                         </div>
                     </div>
 
-                    {/* Top Stat Overview Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Top Stat Overview Grid (Desktop / Laptop >= 1280px only) */}
+                    <div className="hidden xl:grid xl:grid-cols-4 gap-6">
                         <StatCard
                             title="404 Page Status"
                             value="Active"

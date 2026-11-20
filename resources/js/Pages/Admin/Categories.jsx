@@ -231,25 +231,26 @@ export default function CategoriesPage() {
         <AdminLayout>
             <Head title="Categories - Admin" />
             <div className="space-y-6 pb-24">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
-                            <FolderTree className="w-7 h-7 text-primary-glow shrink-0" />
+                        <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground mb-1 flex items-center gap-2.5 sm:gap-3">
+                            <FolderTree className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                             <span>Categories</span>
                         </h1>
-                        <p className="text-sm text-foreground/60">Manage image categories and organization.</p>
+                        <p className="hidden xl:block text-sm text-foreground/60">Manage image categories and organization.</p>
                     </div>
                     <button
                         onClick={() => {
                             setEditingCategory(null);
                             setIsFormOpen(true);
                         }}
-                        className="flex items-center gap-2 px-4 py-2 bg-primary-glow text-white rounded-lg hover:shadow-lg hover:shadow-primary-glow/20 transition-all"
+                        className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-primary-glow text-white text-xs sm:text-sm font-semibold rounded-xl hover:shadow-lg hover:shadow-primary-glow/20 transition-all shrink-0 cursor-pointer"
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 sm:w-5 sm:h-5">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                         </svg>
-                        New Category
+                        <span className="sm:hidden">New</span>
+                        <span className="hidden sm:inline">New Category</span>
                     </button>
                 </div>
 
@@ -274,7 +275,7 @@ export default function CategoriesPage() {
                 )}
 
                 {selectedIds.length > 0 && (
-                    <div className="fixed bottom-0 right-0 left-64 bg-card-bg border-t border-card-border p-4 flex justify-end items-center gap-4 z-40">
+                    <div className="fixed bottom-24 md:bottom-0 right-0 left-0 md:left-20 lg:left-64 bg-card-bg border-t border-card-border px-4 py-3 sm:p-4 flex justify-end items-center gap-2.5 sm:gap-4 z-40">
                         <span className="text-foreground/60 font-medium mr-4">
                             {selectedIds.length} Selected
                         </span>

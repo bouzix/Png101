@@ -72,20 +72,20 @@ export default function CodeInjectionPage() {
             ) : (
                 <div className="space-y-6 pb-24">
                     {/* Page Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                         <div>
-                            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
-                                <Code2 className="w-7 h-7 text-primary-glow shrink-0" />
+                            <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground mb-1 flex items-center gap-2.5 sm:gap-3">
+                                <Code2 className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                                 <span>Code &amp; Script Injection</span>
                             </h1>
-                            <p className="text-foreground/60 text-sm">
+                            <p className="hidden xl:block text-foreground/60 text-sm">
                                 Embed custom HTML, tracking pixels, CSS overrides, or verification meta tags across your site without code deployments.
                             </p>
                         </div>
                     </div>
 
-                    {/* Primary Stat Cards Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Primary Stat Cards Grid (Desktop / Laptop >= 1280px only) */}
+                    <div className="hidden xl:grid xl:grid-cols-4 gap-6">
                         <StatCard
                             title="<head> Injection"
                             value={formData.headCode.trim() ? 'Active' : 'Unset'}

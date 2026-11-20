@@ -150,17 +150,17 @@ export default function EditorTemplatesAdmin({
             <Head title="Editor Templates" />
             <div className="w-full space-y-8 animate-in fade-in duration-300">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
-                            <LayoutTemplate className="w-7 h-7 text-primary-glow shrink-0" />
+                        <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground flex items-center gap-2.5 sm:gap-3">
+                            <LayoutTemplate className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                             <span>Editor Templates</span>
                         </h1>
-                        <p className="text-sm text-foreground/55 mt-1">
+                        <p className="hidden xl:block text-sm text-foreground/55 mt-1">
                             Design visually in the live studio, manage published status, featured picks, or import/export template JSON.
                         </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start md:self-auto">
+                    <div className="flex flex-wrap items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto">
                         <input
                             ref={importInputRef}
                             type="file"
@@ -171,17 +171,21 @@ export default function EditorTemplatesAdmin({
                         <button
                             type="button"
                             onClick={() => importInputRef.current?.click()}
-                            className="h-8 px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 cursor-pointer transition-all"
+                            title="Import JSON"
+                            className="h-8 px-2.5 sm:px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 cursor-pointer transition-all"
                         >
                             <Upload className="w-3.5 h-3.5 text-primary-glow" />
-                            <span>Import JSON</span>
+                            <span className="sm:hidden">Import</span>
+                            <span className="hidden sm:inline">Import JSON</span>
                         </button>
                         <a
                             href="/image-editor?adminTemplate=new"
-                            className="h-8 px-3.5 rounded-lg bg-primary-glow hover:bg-blue-500 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all"
+                            title="Create Template Visually"
+                            className="h-8 px-3 sm:px-3.5 rounded-lg bg-primary-glow hover:bg-blue-500 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all"
                         >
                             <Plus className="w-3.5 h-3.5" />
-                            <span>Create Template Visually</span>
+                            <span className="sm:hidden">Create</span>
+                            <span className="hidden sm:inline">Create Template Visually</span>
                         </a>
                     </div>
                 </div>

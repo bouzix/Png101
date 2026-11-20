@@ -55,7 +55,7 @@ export default function EditorDashboard({ initialData = {}, settings = {} }) {
                                 {settings.enabled ? 'Live Public' : 'Admin Only'}
                             </span>
                         </div>
-                        <p className="text-sm text-foreground/55 mt-1">
+                        <p className="hidden xl:block text-sm text-foreground/55 mt-1">
                             Overview of your Canva-style editor templates, PNG catalog usage, and exports over the last 30 days.
                         </p>
                     </div>
@@ -65,23 +65,27 @@ export default function EditorDashboard({ initialData = {}, settings = {} }) {
                             href="/image-editor"
                             target="_blank"
                             rel="noreferrer"
-                            className="h-8 px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 transition-all"
+                            title="Open Live Studio"
+                            className="h-8 px-2.5 sm:px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 transition-all"
                         >
                             <ExternalLink className="w-3.5 h-3.5 text-primary-glow" />
-                            <span>Open Live Studio</span>
+                            <span className="sm:hidden">Studio</span>
+                            <span className="hidden sm:inline">Open Live Studio</span>
                         </a>
                         <a
                             href="/image-editor?adminTemplate=new"
-                            className="h-8 px-3.5 rounded-lg bg-primary-glow hover:bg-blue-500 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all"
+                            title="Design New Template"
+                            className="h-8 px-3 sm:px-3.5 rounded-lg bg-primary-glow hover:bg-blue-500 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all"
                         >
                             <Plus className="w-3.5 h-3.5" />
-                            <span>Design New Template</span>
+                            <span className="sm:hidden">New Template</span>
+                            <span className="hidden sm:inline">Design New Template</span>
                         </a>
                     </div>
                 </div>
 
-                {/* KPI Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* KPI Grid (Desktop / Laptop >= 1280px only) */}
+                <div className="hidden xl:grid xl:grid-cols-4 gap-4">
                     <StatCard
                         title="Editor Opens (30d)"
                         value={(kpis.opens ?? 0).toLocaleString()}

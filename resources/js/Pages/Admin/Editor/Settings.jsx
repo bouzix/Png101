@@ -89,25 +89,26 @@ export default function EditorSettingsAdmin({ initialSettings = {} }) {
     return (
         <AdminLayout>
             <Head title="Editor Settings" />
-            <form onSubmit={handleSave} className="w-full space-y-8 animate-in fade-in duration-300">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <form onSubmit={handleSave} className="w-full space-y-6 xl:space-y-8 animate-in fade-in duration-300">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
-                            <Settings className="w-7 h-7 text-primary-glow shrink-0" />
+                        <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground flex items-center gap-2.5 sm:gap-3">
+                            <Settings className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                             <span>Image Editor Settings</span>
                         </h1>
-                        <p className="text-sm text-foreground/55 mt-1">
+                        <p className="hidden xl:block text-sm text-foreground/55 mt-1">
                             Control public visibility, canvas limits, allowed export formats, studio features, and SEO metadata.
                         </p>
                     </div>
-                    <div className="inline-flex items-center p-1 bg-card-header-bg border border-card-border rounded-xl">
+                    <div className="inline-flex items-center p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto">
                         <button
                             type="submit"
                             disabled={saving}
-                            className="h-8 inline-flex items-center gap-2 px-4 rounded-lg bg-primary-glow hover:bg-blue-600 text-white text-xs font-bold shadow-sm cursor-pointer disabled:opacity-50 transition-all"
+                            className="h-8 inline-flex items-center gap-2 px-3.5 sm:px-4 rounded-lg bg-primary-glow hover:bg-blue-600 text-white text-xs font-bold shadow-sm cursor-pointer disabled:opacity-50 transition-all"
                         >
                             <Save className="w-3.5 h-3.5" />
-                            <span>{saving ? 'Saving...' : 'Save Settings'}</span>
+                            <span className="sm:hidden">{saving ? '...' : 'Save'}</span>
+                            <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save Settings'}</span>
                         </button>
                     </div>
                 </div>

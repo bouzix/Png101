@@ -250,13 +250,13 @@ export default function DataManagementPage() {
             <Head title="Data & SEO Management - Png101 Admin" />
             <div className="space-y-6 pb-24">
                 {/* Page Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
-                            <Database className="w-7 h-7 text-primary-glow shrink-0" />
+                        <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground mb-1 flex items-center gap-2.5 sm:gap-3">
+                            <Database className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                             <span>Data &amp; SEO Management</span>
                         </h1>
-                        <p className="text-foreground/60 text-sm">
+                        <p className="hidden xl:block text-foreground/60 text-sm">
                             Purge catalog records, inspect upload storage, and automate multi-file XML sitemap generation.
                         </p>
                     </div>
@@ -266,16 +266,18 @@ export default function DataManagementPage() {
                             type="button"
                             onClick={handleGenerateNow}
                             disabled={generatingSeo || seoLoading}
-                            className="h-8 inline-flex items-center gap-2 px-3.5 bg-primary-glow text-white font-bold text-xs rounded-lg hover:bg-blue-600 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                            title="Regenerate All Sitemaps"
+                            className="h-8 inline-flex items-center gap-2 px-3 sm:px-3.5 bg-primary-glow text-white font-bold text-xs rounded-lg hover:bg-blue-600 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
                         >
                             <RefreshCw className={`w-3.5 h-3.5 ${generatingSeo ? 'animate-spin' : ''}`} />
-                            <span>{generatingSeo ? 'Generating Files...' : 'Regenerate All Sitemaps'}</span>
+                            <span className="sm:hidden">{generatingSeo ? '...' : 'Regenerate'}</span>
+                            <span className="hidden sm:inline">{generatingSeo ? 'Generating Files...' : 'Regenerate All Sitemaps'}</span>
                         </button>
                     </div>
                 </div>
 
-                {/* Primary Stat Cards Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Primary Stat Cards Grid (Desktop / Laptop >= 1280px only) */}
+                <div className="hidden xl:grid xl:grid-cols-4 gap-6">
                     <StatCard
                         title="Indexed SEO Files"
                         value={`${seoFileCards.length} Files`}

@@ -122,11 +122,11 @@ export default function UpdateAppPage() {
             <Head title="Update App - Png101 Admin" />
             <div className="space-y-6 pb-24">
                 {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <div className="flex items-center gap-3 mb-1">
-                            <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
-                                <Rocket className="w-7 h-7 text-primary-glow shrink-0" />
+                        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 mb-1">
+                            <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground flex items-center gap-2.5 sm:gap-3">
+                                <Rocket className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                                 <span>Update App</span>
                             </h1>
                             <span
@@ -139,29 +139,33 @@ export default function UpdateAppPage() {
                                 {isLocal ? 'Local Development' : 'Production Hosting'}
                             </span>
                         </div>
-                        <p className="text-foreground/60 text-sm">
+                        <p className="hidden xl:block text-foreground/60 text-sm">
                             Check GitHub remote commits, run database migrations, refresh caches, and regenerate sitemaps safely as Super Admin.
                         </p>
                     </div>
 
-                    <div className="inline-flex flex-wrap items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
+                    <div className="inline-flex flex-wrap items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto">
                         <button
                             type="button"
                             onClick={loadStatus}
                             disabled={loading}
-                            className="h-8 inline-flex items-center gap-2 px-3 rounded-lg bg-card-bg hover:bg-foreground/5 text-xs font-bold text-foreground/85 cursor-pointer disabled:opacity-50 transition-all shadow-sm"
+                            title="Refresh Status"
+                            className="h-8 inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 rounded-lg bg-card-bg hover:bg-foreground/5 text-xs font-bold text-foreground/85 cursor-pointer disabled:opacity-50 transition-all shadow-sm"
                         >
                             <RefreshCw className={`w-3.5 h-3.5 text-primary-glow ${loading ? 'animate-spin' : ''}`} />
-                            Refresh Status
+                            <span className="sm:hidden">Refresh</span>
+                            <span className="hidden sm:inline">Refresh Status</span>
                         </button>
                         <button
                             type="button"
                             onClick={handleCheckRemote}
                             disabled={checkingRemote || loading}
-                            className="h-8 inline-flex items-center gap-2 px-3.5 rounded-lg bg-primary-glow hover:bg-blue-600 text-white text-xs font-bold cursor-pointer disabled:opacity-50 transition-all shadow-sm"
+                            title="Check GitHub Remote"
+                            className="h-8 inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 rounded-lg bg-primary-glow hover:bg-blue-600 text-white text-xs font-bold cursor-pointer disabled:opacity-50 transition-all shadow-sm"
                         >
                             <GitBranch className={`w-3.5 h-3.5 ${checkingRemote ? 'animate-spin' : ''}`} />
-                            {checkingRemote ? 'Checking Remote...' : 'Check GitHub Remote'}
+                            <span className="sm:hidden">{checkingRemote ? '...' : 'Check Git'}</span>
+                            <span className="hidden sm:inline">{checkingRemote ? 'Checking Remote...' : 'Check GitHub Remote'}</span>
                         </button>
                     </div>
                 </div>
@@ -205,8 +209,8 @@ export default function UpdateAppPage() {
                     </div>
                 )}
 
-                {/* Diagnostic Stat Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {/* Diagnostic Stat Cards (Desktop / Laptop >= 1280px only) */}
+                <div className="hidden xl:grid xl:grid-cols-4 gap-5">
                     <StatCard
                         title="Code Version"
                         value={`v${diagnostics?.app_version || appVersion}`}

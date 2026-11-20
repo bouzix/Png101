@@ -4,7 +4,6 @@ import {
     Search,
     AlertTriangle,
     TrendingUp,
-    Sparkles,
     Upload,
     FolderOpen,
     Copy,
@@ -14,16 +13,18 @@ import {
     CheckCircle2,
     FileWarning,
     Tags,
-    Layers,
-    BarChart3,
     Clock,
+    History,
     ShieldCheck,
     LayoutGrid,
+    ChevronLeft,
+    ChevronRight,
     X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { StatCard } from '@/components/ui/StatCard';
+import ResponsiveTableWrapper from '@/components/admin/ResponsiveTableWrapper';
 
 const PERMISSION_LABELS = {
     upload_images: 'Upload Images',
@@ -39,11 +40,13 @@ const PERMISSION_LABELS = {
 };
 
 const TIMEFRAMES = [
-    { value: '7d', label: '7 Days' },
-    { value: '30d', label: '30 Days' },
-    { value: '90d', label: '90 Days' },
-    { value: 'all', label: 'All Time' },
+    { value: '7d', label: '7 Days', shortLabel: '7' },
+    { value: '30d', label: '30 Days', shortLabel: '30' },
+    { value: '90d', label: '90 Days', shortLabel: '90' },
+    { value: 'all', label: 'All Time', shortLabel: null },
 ];
+
+const ROWS_PER_PAGE = 10;
 
 export default function TeamWorkspace() {
     const [session, setSession] = useState(null);
@@ -52,6 +55,7 @@ export default function TeamWorkspace() {
     const [timeframe, setTimeframe] = useState('30d');
     const [queryFilter, setQueryFilter] = useState('');
     const [activeTab, setActiveTab] = useState('gaps');
+    const [currentPage, setCurrentPage] = useState(1);
 
     useEffect(() => {
         fetch('/api/auth/me')
@@ -94,8 +98,6 @@ export default function TeamWorkspace() {
 
     const canUpload = hasPerm('upload_images');
     const canBrowseFiles = hasPerm('upload_images') || hasPerm('edit_images') || hasPerm('delete_images');
-    const canCollections = hasPerm('manage_collections');
-    const canAnalytics = hasPerm('view_analytics');
 
     const summary = workspace?.summary || {};
     const searchIntel = workspace?.searchIntelligence || {
@@ -115,6 +117,17 @@ export default function TeamWorkspace() {
         if (activeTab === 'top') return searchIntel.topSearches || [];
         return [];
     }, [activeTab, searchIntel]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeTab, timeframe, queryFilter]);
+
+    const totalPages = Math.max(1, Math.ceil(currentRows.length / ROWS_PER_PAGE));
+    const safePage = Math.min(currentPage, totalPages);
+    const paginatedRows = useMemo(() => {
+        const start = (safePage - 1) * ROWS_PER_PAGE;
+        return currentRows.slice(start, start + ROWS_PER_PAGE);
+    }, [currentRows, safePage]);
 
     const copyKeyword = (text) => {
         navigator.clipboard.writeText(text);
@@ -171,103 +184,35 @@ export default function TeamWorkspace() {
         <AdminLayout>
             <Head title="Dashboard & Search Intelligence - Png101 Admin" />
             <div className="space-y-6 pb-20">
-                {/* Welcome & Quick Role Overview */}
+                {/* Welcome Header */}
                 <div className="bg-card-bg border border-card-border rounded-2xl p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-                        <div className="space-y-2">
-                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs font-bold text-blue-400">
-                                <Sparkles className="w-3.5 h-3.5" />
-                                Team Workspace · Search Intelligence Hub
-                            </div>
-                            <h1 className="text-2xl sm:text-3xl font-bold text-foreground flex items-center gap-3">
-                                <LayoutGrid className="w-7 h-7 text-primary-glow shrink-0" />
-                                <span>Welcome back{session?.name ? `, ${session.name}` : ''}</span>
-                            </h1>
-                            <p className="text-sm text-foreground/60 max-w-2xl">
-                                Spot missing visitor searches, fill zero-result keyword gaps with new PNG uploads, and fix low-SEO metadata items to grow organic traffic.
-                            </p>
+                    <div className="space-y-2">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-foreground flex items-center gap-3">
+                            <LayoutGrid className="w-7 h-7 text-primary-glow shrink-0" />
+                            <span>Welcome back{session?.name ? `, ${session.name}` : ''}</span>
+                        </h1>
 
-                            {!isSuperAdmin && permissions.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                                    <span className="text-[11px] font-bold uppercase tracking-wider text-foreground/50 mr-1 flex items-center gap-1">
-                                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                                        Your Access:
+                        {!isSuperAdmin && permissions.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                <span className="text-[11px] font-bold uppercase tracking-wider text-foreground/50 mr-1 flex items-center gap-1">
+                                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                                    Your Access:
+                                </span>
+                                {permissions.map((perm) => (
+                                    <span
+                                        key={perm}
+                                        className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                    >
+                                        {PERMISSION_LABELS[perm] || perm}
                                     </span>
-                                    {permissions.map((perm) => (
-                                        <span
-                                            key={perm}
-                                            className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                        >
-                                            {PERMISSION_LABELS[perm] || perm}
-                                        </span>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Quick Launch Actions honoring Permissions */}
-                        <div className="flex flex-wrap items-center gap-2.5">
-                            {canUpload ? (
-                                <Link
-                                    href="/admin/upload"
-                                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-glow hover:bg-primary-glow/90 text-white text-xs font-bold shadow-lg shadow-primary-glow/20 transition-all"
-                                >
-                                    <Upload className="w-4 h-4" />
-                                    Upload PNGs
-                                </Link>
-                            ) : (
-                                <span
-                                    title="Requires Upload Images permission"
-                                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-card-border text-xs font-bold text-foreground/40 cursor-not-allowed"
-                                >
-                                    <Lock className="w-3.5 h-3.5" />
-                                    Upload PNGs
-                                </span>
-                            )}
-
-                            {canBrowseFiles ? (
-                                <Link
-                                    href="/admin/dashboard/files"
-                                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-background hover:bg-white/5 border border-card-border text-xs font-bold text-foreground/85 transition-all"
-                                >
-                                    <FolderOpen className="w-4 h-4 text-blue-400" />
-                                    Manage Files
-                                </Link>
-                            ) : (
-                                <span
-                                    title="Requires Upload, Edit, or Delete Images permission"
-                                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-card-border text-xs font-bold text-foreground/40 cursor-not-allowed"
-                                >
-                                    <Lock className="w-3.5 h-3.5" />
-                                    Manage Files
-                                </span>
-                            )}
-
-                            {canCollections && (
-                                <Link
-                                    href="/admin/dashboard/collections"
-                                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-background hover:bg-white/5 border border-card-border text-xs font-bold text-foreground/85 transition-all"
-                                >
-                                    <Layers className="w-4 h-4 text-purple-400" />
-                                    Collections
-                                </Link>
-                            )}
-
-                            {canAnalytics && (
-                                <Link
-                                    href="/admin/dashboard/analytics"
-                                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-background hover:bg-white/5 border border-card-border text-xs font-bold text-foreground/85 transition-all"
-                                >
-                                    <BarChart3 className="w-4 h-4 text-emerald-400" />
-                                    Full Analytics
-                                </Link>
-                            )}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {/* Primary Stat Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {/* Primary Stat Cards (Laptops & Desktops >= 1280px only; hidden on Mobile & Tablets in Portrait/Landscape) */}
+                <div className="hidden xl:grid xl:grid-cols-4 gap-5">
                     <StatCard
                         title="Total Searches"
                         value={summary.totalSearches ?? 0}
@@ -297,45 +242,51 @@ export default function TeamWorkspace() {
                 {/* Extended Search Intelligence + Catalog Quality Workspace */}
                 <div className="bg-card-bg border border-card-border rounded-2xl overflow-hidden">
                     {/* Toolbar */}
-                    <div className="p-5 border-b border-card-border space-y-4">
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div className="p-4 sm:p-5 border-b border-card-border space-y-4">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
                             <div>
-                                <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                                    <Search className="w-5 h-5 text-primary-glow" />
-                                    Extended Search Intelligence & Action Queue
+                                <h2 className="text-sm sm:text-lg font-bold text-foreground flex items-center gap-1.5 sm:gap-2">
+                                    <Search className="w-4 h-4 sm:w-5 sm:h-5 text-primary-glow shrink-0" />
+                                    <span className="sm:hidden">Search Intelligence &amp; Queue</span>
+                                    <span className="hidden sm:inline">Extended Search Intelligence &amp; Action Queue</span>
                                 </h2>
-                                <p className="text-xs text-foreground/60 mt-0.5">
-                                    Up to 100 real visitor queries per view, grouped by demand so you always know what PNGs to create next.
-                                </p>
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-2">
-                                <div className="inline-flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
+                            <div className="flex flex-wrap items-center justify-between lg:justify-start w-full lg:w-auto gap-2">
+                                <div className="order-2 lg:order-1 inline-flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
                                     {TIMEFRAMES.map((tf) => (
                                         <button
                                             key={tf.value}
                                             type="button"
                                             onClick={() => setTimeframe(tf.value)}
-                                            className={`h-7 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                            title={tf.label}
+                                            aria-label={tf.label}
+                                            className={`h-7 w-7 px-0 xl:w-auto xl:px-2.5 rounded-lg text-xs font-bold inline-flex items-center justify-center transition-all cursor-pointer ${
                                                 timeframe === tf.value
                                                     ? 'bg-primary-glow text-white shadow-sm'
                                                     : 'bg-card-bg text-foreground/70 hover:text-primary-glow shadow-sm'
                                             }`}
                                         >
-                                            {tf.label}
+                                            {tf.shortLabel ? (
+                                                <span className="xl:hidden">{tf.shortLabel}</span>
+                                            ) : (
+                                                <History className="w-3.5 h-3.5 xl:hidden" />
+                                            )}
+                                            <span className="hidden xl:inline">{tf.label}</span>
                                         </button>
                                     ))}
                                 </div>
 
-                                <div className="inline-flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                <div className="order-1 lg:order-2 inline-flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
                                     <button
                                         type="button"
                                         onClick={() => loadWorkspace(timeframe, queryFilter)}
-                                        className="h-7 px-2.5 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 cursor-pointer transition-all"
+                                        className="h-7 w-7 px-0 xl:w-auto xl:px-2.5 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center justify-center xl:gap-1.5 cursor-pointer transition-all"
                                         title="Refresh data"
+                                        aria-label="Refresh"
                                     >
                                         <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-primary-glow' : ''}`} />
-                                        <span>Refresh</span>
+                                        <span className="hidden xl:inline">Refresh</span>
                                     </button>
 
                                     {activeTab !== 'queue' && (
@@ -343,10 +294,12 @@ export default function TeamWorkspace() {
                                             type="button"
                                             onClick={exportSearchCsv}
                                             disabled={!currentRows.length}
-                                            className="h-7 px-2.5 rounded-lg bg-card-bg hover:bg-emerald-500/20 text-xs font-bold text-emerald-400 shadow-sm inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-40 transition-all"
+                                            className="h-7 w-7 px-0 xl:w-auto xl:px-2.5 rounded-lg bg-card-bg hover:bg-emerald-500/20 text-xs font-bold text-emerald-400 shadow-sm inline-flex items-center justify-center xl:gap-1.5 cursor-pointer disabled:opacity-40 transition-all"
+                                            title="Export CSV"
+                                            aria-label="Export CSV"
                                         >
                                             <Download className="w-3.5 h-3.5" />
-                                            <span>Export CSV</span>
+                                            <span className="hidden xl:inline">Export CSV</span>
                                         </button>
                                     )}
                                 </div>
@@ -354,20 +307,30 @@ export default function TeamWorkspace() {
                         </div>
 
                         {/* Tabs + Filter Input */}
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                            <div className="flex flex-wrap items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                            <div className="flex items-center justify-between lg:justify-start w-full lg:w-auto gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start overflow-hidden">
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('gaps')}
-                                    className={`h-7 px-2.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-all ${
+                                    title="Content Gaps (0 Results)"
+                                    aria-label="Content Gaps (0 Results)"
+                                    className={`h-7 px-2 sm:px-2.5 rounded-lg text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-all duration-300 ease-out ${
                                         activeTab === 'gaps'
-                                            ? 'bg-amber-500 text-slate-950 shadow-sm'
-                                            : 'bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
+                                            ? 'flex-1 min-w-0 lg:flex-initial bg-amber-500 text-slate-950 shadow-sm'
+                                            : 'shrink-0 bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
                                     }`}
                                 >
-                                    <AlertTriangle className="w-3.5 h-3.5" />
-                                    <span>Content Gaps (0 Results)</span>
-                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px]">
+                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                    {activeTab === 'gaps' && (
+                                        <>
+                                            <span className="sm:hidden truncate">Gaps</span>
+                                            <span className="hidden sm:inline xl:hidden truncate">
+                                                Content Gaps (0 Results)
+                                            </span>
+                                        </>
+                                    )}
+                                    <span className="hidden xl:inline">Content Gaps (0 Results)</span>
+                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px] leading-none shrink-0">
                                         {searchIntel.zeroResults.length}
                                     </span>
                                 </button>
@@ -375,15 +338,25 @@ export default function TeamWorkspace() {
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('low')}
-                                    className={`h-7 px-2.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-all ${
+                                    title="Under-Served (1-3 Results)"
+                                    aria-label="Under-Served (1-3 Results)"
+                                    className={`h-7 px-2 sm:px-2.5 rounded-lg text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-all duration-300 ease-out ${
                                         activeTab === 'low'
-                                            ? 'bg-primary-glow text-white shadow-sm'
-                                            : 'bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
+                                            ? 'flex-1 min-w-0 lg:flex-initial bg-primary-glow text-white shadow-sm'
+                                            : 'shrink-0 bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
                                     }`}
                                 >
-                                    <TrendingUp className="w-3.5 h-3.5" />
-                                    <span>Under-Served (1-3 Results)</span>
-                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px]">
+                                    <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+                                    {activeTab === 'low' && (
+                                        <>
+                                            <span className="sm:hidden truncate">Low</span>
+                                            <span className="hidden sm:inline xl:hidden truncate">
+                                                Under-Served (1-3 Results)
+                                            </span>
+                                        </>
+                                    )}
+                                    <span className="hidden xl:inline">Under-Served (1-3 Results)</span>
+                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px] leading-none shrink-0">
                                         {searchIntel.lowResults.length}
                                     </span>
                                 </button>
@@ -391,15 +364,25 @@ export default function TeamWorkspace() {
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('top')}
-                                    className={`h-7 px-2.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-all ${
+                                    title="All Top Searches"
+                                    aria-label="All Top Searches"
+                                    className={`h-7 px-2 sm:px-2.5 rounded-lg text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-all duration-300 ease-out ${
                                         activeTab === 'top'
-                                            ? 'bg-purple-600 text-white shadow-sm'
-                                            : 'bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
+                                            ? 'flex-1 min-w-0 lg:flex-initial bg-purple-600 text-white shadow-sm'
+                                            : 'shrink-0 bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
                                     }`}
                                 >
-                                    <Search className="w-3.5 h-3.5" />
-                                    <span>All Top Searches</span>
-                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px]">
+                                    <Search className="w-3.5 h-3.5 shrink-0" />
+                                    {activeTab === 'top' && (
+                                        <>
+                                            <span className="sm:hidden truncate">Top</span>
+                                            <span className="hidden sm:inline xl:hidden truncate">
+                                                All Top Searches
+                                            </span>
+                                        </>
+                                    )}
+                                    <span className="hidden xl:inline">All Top Searches</span>
+                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px] leading-none shrink-0">
                                         {searchIntel.topSearches.length}
                                     </span>
                                 </button>
@@ -407,22 +390,32 @@ export default function TeamWorkspace() {
                                 <button
                                     type="button"
                                     onClick={() => setActiveTab('queue')}
-                                    className={`h-7 px-2.5 rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-all ${
+                                    title="Catalog Quality Queue"
+                                    aria-label="Catalog Quality Queue"
+                                    className={`h-7 px-2 sm:px-2.5 rounded-lg text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-all duration-300 ease-out ${
                                         activeTab === 'queue'
-                                            ? 'bg-emerald-600 text-white shadow-sm'
-                                            : 'bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
+                                            ? 'flex-1 min-w-0 lg:flex-initial bg-emerald-600 text-white shadow-sm'
+                                            : 'shrink-0 bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
                                     }`}
                                 >
-                                    <FileWarning className="w-3.5 h-3.5" />
-                                    <span>Catalog Quality Queue</span>
-                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px]">
+                                    <FileWarning className="w-3.5 h-3.5 shrink-0" />
+                                    {activeTab === 'queue' && (
+                                        <>
+                                            <span className="sm:hidden truncate">Queue</span>
+                                            <span className="hidden sm:inline xl:hidden truncate">
+                                                Catalog Quality Queue
+                                            </span>
+                                        </>
+                                    )}
+                                    <span className="hidden xl:inline">Catalog Quality Queue</span>
+                                    <span className="px-1.5 py-0.5 rounded-full bg-black/15 text-[10px] leading-none shrink-0">
                                         {actionQueueTotal}
                                     </span>
                                 </button>
                             </div>
 
                             {activeTab !== 'queue' && (
-                                <div className="w-full md:w-72 p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                <div className="w-full lg:w-56 xl:w-72 p-1 bg-card-header-bg border border-card-border rounded-xl">
                                     <div className="relative h-7 rounded-lg bg-card-bg shadow-sm flex items-center px-2.5 gap-2 focus-within:ring-1 focus-within:ring-primary-glow/60 transition-all">
                                         <Search className="w-3.5 h-3.5 text-foreground/45 shrink-0 pointer-events-none" />
                                         <input
@@ -470,42 +463,44 @@ export default function TeamWorkspace() {
                                     </p>
                                 </div>
                             ) : (
+                                <>
+                                <ResponsiveTableWrapper>
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="border-b border-card-border text-[11px] uppercase tracking-wider text-foreground/50 bg-background/40">
                                             <th className="py-3 px-4 font-bold w-12">#</th>
-                                            <th className="py-3 px-4 font-bold">Keyword Query</th>
-                                            <th className="py-3 px-4 font-bold">Searches</th>
-                                            <th className="py-3 px-4 font-bold">Avg Results</th>
-                                            <th className="py-3 px-4 font-bold">Last Searched</th>
-                                            <th className="py-3 px-4 font-bold text-right">Actions</th>
+                                            <th className="py-3 px-4 font-bold whitespace-nowrap">Keyword Query</th>
+                                            <th className="py-3 px-4 font-bold whitespace-nowrap">Searches</th>
+                                            <th className="py-3 px-4 font-bold whitespace-nowrap">Avg Results</th>
+                                            <th className="py-3 px-4 font-bold whitespace-nowrap">Last Searched</th>
+                                            <th className="py-3 px-4 font-bold text-right whitespace-nowrap">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-card-border/60 text-sm">
-                                        {currentRows.map((row, idx) => (
+                                        {paginatedRows.map((row, idx) => (
                                             <tr key={`${row.normalizedQuery}-${idx}`} className="hover:bg-white/[0.02] transition-colors">
                                                 <td className="py-3 px-4 text-xs font-mono text-foreground/40">
-                                                    {idx + 1}
+                                                    {(safePage - 1) * ROWS_PER_PAGE + idx + 1}
                                                 </td>
                                                 <td className="py-3 px-4 font-semibold text-foreground">
                                                     {row.query}
                                                 </td>
-                                                <td className="py-3 px-4">
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary-glow/10 text-primary-glow border border-primary-glow/20">
+                                                <td className="py-3 px-4 whitespace-nowrap">
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold whitespace-nowrap bg-primary-glow/10 text-primary-glow border border-primary-glow/20">
                                                         {row.count}
                                                     </span>
                                                 </td>
-                                                <td className="py-3 px-4">
+                                                <td className="py-3 px-4 whitespace-nowrap">
                                                     {row.status === 'gap' ? (
-                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap bg-amber-500/15 text-amber-400 border border-amber-500/30">
                                                             0 results (Gap)
                                                         </span>
                                                     ) : row.status === 'low' ? (
-                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap bg-blue-500/15 text-blue-400 border border-blue-500/30">
                                                             {row.avgResults} avg (Low)
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold whitespace-nowrap bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                                                             {row.avgResults} avg
                                                         </span>
                                                     )}
@@ -517,43 +512,47 @@ export default function TeamWorkspace() {
                                                     </span>
                                                 </td>
                                                 <td className="py-3 px-4 text-right">
-                                                    <div className="inline-flex items-center justify-end gap-2">
+                                                    <div className="inline-flex items-center justify-end gap-1.5 xl:gap-2">
                                                         <button
                                                             type="button"
                                                             onClick={() => copyKeyword(row.query)}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-background hover:bg-white/10 border border-card-border text-xs font-semibold text-foreground/80 cursor-pointer"
+                                                            className="inline-flex items-center justify-center w-7 h-7 p-0 xl:w-auto xl:h-auto xl:px-2.5 xl:py-1.5 xl:gap-1 rounded-lg bg-background hover:bg-white/10 border border-card-border text-xs font-semibold text-foreground/80 cursor-pointer"
                                                             title="Copy keyword"
+                                                            aria-label="Copy keyword"
                                                         >
-                                                            <Copy className="w-3 h-3" />
-                                                            Copy
+                                                            <Copy className="w-3.5 h-3.5 xl:w-3 xl:h-3 shrink-0" />
+                                                            <span className="hidden xl:inline">Copy</span>
                                                         </button>
 
                                                         {canBrowseFiles && (
                                                             <Link
                                                                 href={`/admin/dashboard/files?search=${encodeURIComponent(row.query)}`}
-                                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-background hover:bg-white/10 border border-card-border text-xs font-semibold text-foreground/80"
+                                                                className="inline-flex items-center justify-center w-7 h-7 p-0 xl:w-auto xl:h-auto xl:px-2.5 xl:py-1.5 xl:gap-1 rounded-lg bg-background hover:bg-white/10 border border-card-border text-xs font-semibold text-foreground/80"
                                                                 title="Search existing published files"
+                                                                aria-label="Catalog"
                                                             >
-                                                                <FolderOpen className="w-3 h-3 text-blue-400" />
-                                                                Catalog
+                                                                <FolderOpen className="w-3.5 h-3.5 xl:w-3 xl:h-3 text-blue-400 shrink-0" />
+                                                                <span className="hidden xl:inline">Catalog</span>
                                                             </Link>
                                                         )}
 
                                                         {canUpload ? (
                                                             <Link
                                                                 href={`/admin/dashboard?keyword=${encodeURIComponent(row.query)}`}
-                                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary-glow/15 hover:bg-primary-glow/25 border border-primary-glow/30 text-xs font-bold text-primary-glow"
+                                                                className="inline-flex items-center justify-center w-7 h-7 p-0 xl:w-auto xl:h-auto xl:px-2.5 xl:py-1.5 xl:gap-1 rounded-lg bg-primary-glow/15 hover:bg-primary-glow/25 border border-primary-glow/30 text-xs font-bold text-primary-glow"
+                                                                title="Upload PNG"
+                                                                aria-label="Upload PNG"
                                                             >
-                                                                <Upload className="w-3 h-3" />
-                                                                Upload PNG
+                                                                <Upload className="w-3.5 h-3.5 xl:w-3 xl:h-3 shrink-0" />
+                                                                <span className="hidden xl:inline">Upload PNG</span>
                                                             </Link>
                                                         ) : (
                                                             <span
                                                                 title="Upload permission not granted"
-                                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 border border-card-border text-xs text-foreground/40 cursor-not-allowed"
+                                                                className="inline-flex items-center justify-center w-7 h-7 p-0 xl:w-auto xl:h-auto xl:px-2.5 xl:py-1.5 xl:gap-1 rounded-lg bg-white/5 border border-card-border text-xs text-foreground/40 cursor-not-allowed"
                                                             >
-                                                                <Lock className="w-3 h-3" />
-                                                                Upload
+                                                                <Lock className="w-3.5 h-3.5 xl:w-3 xl:h-3 shrink-0" />
+                                                                <span className="hidden xl:inline">Upload</span>
                                                             </span>
                                                         )}
                                                     </div>
@@ -562,6 +561,61 @@ export default function TeamWorkspace() {
                                         ))}
                                     </tbody>
                                 </table>
+                                </ResponsiveTableWrapper>
+
+                                {totalPages > 1 && (
+                                    <div className="px-4 py-3 border-t border-card-border bg-background/30 flex flex-col sm:flex-row items-center justify-between gap-3">
+                                        <span className="text-xs text-foreground/55">
+                                            Showing{' '}
+                                            <strong className="text-foreground">
+                                                {(safePage - 1) * ROWS_PER_PAGE + 1}
+                                            </strong>
+                                            –
+                                            <strong className="text-foreground">
+                                                {Math.min(safePage * ROWS_PER_PAGE, currentRows.length)}
+                                            </strong>{' '}
+                                            of <strong className="text-foreground">{currentRows.length}</strong> keywords
+                                        </span>
+
+                                        <div className="inline-flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl">
+                                            <button
+                                                type="button"
+                                                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                                                disabled={safePage <= 1}
+                                                aria-label="Previous page"
+                                                className="h-7 w-7 rounded-lg bg-card-bg text-foreground/75 hover:text-primary-glow disabled:opacity-35 disabled:cursor-not-allowed inline-flex items-center justify-center shadow-sm cursor-pointer transition-all"
+                                            >
+                                                <ChevronLeft className="w-3.5 h-3.5" />
+                                            </button>
+
+                                            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                                                <button
+                                                    key={pageNum}
+                                                    type="button"
+                                                    onClick={() => setCurrentPage(pageNum)}
+                                                    className={`h-7 min-w-7 px-2 rounded-lg text-xs font-bold inline-flex items-center justify-center transition-all cursor-pointer ${
+                                                        safePage === pageNum
+                                                            ? 'bg-primary-glow text-white shadow-sm'
+                                                            : 'bg-card-bg text-foreground/70 hover:text-primary-glow shadow-sm'
+                                                    }`}
+                                                >
+                                                    {pageNum}
+                                                </button>
+                                            ))}
+
+                                            <button
+                                                type="button"
+                                                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                                                disabled={safePage >= totalPages}
+                                                aria-label="Next page"
+                                                className="h-7 w-7 rounded-lg bg-card-bg text-foreground/75 hover:text-primary-glow disabled:opacity-35 disabled:cursor-not-allowed inline-flex items-center justify-center shadow-sm cursor-pointer transition-all"
+                                            >
+                                                <ChevronRight className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                                </>
                             )}
                         </div>
                     ) : (
@@ -569,21 +623,25 @@ export default function TeamWorkspace() {
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 {/* Drafts Staging Queue */}
                                 <div className="bg-background/60 border border-card-border rounded-xl overflow-hidden">
-                                    <div className="px-4 py-3 border-b border-card-border flex items-center justify-between">
-                                        <div>
+                                    <div className="px-4 py-3 border-b border-card-border flex items-center justify-between gap-2">
+                                        <div className="min-w-0">
                                             <h3 className="text-sm font-bold text-foreground">
                                                 Staged Drafts ({summary.draftImages ?? 0})
                                             </h3>
-                                            <p className="text-[11px] text-foreground/50">
-                                                Uploaded PNGs waiting for metadata & publishing
+                                            <p className="text-[11px] text-foreground/50 truncate">
+                                                <span className="xl:hidden">Pending metadata &amp; publish</span>
+                                                <span className="hidden xl:inline">
+                                                    Uploaded PNGs waiting for metadata &amp; publishing
+                                                </span>
                                             </p>
                                         </div>
                                         {canUpload && (
                                             <Link
                                                 href="/admin/upload"
-                                                className="text-xs font-bold text-primary-glow hover:underline"
+                                                className="text-xs font-bold text-primary-glow hover:underline whitespace-nowrap shrink-0"
                                             >
-                                                Open Upload Staging →
+                                                <span className="sm:hidden">Staging →</span>
+                                                <span className="hidden sm:inline">Open Upload Staging →</span>
                                             </Link>
                                         )}
                                     </div>
@@ -626,21 +684,25 @@ export default function TeamWorkspace() {
 
                                 {/* Needs SEO Metadata */}
                                 <div className="bg-background/60 border border-card-border rounded-xl overflow-hidden">
-                                    <div className="px-4 py-3 border-b border-card-border flex items-center justify-between">
-                                        <div>
+                                    <div className="px-4 py-3 border-b border-card-border flex items-center justify-between gap-2">
+                                        <div className="min-w-0">
                                             <h3 className="text-sm font-bold text-foreground">
                                                 Low-SEO Published PNGs ({summary.lowSeoImages ?? 0})
                                             </h3>
-                                            <p className="text-[11px] text-foreground/50">
-                                                Missing alt text, description, or having fewer than 5 tags
+                                            <p className="text-[11px] text-foreground/50 truncate">
+                                                <span className="xl:hidden">Missing alt, desc, or &lt;5 tags</span>
+                                                <span className="hidden xl:inline">
+                                                    Missing alt text, description, or having fewer than 5 tags
+                                                </span>
                                             </p>
                                         </div>
                                         {canBrowseFiles && (
                                             <Link
                                                 href="/admin/dashboard/files"
-                                                className="text-xs font-bold text-primary-glow hover:underline"
+                                                className="text-xs font-bold text-primary-glow hover:underline whitespace-nowrap shrink-0"
                                             >
-                                                Browse All Files →
+                                                <span className="sm:hidden">All Files →</span>
+                                                <span className="hidden sm:inline">Browse All Files →</span>
                                             </Link>
                                         )}
                                     </div>

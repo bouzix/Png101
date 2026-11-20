@@ -39,6 +39,7 @@ import { GlassCard } from '../../components/ui/GlassCard';
 import { CountryFlag } from '../../components/ui/CountryFlag';
 import { FilterSidebar } from '../../components/admin/analytics/FilterSidebar';
 import Pagination from '../../components/ui/Pagination';
+import ResponsiveTableWrapper from '../../components/admin/ResponsiveTableWrapper';
 
 const TIME_RANGES = [
     { key: '1h', label: '1h' },
@@ -234,43 +235,47 @@ export default function AnalyticsPage() {
             <Head title="Analytics & Telemetry - Png101 Admin" />
             <div className="space-y-8 animate-in fade-in duration-300">
                 {/* Page Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-7 h-7 text-primary-glow shrink-0">
+                        <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground flex items-center gap-2.5 sm:gap-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
                             </svg>
                             <span>Analytics &amp; Telemetry</span>
                         </h1>
-                        <p className="text-sm text-foreground/55 mt-1">
+                        <p className="hidden xl:block text-sm text-foreground/55 mt-1">
                             Comprehensive tracking of asset downloads, views, search behavior, and audience insights.
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start md:self-auto">
+                    <div className="flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto">
                         <button
                             onClick={handleRefreshAll}
                             disabled={isRefreshing}
-                            className="h-8 px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                            title="Refresh"
+                            aria-label="Refresh"
+                            className="h-8 w-8 px-0 xl:w-auto xl:px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center justify-center xl:gap-1.5 transition-all cursor-pointer"
                         >
                             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-primary-glow' : ''}`} />
-                            <span>Refresh</span>
+                            <span className="hidden xl:inline">Refresh</span>
                         </button>
                         {hasPermission('export_analytics') && (
                             <button
                                 onClick={handleExportCSV}
                                 disabled={!stats?.popularImages.length}
-                                className="h-8 px-3.5 rounded-lg bg-primary-glow hover:bg-blue-600 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                                title="Export CSV"
+                                aria-label="Export CSV"
+                                className="h-8 w-8 px-0 xl:w-auto xl:px-3.5 rounded-lg bg-primary-glow hover:bg-blue-600 text-white text-xs font-bold shadow-sm inline-flex items-center justify-center xl:gap-1.5 transition-all cursor-pointer disabled:opacity-50"
                             >
                                 <FileDown className="w-3.5 h-3.5" />
-                                <span>Export CSV</span>
+                                <span className="hidden xl:inline">Export CSV</span>
                             </button>
                         )}
                     </div>
                 </div>
 
-                {/* ROW 1: KPI Cards Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                {/* ROW 1: KPI Cards Grid (Desktop / Laptop >= 1280px only) */}
+                <div className="hidden xl:grid xl:grid-cols-6 gap-4">
                     <StatCard
                         title="Total Downloads"
                         value={kpis ? formatNumber(kpis.totalDownloads) : '—'}
@@ -903,17 +908,17 @@ export default function AnalyticsPage() {
 
                         {/* Main Results Table */}
                         <GlassCard className="flex-1 w-full overflow-hidden shadow-none">
-                            <div className="overflow-x-auto">
+                            <ResponsiveTableWrapper>
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="border-b border-card-border bg-background/40 text-[11px] font-bold uppercase tracking-wider text-foreground/50">
-                                            <th className="py-3.5 px-4">Asset</th>
-                                            <th className="py-3.5 px-4 text-right">Downloads ({popularTimeRange})</th>
-                                            <th className="py-3.5 px-4 text-right">Total Downloads</th>
-                                            <th className="py-3.5 px-4 text-right">Views</th>
-                                            <th className="py-3.5 px-4 text-right">Conv. Rate</th>
-                                            <th className="py-3.5 px-4 hidden md:table-cell">Resolution</th>
-                                            <th className="py-3.5 px-4 text-right">Action</th>
+                                            <th className="py-3.5 px-4 whitespace-nowrap">Asset</th>
+                                            <th className="py-3.5 px-4 text-right whitespace-nowrap">Downloads ({popularTimeRange})</th>
+                                            <th className="py-3.5 px-4 text-right whitespace-nowrap">Total Downloads</th>
+                                            <th className="py-3.5 px-4 text-right whitespace-nowrap">Views</th>
+                                            <th className="py-3.5 px-4 text-right whitespace-nowrap">Conv. Rate</th>
+                                            <th className="py-3.5 px-4 hidden md:table-cell whitespace-nowrap">Resolution</th>
+                                            <th className="py-3.5 px-4 text-right whitespace-nowrap">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-card-border text-sm">
@@ -1003,7 +1008,7 @@ export default function AnalyticsPage() {
                                         )}
                                     </tbody>
                                 </table>
-                            </div>
+                            </ResponsiveTableWrapper>
 
                             {/* Pagination Bar */}
                             {stats?.popularPagination && stats.popularPagination.totalPages > 1 && (

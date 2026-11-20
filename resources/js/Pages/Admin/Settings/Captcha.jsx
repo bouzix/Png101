@@ -123,13 +123,13 @@ export default function AdminCaptchaSettings() {
                 </div>
             ) : (
                 <div className="space-y-6 pb-24">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                         <div>
-                            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
-                                <ShieldCheck className="w-7 h-7 text-primary-glow shrink-0" />
+                            <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground mb-1 flex items-center gap-2.5 sm:gap-3">
+                                <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                                 <span>Captcha &amp; Bot Protection</span>
                             </h1>
-                            <p className="text-foreground/60 text-sm">
+                            <p className="hidden xl:block text-foreground/60 text-sm">
                                 Choose which CAPTCHA provider protects public PNG downloads, Super Admin login, and Team login, and configure your provider API keys.
                             </p>
                         </div>

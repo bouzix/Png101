@@ -64,17 +64,17 @@ export default function EditorAnalyticsAdmin({ initialData = {}, initialDays = 3
             <Head title="Editor Analytics" />
             <div className="w-full space-y-8 animate-in fade-in duration-300">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
-                            <BarChart3 className="w-7 h-7 text-primary-glow shrink-0" />
+                        <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground flex items-center gap-2.5 sm:gap-3">
+                            <BarChart3 className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                             <span>Editor Analytics &amp; Insights</span>
                         </h1>
-                        <p className="text-sm text-foreground/55 mt-1">
+                        <p className="hidden xl:block text-sm text-foreground/55 mt-1">
                             Track studio engagement, template conversions, exported formats, and PNG asset demand.
                         </p>
                     </div>
-                    <div className="flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start md:self-auto">
+                    <div className="flex items-center gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl self-start sm:self-auto">
                         {[7, 30, 90].map((d) => (
                             <button
                                 key={d}
@@ -91,16 +91,18 @@ export default function EditorAnalyticsAdmin({ initialData = {}, initialDays = 3
                         ))}
                         <a
                             href={`/api/admin/editor/analytics/export?days=${days}`}
-                            className="h-7 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all"
+                            title="Export CSV"
+                            aria-label="Export CSV"
+                            className="h-7 w-7 px-0 xl:w-auto xl:px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-sm inline-flex items-center justify-center xl:gap-1.5 transition-all"
                         >
                             <FileDown className="w-3.5 h-3.5" />
-                            <span>Export CSV</span>
+                            <span className="hidden xl:inline">Export CSV</span>
                         </a>
                     </div>
                 </div>
 
-                {/* Funnel KPIs */}
-                <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${loading ? 'opacity-60' : ''}`}>
+                {/* Funnel KPIs (Desktop / Laptop >= 1280px only) */}
+                <div className={`hidden xl:grid xl:grid-cols-4 gap-4 ${loading ? 'opacity-60' : ''}`}>
                     <StatCard title="Studio Sessions" value={(kpis.opens ?? 0).toLocaleString()} subtitle="Canvas opens" icon={<Sparkles className="w-5 h-5 text-blue-500" />} />
                     <StatCard title="Catalog PNG Inserts" value={(kpis.assetInserts ?? 0).toLocaleString()} subtitle={`${kpis.searches ?? 0} PNG searches`} icon={<ImageIcon className="w-5 h-5 text-violet-500" />} />
                     <StatCard title="Template Applies" value={(kpis.templateApplies ?? 0).toLocaleString()} subtitle="Starter & curated decks" icon={<Layers className="w-5 h-5 text-amber-500" />} />

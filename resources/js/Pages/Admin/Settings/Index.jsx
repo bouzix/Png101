@@ -275,13 +275,13 @@ export default function SettingsPage() {
             ) : (
                 <div className="space-y-6 pb-24">
                     {/* Page Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                         <div>
-                            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
-                                <Settings className="w-7 h-7 text-primary-glow shrink-0" />
+                            <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground mb-1 flex items-center gap-2.5 sm:gap-3">
+                                <Settings className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                                 <span>General Settings</span>
                             </h1>
-                            <p className="text-foreground/60 text-sm">
+                            <p className="hidden xl:block text-foreground/60 text-sm">
                                 Configure global brand metadata, public contact gateways, and organization legal attributes.
                             </p>
                         </div>
@@ -292,17 +292,18 @@ export default function SettingsPage() {
                                     href={formData.websiteUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="h-8 inline-flex items-center gap-2 px-3.5 rounded-lg bg-card-bg hover:bg-foreground/5 text-xs font-bold text-foreground/85 hover:text-foreground transition-all shadow-sm"
+                                    className="h-8 inline-flex items-center gap-2 px-3 sm:px-3.5 rounded-lg bg-card-bg hover:bg-foreground/5 text-xs font-bold text-foreground/85 hover:text-foreground transition-all shadow-sm"
                                 >
                                     <ExternalLink className="w-3.5 h-3.5 text-primary-glow" />
-                                    Visit Live Website
+                                    <span className="sm:hidden">Live Site</span>
+                                    <span className="hidden sm:inline">Visit Live Website</span>
                                 </a>
                             </div>
                         )}
                     </div>
 
-                    {/* Primary Stat Cards Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Primary Stat Cards Grid (Desktop / Laptop >= 1280px only) */}
+                    <div className="hidden xl:grid xl:grid-cols-4 gap-6">
                         <StatCard
                             title="Brand Identity"
                             value={formData.websiteName || 'Png101'}

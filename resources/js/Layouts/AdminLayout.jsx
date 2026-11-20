@@ -9,7 +9,33 @@ import React, {
     useContext,
 } from 'react';
 import { Link, usePage, router } from '@inertiajs/react';
-import { ShieldAlert, Lock, Wrench, UploadCloud } from 'lucide-react';
+import {
+    ShieldAlert,
+    Lock,
+    Wrench,
+    UploadCloud,
+    LayoutGrid,
+    FolderOpen,
+    Settings as SettingsIcon,
+    Menu,
+    X,
+    ExternalLink,
+    LogOut,
+    ChevronDown,
+    Sparkles,
+    SlidersHorizontal,
+    KeyRound,
+    Code2,
+    Database,
+    AlertTriangle,
+    Scale,
+    ShieldCheck,
+    RefreshCw,
+    Layers,
+    Type,
+    BarChart3,
+    Globe,
+} from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import { BrandIcon } from '@/components/BrandMark';
 import GlobalUpdateNotifier from '@/components/admin/GlobalUpdateNotifier';
@@ -164,6 +190,9 @@ export function PersistentAdminLayout({ children }) {
 
     const [isCollapsed, setIsCollapsed] = useState(() => {
         if (typeof window === 'undefined') return false;
+        if (window.innerWidth >= 768 && window.innerWidth < 1024) {
+            return true;
+        }
         try {
             const saved = localStorage.getItem('sidebarCollapsed');
             return saved ? Boolean(JSON.parse(saved)) : false;
@@ -171,6 +200,53 @@ export function PersistentAdminLayout({ children }) {
             return false;
         }
     });
+
+    const [collapsedPopoverItem, setCollapsedPopoverItem] = useState(null);
+    const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+    const [mobileSheetTab, setMobileSheetTab] = useState('more'); // 'more' | 'settings'
+    const [mobileEditorExpanded, setMobileEditorExpanded] = useState(() =>
+        pathname.startsWith('/admin/dashboard/editor')
+    );
+    const sidebarRef = useRef(null);
+
+    // Always default to minimized sidebar when entering tablet viewport (768px - 1023px)
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+        const tabletMql = window.matchMedia('(min-width: 768px) and (max-width: 1023px)');
+        const handleTabletChange = (e) => {
+            if (e.matches) {
+                setIsCollapsed(true);
+                setCollapsedPopoverItem(null);
+            }
+        };
+        if (tabletMql.addEventListener) {
+            tabletMql.addEventListener('change', handleTabletChange);
+            return () => tabletMql.removeEventListener('change', handleTabletChange);
+        }
+        tabletMql.addListener(handleTabletChange);
+        return () => tabletMql.removeListener(handleTabletChange);
+    }, []);
+
+    // Close collapsed submenu popover on outside click/tap or Escape
+    useEffect(() => {
+        if (!collapsedPopoverItem) return undefined;
+        const handlePointerDown = (e) => {
+            if (sidebarRef.current && !sidebarRef.current.contains(e.target)) {
+                setCollapsedPopoverItem(null);
+            }
+        };
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                setCollapsedPopoverItem(null);
+            }
+        };
+        document.addEventListener('pointerdown', handlePointerDown);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('pointerdown', handlePointerDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [collapsedPopoverItem]);
 
     const [session, setSession] = useState(null);
     const mainRef = useRef(null);
@@ -216,6 +292,8 @@ export function PersistentAdminLayout({ children }) {
     // Sync optimisticPath and auto-expand parent group when pathname changes
     useEffect(() => {
         setOptimisticPath(null);
+        setCollapsedPopoverItem(null);
+        setMobileSheetOpen(false);
         if (pathname.startsWith('/admin/dashboard/editor')) {
             setOpenMenus((prev) => (prev.Editor ? prev : { ...prev, Editor: true }));
         } else if (pathname.startsWith('/admin/dashboard/settings')) {
@@ -229,7 +307,10 @@ export function PersistentAdminLayout({ children }) {
     const toggleSidebar = () => {
         const newState = !isCollapsed;
         setIsCollapsed(newState);
-        localStorage.setItem('sidebarCollapsed', JSON.stringify(newState));
+        setCollapsedPopoverItem(null);
+        if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+            localStorage.setItem('sidebarCollapsed', JSON.stringify(newState));
+        }
     };
 
     const handleSignOut = async () => {
@@ -239,7 +320,10 @@ export function PersistentAdminLayout({ children }) {
     };
 
     const toggleMenu = (name) => {
-        if (isCollapsed) return;
+        if (isCollapsed) {
+            setCollapsedPopoverItem((prev) => (prev === name ? null : name));
+            return;
+        }
         setOpenMenus((prev) => ({
             ...prev,
             [name]: !prev[name],
@@ -473,6 +557,8 @@ export function PersistentAdminLayout({ children }) {
         if (pathname.startsWith('/admin/dashboard/settings/data-management')) return hasPerm('manage_data_seo');
         if (
             pathname.startsWith('/admin/dashboard/settings/error-pages') ||
+            pathname.startsWith('/admin/dashboard/settings/legal-pages') ||
+            pathname.startsWith('/admin/dashboard/settings/sliders') ||
             pathname.startsWith('/admin/dashboard/settings/website-info') ||
             pathname.startsWith('/admin/dashboard/settings/captcha')
         ) {
@@ -481,6 +567,79 @@ export function PersistentAdminLayout({ children }) {
         if (pathname.startsWith('/admin/dashboard/team') || pathname.startsWith('/admin/dashboard/tools') || pathname.startsWith('/admin/dashboard/settings/team') || pathname.startsWith('/admin/dashboard/settings/update-app')) return false;
         return true;
     }, [session, pathname]);
+
+    const editorNavItem = useMemo(
+        () => navItems.find((i) => i.name === 'Editor') || null,
+        [navItems]
+    );
+    const settingsNavItem = useMemo(
+        () => navItems.find((i) => i.name === 'Settings') || null,
+        [navItems]
+    );
+    const extraModuleItems = useMemo(
+        () =>
+            navItems.filter(
+                (i) =>
+                    (!i.children || i.children.length === 0) &&
+                    i.name !== 'Dashboard' &&
+                    i.name !== 'Upload' &&
+                    i.name !== 'Files'
+            ),
+        [navItems]
+    );
+
+    const getSettingsChildIcon = (name) => {
+        switch (name) {
+            case 'General':
+                return <Globe className="w-3.5 h-3.5 shrink-0" />;
+            case 'Sliders':
+                return <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />;
+            case 'API Keys':
+                return <KeyRound className="w-3.5 h-3.5 shrink-0" />;
+            case 'Code Injection':
+                return <Code2 className="w-3.5 h-3.5 shrink-0" />;
+            case 'Data Management':
+                return <Database className="w-3.5 h-3.5 shrink-0" />;
+            case 'Error Pages':
+                return <AlertTriangle className="w-3.5 h-3.5 shrink-0" />;
+            case 'Legal Pages':
+                return <Scale className="w-3.5 h-3.5 shrink-0" />;
+            case 'Captcha':
+                return <ShieldCheck className="w-3.5 h-3.5 shrink-0" />;
+            case 'Update App':
+                return <RefreshCw className="w-3.5 h-3.5 shrink-0" />;
+            default:
+                return <SettingsIcon className="w-3.5 h-3.5 shrink-0" />;
+        }
+    };
+
+    const getEditorChildIcon = (name) => {
+        switch (name) {
+            case 'Dashboard':
+                return <LayoutGrid className="w-3.5 h-3.5 shrink-0" />;
+            case 'Templates':
+                return <Sparkles className="w-3.5 h-3.5 shrink-0" />;
+            case 'Categories & Presets':
+                return <Layers className="w-3.5 h-3.5 shrink-0" />;
+            case 'Fonts & Brand Assets':
+                return <Type className="w-3.5 h-3.5 shrink-0" />;
+            case 'Analytics':
+                return <BarChart3 className="w-3.5 h-3.5 shrink-0" />;
+            default:
+                return <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />;
+        }
+    };
+
+    const mobileActiveIndex = useMemo(() => {
+        if (mobileSheetOpen) {
+            return mobileSheetTab === 'settings' ? 3 : 4;
+        }
+        if (activePath === '/admin/dashboard') return 0;
+        if (activePath === '/admin/upload') return 1;
+        if (activePath.startsWith('/admin/dashboard/files')) return 2;
+        if (activePath.startsWith('/admin/dashboard/settings')) return 3;
+        return 4;
+    }, [mobileSheetOpen, mobileSheetTab, activePath]);
 
     const canUploadImages = !session || session.role === 'super_admin' || (Array.isArray(session.permissions) && (session.permissions.includes('*') || session.permissions.includes('upload_images')));
     const isGlobalDropEnabled = canUploadImages && pathname !== '/admin/upload';
@@ -560,8 +719,12 @@ export function PersistentAdminLayout({ children }) {
                         </div>
                     </div>
                 )}
-                {/* Sidebar */}
-                <aside className={`admin-sidebar ${isCollapsed ? 'w-20 overflow-visible' : 'w-64'} bg-white dark:bg-[#0f172a] border-r border-slate-200 dark:border-slate-800/80 flex flex-col transition-all duration-300 ease-in-out relative shadow-sm dark:shadow-xl z-20`}>
+                {/* Sidebar (Tablet & Desktop only; Mobile uses dedicated bottom pill & sheet) */}
+                <aside
+                    ref={sidebarRef}
+                    data-testid="admin-desktop-sidebar"
+                    className={`admin-sidebar hidden md:flex ${isCollapsed ? 'w-20 overflow-visible' : 'w-64'} bg-white dark:bg-[#0f172a] border-r border-slate-200 dark:border-slate-800/80 flex-col transition-all duration-300 ease-in-out relative shadow-sm dark:shadow-xl z-20`}
+                >
                     {/* Toggle Button */}
                     <button
                         type="button"
@@ -691,9 +854,18 @@ export function PersistentAdminLayout({ children }) {
                                         </div>
 
                                         {isCollapsed && (
-                                            <div className="absolute left-full top-0 pl-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-                                                <div className="bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl py-1 px-1 min-w-max">
-                                                    <div className="px-3 py-2 font-bold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800/80 mb-1 whitespace-nowrap text-xs flex items-center gap-2">
+                                            <div
+                                                data-testid={`collapsed-submenu-${item.name.toLowerCase()}`}
+                                                className={`absolute left-full ${
+                                                    hasChildren ? 'bottom-0' : 'top-0'
+                                                } pl-2 z-50 transition-opacity duration-200 ${
+                                                    collapsedPopoverItem === item.name
+                                                        ? 'opacity-100 pointer-events-auto'
+                                                        : 'opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto'
+                                                }`}
+                                            >
+                                                <div className="bg-white dark:bg-[#0f172a] border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl py-1.5 px-1.5 min-w-[190px] max-h-[calc(100vh-5rem)] overflow-y-auto">
+                                                    <div className="px-3 py-2 font-bold text-slate-900 dark:text-white border-b border-slate-100 dark:border-slate-800/80 mb-1 whitespace-nowrap text-xs flex items-center justify-between gap-2">
                                                         <span>{item.name}</span>
                                                         {!item.permitted && (
                                                             <span className="inline-flex items-center gap-1 text-[10px] font-normal text-amber-500">
@@ -708,8 +880,11 @@ export function PersistentAdminLayout({ children }) {
                                                                     <Link
                                                                         key={child.name}
                                                                         href={child.href}
-                                                                        onClick={() => setOptimisticPath(child.href)}
-                                                                        className={`block px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
+                                                                        onClick={() => {
+                                                                            setOptimisticPath(child.href);
+                                                                            setCollapsedPopoverItem(null);
+                                                                        }}
+                                                                        className={`block px-3 py-2 text-xs rounded-lg transition-colors whitespace-nowrap ${
                                                                             activePath === child.href
                                                                                 ? 'bg-blue-50 dark:bg-blue-600/20 text-blue-600 dark:text-blue-300 font-semibold'
                                                                                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
@@ -721,7 +896,7 @@ export function PersistentAdminLayout({ children }) {
                                                                     <div
                                                                         key={child.name}
                                                                         title={child.reason}
-                                                                        className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs rounded-lg text-slate-400 dark:text-slate-500 opacity-55 cursor-not-allowed whitespace-nowrap"
+                                                                        className="flex items-center justify-between gap-2 px-3 py-2 text-xs rounded-lg text-slate-400 dark:text-slate-500 opacity-55 cursor-not-allowed whitespace-nowrap"
                                                                     >
                                                                         <span>{child.name}</span>
                                                                         <Lock className="w-3 h-3" />
@@ -792,13 +967,15 @@ export function PersistentAdminLayout({ children }) {
                             'margin-right 380ms cubic-bezier(0.22, 1, 0.36, 1), padding 300ms ease',
                     }}
                     className={`flex-1 overflow-y-auto ${
-                        shouldSlideOverForBulkEdit ? 'p-4 lg:p-6 lg:mr-[500px]' : 'p-8 lg:mr-0'
+                        shouldSlideOverForBulkEdit
+                            ? 'p-3 pb-28 sm:p-4 sm:pb-28 md:p-4 lg:p-6 lg:mr-[500px]'
+                            : 'p-3 pb-28 sm:p-5 sm:pb-28 md:p-8 lg:mr-0'
                     }`}
                 >
                     {isCurrentRoutePermitted ? (
                         <div
                             className={`w-full max-w-[1600px] mx-auto transition-all duration-300 ${
-                                shouldSlideOverForBulkEdit ? 'p-3 md:p-5' : 'p-6 md:p-8'
+                                shouldSlideOverForBulkEdit ? 'p-1 sm:p-3 md:p-5' : 'p-2 sm:p-4 md:p-8'
                             }`}
                         >
                             <GlobalUpdateNotifier session={session} pathname={pathname} />
@@ -816,6 +993,342 @@ export function PersistentAdminLayout({ children }) {
                         </div>
                     )}
                 </main>
+
+                {/* Dedicated Mobile Admin Navigation (Floating Pill + Cardless Floating Pill Launcher) */}
+                <div className="md:hidden" data-testid="admin-mobile-nav">
+                    {mobileSheetOpen && (
+                        <>
+                            <div
+                                className="fixed inset-0 z-40 bg-slate-950/60 dark:bg-slate-950/75 backdrop-blur-md animate-in fade-in duration-150"
+                                onClick={() => setMobileSheetOpen(false)}
+                            />
+                            <div
+                                data-testid="admin-mobile-sheet"
+                                className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-[min(360px,calc(100vw-24px))] max-h-[calc(100vh-124px)] overflow-y-auto pointer-events-none flex flex-col items-center gap-2.5 pb-1 animate-in fade-in slide-in-from-bottom-3 duration-200"
+                            >
+                                {mobileSheetTab === 'settings' ? (
+                                    <>
+                                        {/* Floating Settings Section Pill Tag */}
+                                        <div className="pointer-events-auto inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#121c32]/90 dark:bg-[#121c32]/95 light:bg-white/95 border border-blue-400/40 text-[10px] font-extrabold uppercase tracking-widest text-blue-400 shadow-lg backdrop-blur-xl">
+                                            <SettingsIcon className="w-3 h-3" />
+                                            <span>Settings</span>
+                                        </div>
+
+                                        {/* Cardless Floating Settings Pill Chips */}
+                                        <div className="w-full grid grid-cols-2 gap-2">
+                                            {(settingsNavItem?.children || []).map((child, idx) => {
+                                                const active = activePath === child.href;
+                                                const isLastOdd =
+                                                    idx === (settingsNavItem?.children?.length || 0) - 1 &&
+                                                    (settingsNavItem?.children?.length || 0) % 2 === 1;
+                                                const spanClass = isLastOdd ? 'col-span-2 justify-center' : '';
+
+                                                if (!child.permitted) {
+                                                    return (
+                                                        <div
+                                                            key={child.name}
+                                                            title={child.reason}
+                                                            className={`pointer-events-auto flex items-center justify-between gap-2 px-4 py-3 rounded-full bg-white/80 dark:bg-[#121c32]/80 border border-slate-300/60 dark:border-slate-700/60 opacity-50 text-xs font-semibold text-slate-400 backdrop-blur-xl select-none ${spanClass}`}
+                                                        >
+                                                            <span className="flex items-center gap-2 truncate">
+                                                                {getSettingsChildIcon(child.name)}
+                                                                <span className="truncate">{child.name}</span>
+                                                            </span>
+                                                            <Lock className="w-3 h-3 shrink-0" />
+                                                        </div>
+                                                    );
+                                                }
+                                                return (
+                                                    <Link
+                                                        key={child.name}
+                                                        href={child.href}
+                                                        onClick={() => {
+                                                            setOptimisticPath(child.href);
+                                                            setMobileSheetOpen(false);
+                                                        }}
+                                                        className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-full border text-xs font-bold transition-all backdrop-blur-xl active:scale-95 ${spanClass} ${
+                                                            active
+                                                                ? 'bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400 text-white shadow-[0_8px_20px_rgba(37,99,235,0.45)]'
+                                                                : 'bg-white/95 dark:bg-[#121c32]/95 border-slate-200/95 dark:border-blue-400/40 text-slate-800 dark:text-slate-100 hover:border-blue-400 shadow-[0_12px_28px_rgba(2,6,23,0.45)]'
+                                                        }`}
+                                                    >
+                                                        <span className={active ? 'text-white' : 'text-blue-500 dark:text-blue-400'}>
+                                                            {getSettingsChildIcon(child.name)}
+                                                        </span>
+                                                        <span className="truncate">{child.name}</span>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        {/* Top Floating Quick Utility Pills (Live Site, Theme Toggle, Sign Out) */}
+                                        <div className="pointer-events-auto flex items-center justify-center gap-2 flex-wrap">
+                                            <Link
+                                                href="/"
+                                                onClick={() => setMobileSheetOpen(false)}
+                                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/95 dark:bg-[#121c32]/95 border border-slate-200/95 dark:border-blue-400/40 text-xs font-bold text-slate-800 dark:text-slate-100 shadow-[0_10px_24px_rgba(2,6,23,0.45)] backdrop-blur-xl active:scale-95"
+                                            >
+                                                <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
+                                                <span>Live Site</span>
+                                            </Link>
+
+                                            <div className="inline-flex items-center px-1.5 py-1 rounded-full bg-white/95 dark:bg-[#121c32]/95 border border-slate-200/95 dark:border-blue-400/40 shadow-[0_10px_24px_rgba(2,6,23,0.45)] backdrop-blur-xl">
+                                                <ThemeToggle
+                                                    size="sm"
+                                                    className="bg-transparent border-0 shadow-none"
+                                                />
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={handleSignOut}
+                                                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/95 dark:bg-[#121c32]/95 border border-red-400/45 text-xs font-bold text-red-600 dark:text-red-400 shadow-[0_10px_24px_rgba(2,6,23,0.45)] backdrop-blur-xl cursor-pointer active:scale-95"
+                                            >
+                                                <LogOut className="w-3.5 h-3.5" />
+                                                <span>Sign Out</span>
+                                            </button>
+                                        </div>
+
+                                        {/* Expandable Image Editor Suite Floating Pills */}
+                                        {editorNavItem && (
+                                            <div className="w-full flex flex-col items-center gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setMobileEditorExpanded((prev) => !prev)}
+                                                    className={`pointer-events-auto w-full flex items-center justify-between px-4 py-3 rounded-full border text-xs font-bold transition-all backdrop-blur-xl cursor-pointer ${
+                                                        activePath.startsWith('/admin/dashboard/editor')
+                                                            ? 'bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400 text-white shadow-[0_8px_20px_rgba(37,99,235,0.45)]'
+                                                            : 'bg-white/95 dark:bg-[#121c32]/95 border-slate-200/95 dark:border-blue-400/40 text-slate-800 dark:text-slate-100 shadow-[0_12px_28px_rgba(2,6,23,0.45)]'
+                                                    }`}
+                                                >
+                                                    <span className="flex items-center gap-2.5">
+                                                        <Sparkles
+                                                            className={`w-4 h-4 ${
+                                                                activePath.startsWith('/admin/dashboard/editor')
+                                                                    ? 'text-white'
+                                                                    : 'text-blue-500 dark:text-blue-400'
+                                                            }`}
+                                                        />
+                                                        <span>Image Editor Suite</span>
+                                                    </span>
+                                                    <ChevronDown
+                                                        className={`w-4 h-4 transition-transform duration-200 ${
+                                                            mobileEditorExpanded ? 'rotate-180' : ''
+                                                        }`}
+                                                    />
+                                                </button>
+
+                                                {mobileEditorExpanded && (
+                                                    <div className="w-full grid grid-cols-2 gap-2 animate-in fade-in slide-in-from-bottom-1 duration-150">
+                                                        {(editorNavItem.children || []).map((child) => {
+                                                            const active = activePath === child.href;
+                                                            if (!child.permitted) {
+                                                                return (
+                                                                    <div
+                                                                        key={child.name}
+                                                                        title={child.reason}
+                                                                        className="pointer-events-auto flex items-center justify-between gap-1.5 px-3.5 py-2.5 rounded-full bg-white/80 dark:bg-[#121c32]/80 border border-slate-300/60 dark:border-slate-700/60 opacity-50 text-[11px] font-semibold text-slate-400 backdrop-blur-xl select-none"
+                                                                    >
+                                                                        <span className="truncate">{child.name}</span>
+                                                                        <Lock className="w-3 h-3 shrink-0" />
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            return (
+                                                                <Link
+                                                                    key={child.name}
+                                                                    href={child.href}
+                                                                    onClick={() => {
+                                                                        setOptimisticPath(child.href);
+                                                                        setMobileSheetOpen(false);
+                                                                    }}
+                                                                    className={`pointer-events-auto flex items-center gap-2 px-3.5 py-2.5 rounded-full border text-[11px] font-bold transition-all backdrop-blur-xl active:scale-95 ${
+                                                                        active
+                                                                            ? 'bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400 text-white shadow-[0_8px_20px_rgba(37,99,235,0.45)]'
+                                                                            : 'bg-white/90 dark:bg-[#16223d]/95 border-slate-200/95 dark:border-blue-400/35 text-slate-700 dark:text-slate-200 shadow-[0_10px_22px_rgba(2,6,23,0.4)]'
+                                                                    }`}
+                                                                >
+                                                                    <span className={active ? 'text-white' : 'text-blue-500 dark:text-blue-400'}>
+                                                                        {getEditorChildIcon(child.name)}
+                                                                    </span>
+                                                                    <span className="truncate">{child.name}</span>
+                                                                </Link>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Remaining Primary Module Floating Pills (Collections, Team, Analytics, Tools) */}
+                                        <div className="w-full grid grid-cols-2 gap-2">
+                                            {extraModuleItems.map((mod) => {
+                                                const active = isItemActive(mod, activePath);
+                                                if (!mod.permitted) {
+                                                    return (
+                                                        <div
+                                                            key={mod.name}
+                                                            title={mod.reason}
+                                                            className="pointer-events-auto flex items-center justify-between gap-2 px-4 py-3 rounded-full bg-white/80 dark:bg-[#121c32]/80 border border-slate-300/60 dark:border-slate-700/60 opacity-50 text-xs font-semibold text-slate-400 backdrop-blur-xl select-none"
+                                                        >
+                                                            <span className="flex items-center gap-2 truncate">
+                                                                <span className="shrink-0 [&_svg]:w-4 [&_svg]:h-4">{mod.icon}</span>
+                                                                <span className="truncate">{mod.name}</span>
+                                                            </span>
+                                                            <Lock className="w-3.5 h-3.5 shrink-0" />
+                                                        </div>
+                                                    );
+                                                }
+                                                return (
+                                                    <Link
+                                                        key={mod.name}
+                                                        href={mod.href}
+                                                        onClick={() => {
+                                                            setOptimisticPath(mod.href);
+                                                            setMobileSheetOpen(false);
+                                                        }}
+                                                        className={`pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-full border text-xs font-bold transition-all backdrop-blur-xl active:scale-95 ${
+                                                            active
+                                                                ? 'bg-gradient-to-r from-blue-600 to-blue-500 border-blue-400 text-white shadow-[0_8px_20px_rgba(37,99,235,0.45)]'
+                                                                : 'bg-white/95 dark:bg-[#121c32]/95 border-slate-200/95 dark:border-blue-400/40 text-slate-800 dark:text-slate-100 hover:border-blue-400 shadow-[0_12px_28px_rgba(2,6,23,0.45)]'
+                                                        }`}
+                                                    >
+                                                        <span className={`shrink-0 [&_svg]:w-4 [&_svg]:h-4 ${active ? 'text-white' : 'text-blue-500 dark:text-blue-400'}`}>
+                                                            {mod.icon}
+                                                        </span>
+                                                        <span className="truncate">{mod.name}</span>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </>
+                    )}
+
+                    {/* Floating Bottom Pill Navigation (matches frontend .mobile-pill-nav aesthetic) */}
+                    <nav
+                        aria-label="Admin Mobile Navigation"
+                        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 mobile-pill-nav"
+                    >
+                        <ul>
+                            <li className={`list ${mobileActiveIndex === 0 ? 'active' : ''}`}>
+                                <Link
+                                    href="/admin/dashboard"
+                                    aria-label="Dashboard"
+                                    onClick={() => {
+                                        setOptimisticPath('/admin/dashboard');
+                                        setMobileSheetOpen(false);
+                                    }}
+                                >
+                                    <span className="icon">
+                                        <LayoutGrid className="w-5 h-5" />
+                                    </span>
+                                    <span className="title">Dashboard</span>
+                                </Link>
+                            </li>
+
+                            <li className={`list ${mobileActiveIndex === 1 ? 'active' : ''}`}>
+                                <Link
+                                    href="/admin/upload"
+                                    aria-label="Upload"
+                                    onClick={() => {
+                                        setOptimisticPath('/admin/upload');
+                                        setMobileSheetOpen(false);
+                                    }}
+                                >
+                                    <span className="icon">
+                                        <UploadCloud className="w-5 h-5" />
+                                    </span>
+                                    <span className="title">Upload</span>
+                                </Link>
+                            </li>
+
+                            <li className={`list ${mobileActiveIndex === 2 ? 'active' : ''}`}>
+                                <Link
+                                    href="/admin/dashboard/files"
+                                    aria-label="Files"
+                                    onClick={() => {
+                                        setOptimisticPath('/admin/dashboard/files');
+                                        setMobileSheetOpen(false);
+                                    }}
+                                >
+                                    <span className="icon">
+                                        <FolderOpen className="w-5 h-5" />
+                                    </span>
+                                    <span className="title">Files</span>
+                                </Link>
+                            </li>
+
+                            <li className={`list ${mobileActiveIndex === 3 ? 'active' : ''}`}>
+                                <button
+                                    type="button"
+                                    aria-label="Admin Settings Menu"
+                                    aria-expanded={mobileSheetOpen && mobileSheetTab === 'settings'}
+                                    onClick={() => {
+                                        if (mobileSheetOpen && mobileSheetTab === 'settings') {
+                                            setMobileSheetOpen(false);
+                                        } else {
+                                            setMobileSheetTab('settings');
+                                            setMobileSheetOpen(true);
+                                        }
+                                    }}
+                                >
+                                    <span className="icon">
+                                        {mobileSheetOpen && mobileSheetTab === 'settings' ? (
+                                            <X className="w-5 h-5" />
+                                        ) : (
+                                            <SettingsIcon className="w-5 h-5" />
+                                        )}
+                                    </span>
+                                    <span className="title">Settings</span>
+                                </button>
+                            </li>
+
+                            <li className={`list ${mobileActiveIndex === 4 ? 'active' : ''}`}>
+                                <button
+                                    type="button"
+                                    aria-label="All Admin Modules"
+                                    aria-expanded={mobileSheetOpen && mobileSheetTab !== 'settings'}
+                                    onClick={() => {
+                                        if (mobileSheetOpen && mobileSheetTab !== 'settings') {
+                                            setMobileSheetOpen(false);
+                                        } else {
+                                            setMobileSheetTab('more');
+                                            setMobileEditorExpanded(
+                                                activePath.startsWith('/admin/dashboard/editor')
+                                            );
+                                            setMobileSheetOpen(true);
+                                        }
+                                    }}
+                                >
+                                    <span className="icon">
+                                        {mobileSheetOpen && mobileSheetTab !== 'settings' ? (
+                                            <X className="w-5 h-5" />
+                                        ) : (
+                                            <Menu className="w-5 h-5" />
+                                        )}
+                                    </span>
+                                    <span className="title">More</span>
+                                </button>
+                            </li>
+
+                            <div
+                                className="indicator"
+                                style={{
+                                    transform:
+                                        mobileActiveIndex >= 0
+                                            ? `translateX(${mobileActiveIndex * 100}%)`
+                                            : 'translateX(0%) scale(0.75)',
+                                    opacity: mobileActiveIndex >= 0 ? 1 : 0,
+                                }}
+                            />
+                        </ul>
+                    </nav>
+                </div>
             </div>
         </AdminShellContext.Provider>
     );

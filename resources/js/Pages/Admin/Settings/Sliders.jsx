@@ -502,9 +502,9 @@ export default function AdminSliderSettings({ initialSliders = {} }) {
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-bold text-foreground flex items-center gap-2.5">
                             <SlidersHorizontal className="w-7 h-7 text-primary-glow" />
-                            <span>Sliders & Carousels</span>
+                            <span>Sliders &amp; Carousels</span>
                         </h1>
-                        <p className="text-sm text-foreground/60 mt-1">
+                        <p className="hidden xl:block text-sm text-foreground/60 mt-1">
                             Configure visible cards per screen size, per-device auto-scroll steps, side chevron button placement/size, and test everything live below.
                         </p>
                     </div>
@@ -513,24 +513,28 @@ export default function AdminSliderSettings({ initialSliders = {} }) {
                         <button
                             type="button"
                             onClick={handleResetDefaults}
-                            className="h-8 px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer"
+                            title="Reset Defaults"
+                            className="h-8 px-2.5 sm:px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer"
                         >
                             <RotateCcw className="w-3.5 h-3.5" />
-                            <span>Reset Defaults</span>
+                            <span className="sm:hidden">Reset</span>
+                            <span className="hidden sm:inline">Reset Defaults</span>
                         </button>
 
                         <button
                             type="button"
                             onClick={handleSave}
                             disabled={saving}
-                            className="h-8 px-3.5 rounded-lg bg-primary-glow hover:bg-blue-500 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                            title="Save Slider Settings"
+                            className="h-8 px-3 sm:px-3.5 rounded-lg bg-primary-glow hover:bg-blue-500 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
                         >
                             {saving ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
                                 <Save className="w-3.5 h-3.5" />
                             )}
-                            <span>{saving ? 'Saving...' : 'Save Slider Settings'}</span>
+                            <span className="sm:hidden">{saving ? '...' : 'Save'}</span>
+                            <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save Slider Settings'}</span>
                         </button>
                     </div>
                 </div>

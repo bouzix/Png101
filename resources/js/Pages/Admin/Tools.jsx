@@ -21,6 +21,7 @@ import {
 import { toast } from 'sonner';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { StatCard } from '@/components/ui/StatCard';
+import ResponsiveTableWrapper from '@/components/admin/ResponsiveTableWrapper';
 import BgRemoverSettingsCard, { DEFAULT_BG_REMOVER_CONFIG } from '@/components/admin/BgRemoverSettingsCard';
 
 function formatBytes(bytes) {
@@ -203,7 +204,7 @@ export default function AdminToolsPage() {
                                     {settings.globalEnabled && activeGroupCount > 0 ? 'Active' : 'Deactivated'}
                                 </span>
                             </div>
-                            <p className="text-foreground/60 text-sm">
+                            <p className="hidden xl:block text-foreground/60 text-sm">
                                 Super Admin exclusive · Manage standalone <code className="text-xs font-mono">/tools</code> &amp; <code className="text-xs font-mono">/tools/convert</code> SEO tools and site integration.
                             </p>
                         </div>
@@ -214,9 +215,10 @@ export default function AdminToolsPage() {
                                     href="/tools"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="h-8 px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/85 shadow-sm inline-flex items-center gap-1.5 transition-all"
+                                    title="View /tools"
+                                    className="h-8 w-8 px-0 xl:w-auto xl:px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/85 shadow-sm inline-flex items-center justify-center xl:gap-1.5 transition-all"
                                 >
-                                    <span>View /tools</span>
+                                    <span className="hidden xl:inline">View /tools</span>
                                     <ExternalLink className="w-3.5 h-3.5 text-primary-glow" />
                                 </a>
                             )}
@@ -224,16 +226,17 @@ export default function AdminToolsPage() {
                                 type="button"
                                 onClick={() => persistSettings(settings)}
                                 disabled={saving}
-                                className="h-8 px-3.5 rounded-lg bg-primary-glow hover:bg-blue-500 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+                                className="h-8 px-3 xl:px-3.5 rounded-lg bg-primary-glow hover:bg-blue-500 text-white text-xs font-bold shadow-sm inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
                             >
                                 <Save className="w-3.5 h-3.5" />
-                                <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                                <span className="sm:hidden">{saving ? '...' : 'Save'}</span>
+                                <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save Changes'}</span>
                             </button>
                         </div>
                     </div>
 
-                    {/* KPI Stat Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    {/* KPI Stat Cards (Desktop / Laptop >= 1280px only) */}
+                    <div className="hidden xl:grid xl:grid-cols-4 gap-5">
                         <StatCard
                             title="Master Switch"
                             value={settings.globalEnabled ? 'Online' : 'Offline'}
@@ -533,21 +536,21 @@ export default function AdminToolsPage() {
                         </div>
 
                         {Array.isArray(analytics.leaderboard) && analytics.leaderboard.length > 0 ? (
-                            <div className="overflow-x-auto">
+                            <ResponsiveTableWrapper>
                                 <table className="w-full text-left text-xs">
                                     <thead className="bg-background/70 text-foreground/55 uppercase tracking-wider border-b border-card-border">
                                         <tr>
-                                            <th className="py-3 px-6">Tool Page</th>
-                                            <th className="py-3 px-4 text-right">Views</th>
-                                            <th className="py-3 px-4 text-right">Conversions</th>
-                                            <th className="py-3 px-4 text-right">Files</th>
-                                            <th className="py-3 px-6 text-right">Bytes Saved</th>
+                                            <th className="py-3 px-6 whitespace-nowrap">Tool Page</th>
+                                            <th className="py-3 px-4 text-right whitespace-nowrap">Views</th>
+                                            <th className="py-3 px-4 text-right whitespace-nowrap">Conversions</th>
+                                            <th className="py-3 px-4 text-right whitespace-nowrap">Files</th>
+                                            <th className="py-3 px-6 text-right whitespace-nowrap">Bytes Saved</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-card-border">
                                         {analytics.leaderboard.map((row) => (
                                             <tr key={row.slug} className="hover:bg-background/40">
-                                                <td className="py-3 px-6">
+                                                <td className="py-3 px-6 whitespace-nowrap">
                                                     <div className="font-bold text-foreground">{row.shortTitle || row.title}</div>
                                                     <div className="font-mono text-[11px] text-foreground/50">{row.url || `/tools/${row.slug}`}</div>
                                                 </td>
@@ -556,14 +559,14 @@ export default function AdminToolsPage() {
                                                     {row.conversions}
                                                 </td>
                                                 <td className="py-3 px-4 text-right font-mono">{row.filesConverted}</td>
-                                                <td className="py-3 px-6 text-right font-mono text-emerald-500 font-bold">
+                                                <td className="py-3 px-6 text-right font-mono text-emerald-500 font-bold whitespace-nowrap">
                                                     {formatBytes(row.bytesSaved)}
                                                 </td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
-                            </div>
+                            </ResponsiveTableWrapper>
                         ) : (
                             <div className="p-10 text-center text-xs text-foreground/55">
                                 No tool usage recorded in the last 30 days yet. Stats will populate automatically as visitors convert images on <code>/tools/*</code>.

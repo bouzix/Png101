@@ -227,13 +227,13 @@ export default function LegalPagesSettingsPage({ initialConfig = {}, defaults = 
 
             <div className="space-y-6 pb-24">
                 {/* Page Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
-                            <Scale className="w-7 h-7 text-primary-glow shrink-0" />
+                        <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground mb-1 flex items-center gap-2.5 sm:gap-3">
+                            <Scale className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                             <span>Legal &amp; Info Pages</span>
                         </h1>
-                        <p className="text-foreground/60 text-sm">
+                        <p className="hidden xl:block text-foreground/60 text-sm">
                             Edit content across About Us, Contact Us, Terms of Service, Privacy Policy, and DMCA Policy while keeping bold, italic, links, and lists intact.
                         </p>
                     </div>
@@ -243,10 +243,12 @@ export default function LegalPagesSettingsPage({ initialConfig = {}, defaults = 
                             href={activeTabMeta.href}
                             target="_blank"
                             rel="noreferrer"
-                            className="h-8 inline-flex items-center gap-2 px-3.5 rounded-lg bg-card-bg hover:bg-foreground/5 text-xs font-bold text-foreground/85 hover:text-foreground transition-all shadow-sm"
+                            title={`View ${activeTabMeta.label}`}
+                            className="h-8 inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 rounded-lg bg-card-bg hover:bg-foreground/5 text-xs font-bold text-foreground/85 hover:text-foreground transition-all shadow-sm"
                         >
                             <ExternalLink className="w-3.5 h-3.5 text-primary-glow" />
-                            <span>View {activeTabMeta.label}</span>
+                            <span className="sm:hidden">View</span>
+                            <span className="hidden sm:inline">View {activeTabMeta.label}</span>
                         </a>
 
                         {confirmReset ? (
@@ -274,10 +276,12 @@ export default function LegalPagesSettingsPage({ initialConfig = {}, defaults = 
                             <button
                                 type="button"
                                 onClick={() => setConfirmReset(true)}
-                                className="h-8 inline-flex items-center gap-1.5 px-3.5 rounded-lg bg-card-bg hover:bg-foreground/5 text-xs font-bold text-foreground/80 hover:text-amber-500 transition-all shadow-sm cursor-pointer"
+                                title="Reset Page"
+                                className="h-8 inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 rounded-lg bg-card-bg hover:bg-foreground/5 text-xs font-bold text-foreground/80 hover:text-amber-500 transition-all shadow-sm cursor-pointer"
                             >
                                 <RotateCcw className="w-3.5 h-3.5" />
-                                <span>Reset Page</span>
+                                <span className="sm:hidden">Reset</span>
+                                <span className="hidden sm:inline">Reset Page</span>
                             </button>
                         )}
 
@@ -285,16 +289,44 @@ export default function LegalPagesSettingsPage({ initialConfig = {}, defaults = 
                             type="button"
                             onClick={handleSave}
                             disabled={saving}
-                            className="h-8 inline-flex items-center gap-2 px-4 rounded-lg bg-primary-glow hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
+                            className="h-8 inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 rounded-lg bg-primary-glow hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-all cursor-pointer"
                         >
                             <Save className="w-3.5 h-3.5" />
-                            <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                            <span className="sm:hidden">{saving ? '...' : 'Save'}</span>
+                            <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save Changes'}</span>
                         </button>
                     </div>
                 </div>
 
-                {/* Page Tabs */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                {/* Page Tabs (Compact Accordion Strip below xl:, Full Cards at xl:+) */}
+                <div className="flex xl:hidden items-center justify-between gap-1 p-1 bg-card-header-bg border border-card-border rounded-xl overflow-hidden">
+                    {PAGE_TABS.map((tab) => {
+                        const Icon = tab.icon;
+                        const active = activeTab === tab.key;
+                        return (
+                            <button
+                                key={tab.key}
+                                type="button"
+                                onClick={() => {
+                                    setActiveTab(tab.key);
+                                    setConfirmReset(false);
+                                }}
+                                title={tab.label}
+                                aria-label={tab.label}
+                                className={`h-8 px-2.5 sm:px-3 rounded-lg text-xs font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer transition-all duration-300 ease-out ${
+                                    active
+                                        ? 'flex-1 min-w-0 bg-primary-glow text-white shadow-sm'
+                                        : 'shrink-0 bg-card-bg text-foreground/70 hover:text-foreground shadow-sm'
+                                }`}
+                            >
+                                <Icon className="w-3.5 h-3.5 shrink-0" />
+                                {active && <span className="truncate">{tab.label}</span>}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <div className="hidden xl:grid xl:grid-cols-5 gap-3">
                     {PAGE_TABS.map((tab) => {
                         const Icon = tab.icon;
                         const active = activeTab === tab.key;

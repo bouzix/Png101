@@ -399,17 +399,17 @@ export default function AdminFiles() {
             <Head title="My Files - Admin" />
             <div className="w-full space-y-6 pb-12 animate-in fade-in duration-300">
                 {/* Page Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
+                        <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground flex items-center gap-2.5 sm:gap-3">
                             {viewMode === 'trash' ? (
-                                <Trash2 className="w-7 h-7 text-rose-400" />
+                                <Trash2 className="w-6 h-6 sm:w-7 sm:h-7 text-rose-400 shrink-0" />
                             ) : (
-                                <FolderOpen className="w-7 h-7 text-primary-glow" />
+                                <FolderOpen className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                             )}
                             <span>{viewMode === 'trash' ? 'Trash Bin' : 'My Files'}</span>
                         </h1>
-                        <p className="text-sm text-foreground/55 mt-1">
+                        <p className="hidden xl:block text-sm text-foreground/55 mt-1">
                             {search.trim()
                                 ? `Showing ${filteredImages.length} matching file${filteredImages.length !== 1 ? 's' : ''} out of ${currentDataset.length}.`
                                 : viewMode === 'trash'
@@ -427,14 +427,15 @@ export default function AdminFiles() {
                                 setSelectedIds([]);
                                 setCurrentPage(1);
                             }}
-                            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            className={`inline-flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                                 viewMode === 'active'
                                     ? 'bg-primary-glow text-white shadow-md shadow-primary-glow/25'
                                     : 'text-foreground/65 hover:text-foreground'
                             }`}
                         >
-                            <FolderOpen className="w-3.5 h-3.5" />
-                            <span>Active Catalog ({images.length})</span>
+                            <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+                            <span className="sm:hidden">Active ({images.length})</span>
+                            <span className="hidden sm:inline">Active Catalog ({images.length})</span>
                         </button>
                         <button
                             type="button"
@@ -444,20 +445,21 @@ export default function AdminFiles() {
                                 setCurrentPage(1);
                                 fetchTrash();
                             }}
-                            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            className={`inline-flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                                 viewMode === 'trash'
                                     ? 'bg-rose-600 text-white shadow-md shadow-rose-600/25'
                                     : 'text-foreground/65 hover:text-foreground'
                             }`}
                         >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Trash Bin ({trashedImages.length})</span>
+                            <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                            <span className="sm:hidden">Trash ({trashedImages.length})</span>
+                            <span className="hidden sm:inline">Trash Bin ({trashedImages.length})</span>
                         </button>
                     </div>
                 </div>
 
-                {/* KPI Overview Row */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* KPI Overview Row (Desktop / Laptop >= 1280px only) */}
+                <div className="hidden xl:grid xl:grid-cols-4 gap-4">
                     <StatCard
                         title="Active Catalog"
                         value={images.length.toLocaleString()}

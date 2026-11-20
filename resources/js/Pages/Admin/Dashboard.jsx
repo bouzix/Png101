@@ -367,12 +367,12 @@ export default function Dashboard() {
         <AdminLayout>
             <Head title="Upload Image - Admin" />
             <div className="w-full pb-24">
-                <div className="mb-6">
-                    <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center gap-3">
-                        <Upload className="w-7 h-7 text-primary-glow shrink-0" />
+                <div className="mb-5 sm:mb-6">
+                    <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground flex items-center gap-2.5 sm:gap-3">
+                        <Upload className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                         <span>Upload Image</span>
                     </h1>
-                    <p className="text-sm text-foreground/60 mt-1">
+                    <p className="hidden xl:block text-sm text-foreground/60 mt-1">
                         Drop transparent PNG files to stage, edit metadata with AI, and publish to your catalog.
                     </p>
                 </div>

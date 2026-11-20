@@ -400,13 +400,13 @@ export default function TeamPage() {
             <Head title="Team Management - Png101 Admin" />
             <div className="space-y-6 pb-20">
                 {/* Page Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-1 flex items-center gap-3">
-                            <Users className="w-7 h-7 text-primary-glow shrink-0" />
+                        <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground mb-1 flex items-center gap-2.5 sm:gap-3">
+                            <Users className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                             <span>Team Management</span>
                         </h1>
-                        <p className="text-foreground/60 text-sm">
+                        <p className="hidden xl:block text-foreground/60 text-sm">
                             Create team accounts, assign granular permissions, and send login credentials via email.
                         </p>
                     </div>
@@ -416,29 +416,32 @@ export default function TeamPage() {
                             href="/team/login"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="h-8 px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 transition-all"
+                            title="Team Login Page"
+                            className="h-8 px-2.5 sm:px-3 rounded-lg bg-card-bg hover:text-primary-glow text-xs font-bold text-foreground/80 shadow-sm inline-flex items-center gap-1.5 transition-all"
                         >
                             <ExternalLink className="w-3.5 h-3.5 text-primary-glow" />
-                            <span>Team Login Page</span>
+                            <span className="sm:hidden">Login</span>
+                            <span className="hidden sm:inline">Team Login Page</span>
                         </a>
                         <button
                             type="button"
                             onClick={() => setShowSmtp(!showSmtp)}
-                            className={`h-8 px-3 rounded-lg text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                            className={`h-8 px-2.5 sm:px-3 rounded-lg text-xs font-bold shadow-sm inline-flex items-center gap-1.5 transition-all cursor-pointer ${
                                 showSmtp
                                     ? 'bg-primary-glow text-white'
                                     : 'bg-card-bg text-foreground/80 hover:text-primary-glow'
                             }`}
                         >
                             <Server className="w-3.5 h-3.5" />
-                            <span>SMTP Email Settings</span>
+                            <span className="sm:hidden">SMTP</span>
+                            <span className="hidden sm:inline">SMTP Email Settings</span>
                             {showSmtp ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                         </button>
                     </div>
                 </div>
 
-                {/* Primary Stat Cards Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* Primary Stat Cards Grid (Desktop / Laptop >= 1280px only) */}
+                <div className="hidden xl:grid xl:grid-cols-4 gap-6">
                     <StatCard
                         title="Total Team Members"
                         value={members.length}

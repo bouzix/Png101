@@ -29,6 +29,7 @@ import Pagination from '@/components/ui/Pagination';
 import CreateCollectionModal from '@/components/admin/collections/CreateCollectionModal';
 import EditCollectionModal from '@/components/admin/collections/EditCollectionModal';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
+import ResponsiveTableWrapper from '@/components/admin/ResponsiveTableWrapper';
 
 const COLS_STORAGE_KEY = 'png101_admin_collections_cols';
 
@@ -236,39 +237,42 @@ export default function AdminCollectionsPage() {
         <AdminLayout>
             <Head title="Collections - Admin" />
             <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-foreground mb-1 flex items-center gap-2.5">
-                            <Layers className="w-7 h-7 text-primary-glow" />
+                        <h1 className="text-xl sm:text-2xl xl:text-3xl font-bold text-foreground mb-1 flex items-center gap-2.5">
+                            <Layers className="w-6 h-6 sm:w-7 sm:h-7 text-primary-glow shrink-0" />
                             <span>Collections</span>
                         </h1>
-                        <p className="text-foreground/60 text-sm">
+                        <p className="hidden xl:block text-foreground/60 text-sm">
                             Curate themed sets, seasonal packs, and automated smart collections driven by tags.
                         </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
                         <a
                             href="/collections"
                             target="_blank"
                             rel="noreferrer"
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-card-bg hover:bg-white/5 text-foreground font-semibold text-sm border border-card-border hover:border-primary-glow/50 transition-all shadow-lg cursor-pointer"
+                            title="Public Directory"
+                            className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-card-bg hover:bg-white/5 text-foreground font-semibold text-xs sm:text-sm border border-card-border hover:border-primary-glow/50 transition-all shadow-lg cursor-pointer"
                         >
                             <ExternalLink className="w-4 h-4 text-primary-glow" />
-                            <span>Public Directory</span>
+                            <span className="sm:hidden">Public</span>
+                            <span className="hidden sm:inline">Public Directory</span>
                         </a>
 
                         <button
                             onClick={() => setIsCreateOpen(true)}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition-all shadow-lg shadow-blue-600/30 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                            className="flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm transition-all shadow-lg shadow-blue-600/30 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                         >
                             <Plus className="w-4 h-4 stroke-[2.5]" />
-                            <span>Create Collection</span>
+                            <span className="sm:hidden">New</span>
+                            <span className="hidden sm:inline">Create Collection</span>
                         </button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="hidden xl:grid xl:grid-cols-4 gap-6">
                     <StatCard
                         title="Total Collections"
                         value={collections.length}
@@ -844,17 +848,17 @@ export default function AdminCollectionsPage() {
                 ) : (
                     <>
                         <div className="bg-card-bg border border-card-border rounded-xl overflow-hidden">
-                            <div className="overflow-x-auto">
+                            <ResponsiveTableWrapper>
                                 <table className="w-full text-left text-sm">
                                     <thead>
                                         <tr className="border-b border-card-border bg-card-header-bg text-foreground/60 text-xs font-semibold uppercase tracking-wider">
-                                            <th className="py-3.5 px-5">Collection</th>
-                                            <th className="py-3.5 px-4">Type</th>
-                                            <th className="py-3.5 px-4">Rules / Tags</th>
-                                            <th className="py-3.5 px-4 text-center">Images</th>
-                                            <th className="py-3.5 px-4 text-center">Status</th>
-                                            <th className="py-3.5 px-4 text-center">Featured</th>
-                                            <th className="py-3.5 px-5 text-right">Actions</th>
+                                            <th className="py-3.5 px-5 whitespace-nowrap">Collection</th>
+                                            <th className="py-3.5 px-4 whitespace-nowrap">Type</th>
+                                            <th className="py-3.5 px-4 whitespace-nowrap">Rules / Tags</th>
+                                            <th className="py-3.5 px-4 text-center whitespace-nowrap">Images</th>
+                                            <th className="py-3.5 px-4 text-center whitespace-nowrap">Status</th>
+                                            <th className="py-3.5 px-4 text-center whitespace-nowrap">Featured</th>
+                                            <th className="py-3.5 px-5 text-right whitespace-nowrap">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-card-border">
@@ -999,7 +1003,7 @@ export default function AdminCollectionsPage() {
                                     })}
                                     </tbody>
                                 </table>
-                            </div>
+                            </ResponsiveTableWrapper>
                         </div>
 
                         <GlassCard className="px-4 py-2.5 !shadow-none">
